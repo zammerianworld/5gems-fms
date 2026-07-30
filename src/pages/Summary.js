@@ -178,7 +178,7 @@ export default function Summary() {
           head: [['Route','Trips','Tons','Sales (PHP)']],
           body: Object.entries(r.byRoute).map(([route,d])=>[route,d.trips,d.tons.toFixed(3),f2(d.sales)]),
           foot: [['Subtotal',r.td.length,r.totalTons.toFixed(3),f2(r.dumpSales)]],
-          headStyles:{fillColor:[241,114,0],fontSize:8,fontStyle:'bold'},
+          headStyles:{fillColor:[255,30,0],fontSize:8,fontStyle:'bold'},
           tableLineColor:[100,100,100],tableLineWidth:0.15,
           footStyles:{fillColor:[240,240,240],fontStyle:'bold'},
           bodyStyles:{fontSize:8},
@@ -206,7 +206,7 @@ export default function Summary() {
 
       // Truck total
       const totY = (doc.lastAutoTable?.finalY || 30) + 4
-      doc.setFillColor(241,114,0); doc.setTextColor(255,255,255)
+      doc.setFillColor(255,30,0); doc.setTextColor(255,255,255)
       doc.rect(14, totY, 183, 8, 'F')
       doc.setFontSize(8); doc.setFont(undefined,'bold')
       doc.text(`TOTAL — ${truck.plate}`, 18, totY+5)
@@ -231,7 +231,7 @@ export default function Summary() {
           return [truck.plate, truck.truck_type, r.td.length, r.tp.length, r.totalTrips, r.totalVans||'—', r.totalTons>0?r.totalTons.toFixed(3):'—', f2(r.totalSales)]
         }),
         foot: [['FLEET TOTAL','', allDumpInPeriod.length, allPMInPeriod.length, fleetTrips, '—', fleetTons.toFixed(3), f2(fleetSales)]],
-        headStyles:{fillColor:[241,114,0],fontSize:8,fontStyle:'bold'},
+        headStyles:{fillColor:[255,30,0],fontSize:8,fontStyle:'bold'},
           tableLineColor:[100,100,100],tableLineWidth:0.15,
         footStyles:{fillColor:[30,30,30],textColor:[255,255,255],fontStyle:'bold'},
         bodyStyles:{fontSize:8},

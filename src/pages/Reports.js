@@ -260,7 +260,7 @@ export default function Reports() {
       const driver = r.driver
       const truckLabel = `${truck.truck_code || truck.plate} | ${truck.plate}${driver ? ' | ' + driver.driver_name : ''}`
       doc.setFontSize(10); doc.setFont(undefined, 'bold')
-      doc.setFillColor(241,114,0); doc.rect(14, 20, 183, 7, 'F')
+      doc.setFillColor(255,30,0); doc.rect(14, 20, 183, 7, 'F')
       doc.setTextColor(255,255,255)
       doc.text(truckLabel.toUpperCase(), 16, 25)
       doc.setTextColor(0); doc.setFont(undefined, 'normal')
@@ -271,7 +271,7 @@ export default function Reports() {
         head: [['Route / Trip Code', 'No. of Trips', 'Sales (PHP)', '% of Sales']],
         body: salesRows.length ? salesRows : [['No trips in this period','','','']],
         foot: [['Total Sales Net of VAT', String(r.tripCount), f2(r.totalSales), '100.00%'], ['  Withholding Tax (2%)', '', `(${f2(r.wht2)})`, '2.00%'], ['Net Receivable', '', f2(r.totalSales - r.wht2), pct(r.totalSales - r.wht2, r.totalSales)]],
-        headStyles: { fillColor: [241,114,0], fontSize: 8, fontStyle: 'bold' },
+        headStyles: { fillColor: [255,30,0], fontSize: 8, fontStyle: 'bold' },
         footStyles: { fillColor: [245,245,245], fontSize: 8, fontStyle: 'bold', textColor: [0,0,0] },
         tableLineColor: [100,100,100], tableLineWidth: 0.15,
         bodyStyles: { fontSize: 8.5 },
@@ -332,7 +332,7 @@ export default function Reports() {
         head: [['Truck', 'Driver', 'Trips', 'Sales (PHP)', 'Expenses (PHP)', 'Net Income (PHP)', '% of Sales']],
         body: summaryRows,
         foot: [['TOTAL','',String(reportTrucks.reduce((s,t)=>s+getTruckReport(t).tripCount,0)), f2(totSales), f2(totExp), (totNet>=0?'':'-')+f2(Math.abs(totNet)), pct(totNet,totSales)]],
-        headStyles: { fillColor: [241,114,0], fontSize: 8, fontStyle: 'bold' },
+        headStyles: { fillColor: [255,30,0], fontSize: 8, fontStyle: 'bold' },
         footStyles: { fillColor: [30,30,30], textColor: [255,255,255], fontStyle: 'bold' },
         bodyStyles: { fontSize: 8.5 },
         alternateRowStyles: { fillColor: [250,250,250] },
@@ -352,7 +352,7 @@ export default function Reports() {
           else doc.line(x-35, sigY+10, x+35, sigY+10)
           doc.setFont(undefined,'bold'); doc.setFontSize(7); doc.setTextColor(0)
           doc.text(s.name, x, sigY+14, { align })
-          doc.setFont(undefined,'normal'); doc.setFontSize(6); doc.setTextColor(241,114,0)
+          doc.setFont(undefined,'normal'); doc.setFontSize(6); doc.setTextColor(255,30,0)
           doc.text(s.title||'', x, sigY+18, { align })
           doc.setTextColor(0)
         })

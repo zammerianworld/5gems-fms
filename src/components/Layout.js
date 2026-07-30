@@ -264,8 +264,8 @@ export default function Layout({ children }) {
           )}
           <button onClick={handleSignOut} style={{
             width: '100%',
-            background: 'rgba(241,114,0,0.15)',
-            border: '0.5px solid rgba(241,114,0,0.3)',
+            background: 'rgba(255,30,0,0.15)',
+            border: '0.5px solid rgba(255,30,0,0.3)',
             color: 'var(--accent)',
             padding: '6px 0',
             borderRadius: 6,

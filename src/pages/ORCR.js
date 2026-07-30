@@ -111,7 +111,7 @@ export default function ORCR() {
       startY: 26,
       head: [['Vehicle', 'Plate', 'Type', 'OR No.', 'OR Expiry', 'OR Days', 'CR No.', 'CR Issued Date', 'Status']],
       body: rows,
-      headStyles: { fillColor: [241, 114, 0], fontSize: 7, fontStyle: 'bold' },
+      headStyles: { fillColor: [255,30,0], fontSize: 7, fontStyle: 'bold' },
       bodyStyles: { fontSize: 7.5 },
       alternateRowStyles: { fillColor: [250, 250, 250] },
       didParseCell: (data) => {
@@ -138,7 +138,7 @@ export default function ORCR() {
         doc.setDrawColor(100); doc.line(14, sigY + 10, 90, sigY + 10)
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0)
         doc.text(orcrPrepName.toUpperCase(), 14, sigY + 14)
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(241,114,0)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(255,30,0)
         doc.text(orcrPrepTitle, 14, sigY + 18)
       }
       if (orcrNotedName) {
@@ -147,7 +147,7 @@ export default function ORCR() {
         doc.setDrawColor(100); doc.line(W - 90, sigY + 10, W - 14, sigY + 10)
         doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0)
         doc.text(orcrNotedName.toUpperCase(), W - 14, sigY + 14, { align: 'right' })
-        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(241,114,0)
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7); doc.setTextColor(255,30,0)
         doc.text(orcrNotedTitle, W - 14, sigY + 18, { align: 'right' })
       }
       doc.setTextColor(0)
@@ -167,7 +167,7 @@ export default function ORCR() {
         else doc.line(x-35, sigY3+10, x+35, sigY3+10)
         doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(0)
         doc.text(s.name, x, sigY3+14, { align })
-        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(241,114,0)
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(255,30,0)
         doc.text(s.title||'', x, sigY3+18, { align })
         doc.setTextColor(0)
       })

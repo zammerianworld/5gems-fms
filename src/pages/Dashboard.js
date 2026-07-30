@@ -176,7 +176,7 @@ export default function Dashboard() {
   })
   const expCategories = Object.entries(expByCategory).sort((a, b) => b[1] - a[1])
   const totalMonthExp = expCategories.reduce((s, [, v]) => s + v, 0)
-  const catColors = ['#f17200','#2563eb','#16a34a','#dc2626','#7c3aed','#0891b2','#d97706','#be185d']
+  const catColors = ['#ff1e00','#2563eb','#16a34a','#dc2626','#7c3aed','#0891b2','#d97706','#be185d']
   const maxVal = Math.max(...truckData.map(d => Math.max(d.sales, d.totalExp)), 1)
 
   const prevMonth = () => {
@@ -241,7 +241,7 @@ export default function Dashboard() {
 
       {/* How-To Guide banner */}
       <div onClick={() => navigate('/how-to')}
-        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'linear-gradient(135deg, #f17200 0%, #e65c00 100%)', borderRadius: 10, marginBottom: 14, cursor: 'pointer', boxShadow: '0 2px 8px rgba(241,114,0,0.25)', transition: 'opacity .15s' }}
+        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'linear-gradient(135deg, #ff1e00 0%, #ff5800 100%)', borderRadius: 10, marginBottom: 14, cursor: 'pointer', boxShadow: '0 2px 8px rgba(255,30,0,0.25)', transition: 'opacity .15s' }}
         onMouseEnter={e => e.currentTarget.style.opacity = '.9'}
         onMouseLeave={e => e.currentTarget.style.opacity = '1'}>
         <span style={{ fontSize: 28, flexShrink: 0 }}>📖</span>

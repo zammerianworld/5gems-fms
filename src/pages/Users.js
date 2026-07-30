@@ -320,7 +320,7 @@ export default function Users() {
                   const defaults = editForm.role === 'staff' ? STAFF_DEFAULTS : ADMIN_DEFAULTS
                   const checked = editPerms === null ? defaults.includes(m.key) : !!(editPerms[m.key])
                   return (
-                    <label key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 5px', borderRadius: 3, cursor: 'pointer', background: checked ? 'rgba(241,114,0,0.08)' : 'transparent' }}>
+                    <label key={m.key} style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '3px 5px', borderRadius: 3, cursor: 'pointer', background: checked ? 'rgba(255,30,0,0.08)' : 'transparent' }}>
                       <input type="checkbox" checked={checked} onChange={e => {
                         const base = editPerms === null ? defaults.reduce((o,k) => ({...o,[k]:true}), {}) : {...editPerms}
                         base[m.key] = e.target.checked

@@ -133,7 +133,7 @@ export default function Loans() {
         })
       : rows.map(r => [r.month, r.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), pf(r.amort), pf(r.interest), pf(r.principal), pf(r.outstanding), r.actual?'Paid':r===rows[rows.length-1]?'Final':'Pending'])
 
-    autoTable(doc, { startY:47, head, body, styles:{fontSize:8}, headStyles:{fillColor:[241,114,0]}, alternateRowStyles:{fillColor:[250,250,250]} })
+    autoTable(doc, { startY:47, head, body, styles:{fontSize:8}, headStyles:{fillColor:[255,30,0]}, alternateRowStyles:{fillColor:[250,250,250]} })
 
     const finalY = doc.lastAutoTable.finalY + 4
     const totAmort = rows.reduce((s,r)=>s+r.amort,0)
@@ -701,7 +701,7 @@ export default function Loans() {
                                     </thead>
                                     <tbody>
                                       {revisedRows.map((row, i) => (
-                                        <tr key={i} style={{ borderBottom:'1px solid var(--border)', background: row.actual ? 'rgba(22,163,74,0.05)' : row.isLastRevised ? 'rgba(241,114,0,0.06)' : 'transparent' }}>
+                                        <tr key={i} style={{ borderBottom:'1px solid var(--border)', background: row.actual ? 'rgba(22,163,74,0.05)' : row.isLastRevised ? 'rgba(255,30,0,0.06)' : 'transparent' }}>
                                           <td style={{ padding:'5px 8px', color:'var(--muted)' }}>{row.month}</td>
                                           <td style={{ padding:'5px 8px' }}>{row.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</td>
                                           <td style={{ padding:'5px 8px', textAlign:'right', fontWeight: row.isLastRevised?700:500, color: row.isLastRevised?'var(--accent)':'var(--text)' }}>₱{fmt(row.amort)}</td>
@@ -712,7 +712,7 @@ export default function Loans() {
                                             {row.actual
                                               ? <span style={{ fontSize:10, background:'#dcfce7', color:'#16a34a', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>✅ Paid</span>
                                               : row.isLastRevised
-                                                ? <span style={{ fontSize:10, background:'rgba(241,114,0,0.1)', color:'var(--accent)', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>Final</span>
+                                                ? <span style={{ fontSize:10, background:'rgba(255,30,0,0.1)', color:'var(--accent)', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>Final</span>
                                                 : <span style={{ fontSize:10, background:'var(--bg)', color:'var(--muted)', padding:'1px 6px', borderRadius:10 }}>Pending</span>
                                             }
                                           </td>

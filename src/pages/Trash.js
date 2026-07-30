@@ -126,7 +126,7 @@ export default function Trash() {
                     .sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at))
                     .map(t => (
                     <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface)', borderRadius: 8, border: '0.5px solid var(--border)', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: 11, background: t._type === 'dump' ? 'rgba(241,114,0,0.1)' : 'rgba(67,56,202,0.1)', color: t._type === 'dump' ? 'var(--accent)' : '#4338CA', padding: '1px 6px', borderRadius: 4 }}>
+                      <span style={{ fontSize: 11, background: t._type === 'dump' ? 'rgba(255,30,0,0.1)' : 'rgba(67,56,202,0.1)', color: t._type === 'dump' ? 'var(--accent)' : '#4338CA', padding: '1px 6px', borderRadius: 4 }}>
                         {t._type === 'dump' ? '🚛 Dump' : '🚜 PM'}
                       </span>
                       <span style={{ fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>{t.truck_plate}</span>

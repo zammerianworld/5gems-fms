@@ -286,7 +286,7 @@ export default function HistoricalData() {
     <div className="page">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Historical Data <span style={{ fontSize:12, background:'rgba(241,114,0,0.1)', color:'var(--accent)', borderRadius:6, padding:'2px 8px', marginLeft:8, fontWeight:400 }}>📅 Historical</span></h1>
+          <h1 className="page-title">Historical Data <span style={{ fontSize:12, background:'rgba(255,30,0,0.1)', color:'var(--accent)', borderRadius:6, padding:'2px 8px', marginLeft:8, fontWeight:400 }}>📅 Historical</span></h1>
           <p className="page-sub">Monthly sales &amp; expense entries for past years — no individual trips required</p>
         </div>
         <div style={{ display:'flex', gap:8 }}>
@@ -501,7 +501,7 @@ export default function HistoricalData() {
                 <div onClick={()=>setExpandedId(isExpanded?null:r.id)} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 14px', background:'var(--surface)', cursor:'pointer', flexWrap:'wrap' }}>
                   <span style={{ fontSize:13, fontWeight:600 }}>{monthLabel(r.period_month)} {r.period_year}</span>
                   <span style={{ fontSize:12, fontFamily:'var(--mono)', color:'var(--muted)' }}>{getTruckName(r.truck_id)}</span>
-                  <span style={{ fontSize:10, background:'rgba(241,114,0,0.1)', color:'var(--accent)', borderRadius:10, padding:'1px 8px' }}>📅 Historical</span>
+                  <span style={{ fontSize:10, background:'rgba(255,30,0,0.1)', color:'var(--accent)', borderRadius:10, padding:'1px 8px' }}>📅 Historical</span>
                   {liveMonths.has(`${r.period_year}-${r.period_month}`) && (
                     <span title="Live trip data exists for this month — check for potential overlap" style={{ fontSize:10, background:'rgba(220,38,38,0.1)', color:'var(--danger)', borderRadius:10, padding:'1px 8px', cursor:'help' }}>⚠️ Live data exists</span>
                   )}

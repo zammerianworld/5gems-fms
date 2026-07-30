@@ -427,7 +427,7 @@ export default function CheckVouchers() {
       doc.addImage(headerImg, 'PNG', 0, 0, W, imgH, undefined, 'FAST')
       headerH = imgH + 4
     } catch (e) {
-      doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(241, 114, 0)
+      doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(255,30,0)
       doc.text('DRAGON SPEED TRUCKING CORPORATION', W / 2, 14, { align: 'center' })
       doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(100)
       if (settings.address) doc.text(settings.address, W / 2, 20, { align: 'center' })
@@ -573,13 +573,13 @@ export default function CheckVouchers() {
     doc.line(W - 100, sigY, W - 14, sigY)
     doc.text('Payment Approved By', W - 14, sigY + 5, { align: 'right' })
 
-    // ── ORANGE FOOTER — fixed at page bottom ─────────────────────────────────
+    // ── FOOTER ACCENT BAR — fixed at page bottom ──────────────────────────────
     const pageH = doc.internal.pageSize.getHeight()
     const footY = pageH - 14
-    doc.setFillColor(241, 114, 0)
+    doc.setFillColor(255, 30, 0)
     doc.rect(0, footY, W + 10, 20, 'F')
     doc.setFontSize(11); doc.setFont('helvetica', 'bold'); doc.setTextColor(255, 255, 255)
-    doc.text('YOUR BUSINESS. OUR PASSION.', W / 2, footY + 9, { align: 'center' })
+    doc.text(co.toUpperCase(), W / 2, footY + 9, { align: 'center' })
 
     // Cancelled watermark
     if (v.status === 'Cancelled') {
@@ -601,7 +601,7 @@ export default function CheckVouchers() {
         else doc.line(x-35, sigY+18, x+35, sigY+18)
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0)
         doc.text(s.name.toUpperCase(), x, sigY+23, { align })
-        doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(241,114,0)
+        doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(255,30,0)
         doc.text(s.title||'', x, sigY+27, { align })
         doc.setTextColor(0)
       })
@@ -1137,9 +1137,9 @@ export default function CheckVouchers() {
                 </div>
               </div>
 
-              {/* Orange footer */}
-              <div style={{ background: '#f17200', marginTop: 24, padding: '8px 0', textAlign: 'center', color: '#fff', fontWeight: 'bold', fontSize: 12, borderRadius: 4 }}>
-                YOUR BUSINESS. OUR PASSION.
+              {/* Footer accent bar */}
+              <div style={{ background: '#ff1e00', marginTop: 24, padding: '8px 0', textAlign: 'center', color: '#fff', fontWeight: 'bold', fontSize: 12, borderRadius: 4 }}>
+                {settings.company_name || 'FLEET MANAGEMENT SYSTEM'}
               </div>
             </div>
           </div>
@@ -1335,7 +1335,7 @@ export default function CheckVouchers() {
                     { label: 'Total Checks', value: totalChecks, sub: 'issued', icon: '🧾', color: 'var(--text)', accent: 'var(--border)' },
                     { label: 'Remaining', value: upcoming.length, sub: 'checks pending', icon: '⏳', color: '#d97706', accent: '#fef3c7' },
                     { label: 'Months Left', value: monthsLeft, sub: 'months to go', icon: '📅', color: '#7c3aed', accent: '#ede9fe' },
-                    { label: 'Total Remaining', value: `₱${fmt(totalUpcoming)}`, sub: 'outstanding', icon: '💰', color: 'var(--accent)', accent: 'rgba(241,114,0,0.1)' },
+                    { label: 'Total Remaining', value: `₱${fmt(totalUpcoming)}`, sub: 'outstanding', icon: '💰', color: 'var(--accent)', accent: 'rgba(255,30,0,0.1)' },
                     { label: 'Cleared', value: cleared.length, sub: 'completed', icon: '✅', color: '#16a34a', accent: '#dcfce7' },
                   ].map(s => (
                     <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', position: 'relative', overflow: 'hidden' }}>
@@ -1374,7 +1374,7 @@ export default function CheckVouchers() {
                   const isCurrentMonth = monthKey === today.toISOString().slice(0,7)
 
                   const monthBorderColor = hasOverdue ? '#dc2626' : hasDueToday ? '#d97706' : allCleared ? '#16a34a' : isCurrentMonth ? 'var(--accent)' : 'var(--border)'
-                  const monthBg = hasOverdue ? '#fff5f5' : hasDueToday ? '#fffbeb' : allCleared ? '#f0fdf4' : isCurrentMonth ? 'rgba(241,114,0,0.04)' : 'var(--surface)'
+                  const monthBg = hasOverdue ? '#fff5f5' : hasDueToday ? '#fffbeb' : allCleared ? '#f0fdf4' : isCurrentMonth ? 'rgba(255,30,0,0.04)' : 'var(--surface)'
 
                   const isCollapsed = collapsedMonths.has(monthKey)
                   return (

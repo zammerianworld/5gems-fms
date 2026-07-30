@@ -460,7 +460,7 @@ export default function Expenses() {
       const truck = trucks.find(t => t.id === e.truck_id)?.plate || (e.scope === 'all' ? 'Fleet-wide' : '—')
       return [e.expense_date||'', e.expense_type==='admin'?'Admin':'Operation', truck, e.category||'', e.maintenance_category||'', e.description||'', e.reference_no||'', Number(e.amount||0).toLocaleString('en-PH',{minimumFractionDigits:2})]
     })
-    autoTable(doc, { startY:24, head:[['Date','Type','Truck/Scope','Category','Classify','Description','Ref #','Amount (PHP)']], body:rows, foot:[['','','','','','','TOTAL',Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})]], headStyles:{fillColor:[241,114,0],fontSize:8,fontStyle:'bold'}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:9}, bodyStyles:{fontSize:8}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{7:{halign:'right'}}, margin:{left:14,right:14} })
+    autoTable(doc, { startY:24, head:[['Date','Type','Truck/Scope','Category','Classify','Description','Ref #','Amount (PHP)']], body:rows, foot:[['','','','','','','TOTAL',Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})]], headStyles:{fillColor:[255,30,0],fontSize:8,fontStyle:'bold'}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:9}, bodyStyles:{fontSize:8}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{7:{halign:'right'}}, margin:{left:14,right:14} })
     doc.save(`Expenses-Detail-${new Date().toISOString().slice(0,10)}.pdf`)
     showToast('PDF saved.')
   }
@@ -474,7 +474,7 @@ export default function Expenses() {
     doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.text('DRAGON SPEED TRUCKING CORPORATION',14,14)
     doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.setTextColor(100); doc.text('Expenses — Summary by Category    '+dateStr,14,20); doc.setTextColor(0)
     const rows = Object.entries(byCategory).sort((a,b)=>b[1].total-a[1].total).map(([cat,d])=>[cat,d.admin>0?Number(d.admin).toLocaleString('en-PH',{minimumFractionDigits:2}):'—',d.operation>0?Number(d.operation).toLocaleString('en-PH',{minimumFractionDigits:2}):'—',Number(d.total).toLocaleString('en-PH',{minimumFractionDigits:2})])
-    autoTable(doc,{startY:24,head:[['Category','Admin (PHP)','Operation (PHP)','Total (PHP)']],body:rows,foot:[['TOTAL','','',Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})]],headStyles:{fillColor:[241,114,0],fontSize:9,fontStyle:'bold'},footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:10},bodyStyles:{fontSize:9},alternateRowStyles:{fillColor:[250,250,250]},columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'}},margin:{left:14,right:14}})
+    autoTable(doc,{startY:24,head:[['Category','Admin (PHP)','Operation (PHP)','Total (PHP)']],body:rows,foot:[['TOTAL','','',Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})]],headStyles:{fillColor:[255,30,0],fontSize:9,fontStyle:'bold'},footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:10},bodyStyles:{fontSize:9},alternateRowStyles:{fillColor:[250,250,250]},columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'}},margin:{left:14,right:14}})
     doc.save(`Expenses-Summary-${new Date().toISOString().slice(0,10)}.pdf`)
     showToast('PDF saved.')
   }
@@ -724,7 +724,7 @@ export default function Expenses() {
                       <label className="label required">Select Trucks ({(form.truck_ids||[]).length} selected)</label>
                       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:6, padding:8, background:'var(--bg)', borderRadius:6, border:'1px solid var(--border)', maxHeight:180, overflowY:'auto' }}>
                         {companyTrucks.map(t => (
-                          <label key={t.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 8px', borderRadius:4, cursor:'pointer', background:(form.truck_ids||[]).includes(t.id)?'rgba(241,114,0,0.1)':'transparent', border:(form.truck_ids||[]).includes(t.id)?'1px solid var(--accent)':'1px solid transparent' }}>
+                          <label key={t.id} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 8px', borderRadius:4, cursor:'pointer', background:(form.truck_ids||[]).includes(t.id)?'rgba(255,30,0,0.1)':'transparent', border:(form.truck_ids||[]).includes(t.id)?'1px solid var(--accent)':'1px solid transparent' }}>
                             <input type="checkbox" checked={(form.truck_ids||[]).includes(t.id)}
                               onChange={e=>setForm(f=>({...f,truck_ids:e.target.checked?[...(f.truck_ids||[]),t.id]:(f.truck_ids||[]).filter(id=>id!==t.id)}))}
                               style={{ width:'auto',margin:0 }} />
@@ -823,7 +823,7 @@ export default function Expenses() {
                           <tr key={i}>
                             <td className="mono">{row.expense_date}</td>
                             <td>{row.description||'—'}</td>
-                            <td><span style={{ fontSize:10, background:'rgba(241,114,0,0.1)', color:'var(--accent)', padding:'1px 6px', borderRadius:4 }}>{row.category}</span></td>
+                            <td><span style={{ fontSize:10, background:'rgba(255,30,0,0.1)', color:'var(--accent)', padding:'1px 6px', borderRadius:4 }}>{row.category}</span></td>
                             <td className="text-right mono">₱{row.amount.toLocaleString('en-PH',{minimumFractionDigits:2})}</td>
                           </tr>
                         ))}
@@ -1116,7 +1116,7 @@ export default function Expenses() {
                         {s.quantity_remaining <= 0
                           ? <span style={{ fontSize:11, background:'#f0fdf4', color:'#16a34a', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>✅ Fully Allocated</span>
                           : s.quantity_remaining < s.quantity
-                            ? <span style={{ fontSize:11, background:'rgba(241,114,0,0.1)', color:'var(--accent)', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>⚡ Partial ({s.quantity_remaining}/{s.quantity} left)</span>
+                            ? <span style={{ fontSize:11, background:'rgba(255,30,0,0.1)', color:'var(--accent)', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>⚡ Partial ({s.quantity_remaining}/{s.quantity} left)</span>
                             : <span style={{ fontSize:11, background:'#fffbeb', color:'#d97706', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>📦 In Stock ({s.quantity_remaining})</span>
                         }
                       </td>

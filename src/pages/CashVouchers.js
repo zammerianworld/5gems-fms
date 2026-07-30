@@ -86,7 +86,7 @@ export default function CashVouchers() {
     if (settings.contact) doc.text(`${settings.contact}${settings.email?' / '+settings.email:''}`, W/2, 31, { align: 'center' })
 
     // Title box
-    doc.setFillColor(241,114,0)
+    doc.setFillColor(255,30,0)
     doc.rect(14, 36, W-28, 10, 'F')
     doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255)
     doc.text('CASH VOUCHER', W/2, 43, { align: 'center' })
@@ -143,7 +143,7 @@ export default function CashVouchers() {
         else doc.line(x-35, sigY+18, x+35, sigY+18)
         doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(0)
         doc.text(s.name.toUpperCase(), x, sigY+23, { align })
-        doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(241,114,0)
+        doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(255,30,0)
         doc.text(s.title||'', x, sigY+27, { align })
         doc.setTextColor(0)
       })

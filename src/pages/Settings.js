@@ -322,7 +322,7 @@ export default function Settings() {
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{sig.full_name}</div>
                         <div style={{ fontSize: 11, color: 'var(--accent)' }}>{sig.title}</div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-                          {sig.is_default_prepared && <span style={{ fontSize: 10, background: 'rgba(241,114,0,0.1)', color: 'var(--accent)', padding: '1px 6px', borderRadius: 4 }}>Default Prepared</span>}
+                          {sig.is_default_prepared && <span style={{ fontSize: 10, background: 'rgba(255,30,0,0.1)', color: 'var(--accent)', padding: '1px 6px', borderRadius: 4 }}>Default Prepared</span>}
                           {sig.is_default_approved && <span style={{ fontSize: 10, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', padding: '1px 6px', borderRadius: 4 }}>Default Approved</span>}
                         </div>
                       </div>

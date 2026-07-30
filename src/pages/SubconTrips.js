@@ -228,7 +228,7 @@ export default function SubconTrips() {
     doc.setDrawColor(200); doc.line(10, subtitle ? 27 : 23, W - 10, subtitle ? 27 : 23)
     autoTable(doc, {
       startY: subtitle ? 30 : 26, head: [cols], body: rows,
-      headStyles: { fillColor: [241, 114, 0], fontSize: 7, fontStyle: 'bold' },
+      headStyles: { fillColor: [255,30,0], fontSize: 7, fontStyle: 'bold' },
       bodyStyles: { fontSize: 7 },
       alternateRowStyles: { fillColor: [250, 250, 250] },
       margin: { left: 10, right: 10 },
@@ -251,7 +251,7 @@ export default function SubconTrips() {
       doc.setDrawColor(150); doc.line(slotX - 28, sigY + 7, slotX + 28, sigY + 7)
       doc.setFont(undefined, 'bold'); doc.setFontSize(7); doc.setTextColor(0)
       doc.text((s.name || '').toUpperCase(), slotX, sigY + 11, { align: 'center' })
-      doc.setFont(undefined, 'normal'); doc.setFontSize(6); doc.setTextColor(241, 114, 0)
+      doc.setFont(undefined, 'normal'); doc.setFontSize(6); doc.setTextColor(255,30,0)
       doc.text(s.title || '', slotX, sigY + 15, { align: 'center' })
       doc.setTextColor(0)
     })
@@ -530,7 +530,7 @@ export default function SubconTrips() {
       grandCollected += totalCollected; grandShare += expShare; grandNet += netCredited
       const moLabel = mo === 'uncredited' ? 'Not Yet Credited' : new Date(mo + '-01').toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
       // Month header bar
-      doc.setFillColor(241,114,0); doc.rect(10, startY, W-20, 7, 'F')
+      doc.setFillColor(255,30,0); doc.rect(10, startY, W-20, 7, 'F')
       doc.setTextColor(255,255,255); doc.setFontSize(8); doc.setFont('helvetica','bold')
       doc.text(moLabel.toUpperCase(), 13, startY+5)
       doc.text(`${group.trips.length} trip${group.trips.length>1?'s':''}`, W/2, startY+5, { align: 'center' })

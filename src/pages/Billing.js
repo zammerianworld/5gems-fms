@@ -12,7 +12,7 @@ import { useLocation } from 'react-router-dom'
 const TABS = ['Generate', 'Invoice List', 'Manage Trips', 'Aging Report', 'Client Balance']
 const STATUS_OPTIONS = ['Invoiced', 'Paid', 'Returned', 'On Hold']
 const STATUS_COLORS = {
-  Invoiced: { bg: 'rgba(241,114,0,0.12)', color: '#c85a00' },
+  Invoiced: { bg: 'rgba(255,30,0,0.12)', color: '#cc1800' },
   Paid: { bg: 'rgba(22,163,74,0.12)', color: '#15803d' },
   Returned: { bg: 'rgba(220,38,38,0.12)', color: '#dc2626' },
   'On Hold': { bg: 'rgba(202,138,4,0.12)', color: '#a16207' },
@@ -1396,7 +1396,7 @@ export default function Billing() {
         const pH2 = doc.internal.pageSize.getHeight()
         if (startY+28 > pH2-6) { doc.addPage(); startY=10 }
         const sigBaseY2=startY+8; const perSlot2=(W-28)/sigs.length
-        sigs.forEach((s,idx)=>{ const slotX=14+idx*perSlot2+perSlot2/2; doc.setFontSize(5.5); doc.setFont(undefined,'normal'); doc.setTextColor(120); doc.text(`${s.label}:`,slotX,sigBaseY2,{align:'center'}); doc.setDrawColor(150); doc.line(slotX-28,sigBaseY2+7,slotX+28,sigBaseY2+7); doc.setFont(undefined,'bold'); doc.setFontSize(7); doc.setTextColor(0); doc.text((s.name||'').toUpperCase(),slotX,sigBaseY2+11,{align:'center'}); doc.setFont(undefined,'normal'); doc.setFontSize(6); doc.setTextColor(241,114,0); doc.text(s.title||'',slotX,sigBaseY2+15,{align:'center'}); doc.setTextColor(0) })
+        sigs.forEach((s,idx)=>{ const slotX=14+idx*perSlot2+perSlot2/2; doc.setFontSize(5.5); doc.setFont(undefined,'normal'); doc.setTextColor(120); doc.text(`${s.label}:`,slotX,sigBaseY2,{align:'center'}); doc.setDrawColor(150); doc.line(slotX-28,sigBaseY2+7,slotX+28,sigBaseY2+7); doc.setFont(undefined,'bold'); doc.setFontSize(7); doc.setTextColor(0); doc.text((s.name||'').toUpperCase(),slotX,sigBaseY2+11,{align:'center'}); doc.setFont(undefined,'normal'); doc.setFontSize(6); doc.setTextColor(255,30,0); doc.text(s.title||'',slotX,sigBaseY2+15,{align:'center'}); doc.setTextColor(0) })
       }
       doc.save(`Aging-AllOverdue-${now4.toISOString().slice(0,10)}.pdf`); showToast('Printed — Critical first.'); setShowOverduePrintModal(false)
     } catch(err) { showToast('Print error: ' + err.message, 'error') }
@@ -2126,7 +2126,7 @@ export default function Billing() {
                               const amt = editingInvoice.truck_type === 'Dump Truck' ? (t.weight_tons||0)*displayRate : displayRate+(t.stripping_fee||0)
                               const changed = editingRates[t.id] !== undefined
                               return (
-                                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: i<invoiceTrips.length-1?'0.5px solid var(--border)':'none', background: changed?'rgba(241,114,0,0.05)':removingTripId===t.id?'rgba(220,38,38,0.06)':'transparent' }}>
+                                <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 12px', borderBottom: i<invoiceTrips.length-1?'0.5px solid var(--border)':'none', background: changed?'rgba(255,30,0,0.05)':removingTripId===t.id?'rgba(220,38,38,0.06)':'transparent' }}>
                                   <span style={{ minWidth: 82, color: 'var(--muted)', fontSize: 11 }}>{fmtDate(t.trip_date)}</span>
                                   <span style={{ fontFamily: 'var(--mono)', fontWeight: 500, minWidth: 75, fontSize: 12 }}>{t.truck_plate}</span>
                                   <span style={{ flex: 1, fontSize: 11, color: 'var(--muted)' }}>{editingInvoice.truck_type==='Dump Truck'?`${t.route||''} · ${t.commodity||''} · ${t.weight_tons}t`:`${t.trip_code||''} · ${t.container_size||''}`}</span>

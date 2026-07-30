@@ -4,8 +4,8 @@ import { useToast, Toast } from '../components/Toast'
 
 const MODULE_META = {
   'Trip':         { icon: '🚛', color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)' },
-  'Billing':      { icon: '🧾', color: '#f17200', bg: 'rgba(241,114,0,0.08)' },
-  'Invoices':     { icon: '🧾', color: '#f17200', bg: 'rgba(241,114,0,0.08)' },
+  'Billing':      { icon: '🧾', color: '#ff1e00', bg: 'rgba(255,30,0,0.08)' },
+  'Invoices':     { icon: '🧾', color: '#ff1e00', bg: 'rgba(255,30,0,0.08)' },
   'CheckVouchers':{ icon: '💳', color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)' },
   'CashVouchers': { icon: '💵', color: '#10b981', bg: 'rgba(16,185,129,0.08)' },
   'Expenses':     { icon: '📊', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
@@ -19,7 +19,7 @@ const MODULE_META = {
 
 const ACTION_COLORS = {
   'destructive': { color: '#dc2626', label: 'Deleted / Updated' },
-  'generate':    { color: '#f17200', label: 'Generated' },
+  'generate':    { color: '#ff1e00', label: 'Generated' },
   'default':     { color: 'var(--muted)', label: 'Action' },
 }
 

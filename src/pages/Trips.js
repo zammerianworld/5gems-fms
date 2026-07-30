@@ -619,7 +619,7 @@ export default function Trips() {
           <div className="form-group">
             <label className="label required">
               Supplier Amount (₱)
-              {code === 'SMC' && <span style={{ marginLeft: 6, fontSize: 9, background: 'rgba(241,114,0,0.12)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4, fontWeight: 400 }}>VAT Inclusive (SMC)</span>}
+              {code === 'SMC' && <span style={{ marginLeft: 6, fontSize: 9, background: 'rgba(255,30,0,0.12)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4, fontWeight: 400 }}>VAT Inclusive (SMC)</span>}
             </label>
             <input type="number" step="0.01" value={c.supplier_amount || ''} onChange={e => updateContainer(idx, 'supplier_amount', e.target.value)} placeholder="0.00" />
             {code === 'SMC' && c.supplier_amount > 0 && (

@@ -296,7 +296,7 @@ export default function YearOverYear() {
         doc.setDrawColor(80); doc.line(x - sigColW*0.35, sigY+14, x + sigColW*0.35, sigY+14)
         doc.setFontSize(8.5); doc.setFont('helvetica','bold'); doc.setTextColor(0)
         doc.text(s.name, x, sigY+18, { align:'center' })
-        if (s.title) { doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(241,114,0); doc.text(s.title, x, sigY+22, { align:'center' }) }
+        if (s.title) { doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(255,30,0); doc.text(s.title, x, sigY+22, { align:'center' }) }
         doc.setTextColor(0)
       })
     }
@@ -451,7 +451,7 @@ export default function YearOverYear() {
         m.fmt(m.b),
         pct(m.a, m.b),
       ]),
-      headStyles: { fillColor: [241, 114, 0], fontSize: 9, fontStyle: 'bold', halign: 'center' },
+      headStyles: { fillColor: [255,30,0], fontSize: 9, fontStyle: 'bold', halign: 'center' },
       bodyStyles: { fontSize: 9, halign: 'right' },
       columnStyles: { 0: { halign: 'left', fontStyle: 'bold' } },
       tableLineColor: [150, 150, 150], tableLineWidth: 0.15,

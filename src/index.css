@@ -12,9 +12,9 @@
   --text: #1a1a1a;
   --muted: #6b6b6b;
   --hint: #9e9e9e;
-  --accent: #f17200;
-  --accent-dark: #c95e00;
-  --accent-light: #fff3e8;
+  --accent: #ff1e00;
+  --accent-dark: #cc1800;
+  --accent-light: #ffe9e6;
   --danger: #c0392b;
   --danger-light: #fdf0ef;
   --success: #0f6e56;
@@ -46,9 +46,9 @@ body.dark {
   --text: #f3f4f6;
   --muted: #9ca3af;
   --hint: #6b7280;
-  --accent: #f17200;
-  --accent-dark: #c95e00;
-  --accent-light: rgba(241,114,0,0.15);
+  --accent: #ff1e00;
+  --accent-dark: #cc1800;
+  --accent-light: rgba(255,30,0,0.15);
   --danger: #f87171;
   --danger-light: rgba(248,113,113,0.12);
   --success: #34d399;
@@ -78,7 +78,7 @@ input, select, textarea {
 }
 input:focus, select:focus, textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(241,114,0,0.1);
+  box-shadow: 0 0 0 3px rgba(255,30,0,0.1);
 }
 
 button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-weight: 500; transition: all 0.15s; }
