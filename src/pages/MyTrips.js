@@ -1,0 +1,387 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { supabase, fmt, fmtDate, fetchAllRows } from '../lib/supabase'
+import { useAuth } from '../components/AuthContext'
+
+// SMC trip_code stores supplier_amount + stripping_fee as VAT-inclusive; divide by 1.12 for net.
+const pmNet = (t) => {
+  const raw = (parseFloat(t.supplier_amount) || 0) + (parseFloat(t.stripping_fee) || 0)
+  return t.trip_code === 'SMC' ? raw / 1.12 : raw
+}
+const dumpNet = (t) => (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0)
+
+const PaidBadge = ({ paid, label }) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600,
+    padding: '2px 8px', borderRadius: 20,
+    color: paid ? 'var(--success)' : 'var(--muted)',
+    background: paid ? 'rgba(22,163,74,0.1)' : 'rgba(148,163,184,0.15)',
+  }}>{paid ? '✅' : '⏳'} {label}</span>
+)
+
+export default function MyTrips() {
+  const { profile, viewerPlates } = useAuth()
+  const [view, setView] = useState('trips')
+  const [dumpTrips, setDumpTrips] = useState([])
+  const [pmTrips, setPmTrips] = useState([])
+  const [expenses, setExpenses] = useState([])
+  const [myInvoices, setMyInvoices] = useState([])
+  const [shareCounts, setShareCounts] = useState({})
+  const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState('dump')
+  const [tripView, setTripView] = useState('invoice')
+  const [expandedInvoice, setExpandedInvoice] = useState(null)
+  const [month, setMonth] = useState('')
+
+  const fetchAll = useCallback(async () => {
+    setLoading(true)
+    // RLS already scopes trips/expenses to the logged-in viewer's own
+    // plate(s) — no extra filtering is required (or trusted) client-side.
+    // Invoices never come from the shared invoices table directly (one
+    // invoice can cover multiple trucks) — get_my_invoices() returns only
+    // this account's own trip totals per invoice.
+    const [dt, pt, ex, inv] = await Promise.all([
+      fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
+      fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
+      fetchAllRows(() => supabase.from('expenses').select('*').order('expense_date', { ascending: false })),
+      supabase.rpc('get_my_invoices'),
+    ])
+    if (dt.data) setDumpTrips(dt.data)
+    if (pt.data) setPmTrips(pt.data)
+    if (ex.data) setExpenses(ex.data)
+    if (inv.data) setMyInvoices(inv.data)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => { fetchAll() }, [fetchAll])
+
+  // Default to whichever trip type actually has data for this account
+  useEffect(() => {
+    if (!loading && dumpTrips.length === 0 && pmTrips.length > 0) setTab('pm')
+  }, [loading, dumpTrips.length, pmTrips.length])
+
+  // Shared (scope='all') expenses need a per-date truck count to compute this
+  // account's share — fetch it once per unique date that shows up.
+  useEffect(() => {
+    const sharedDates = [...new Set(expenses.filter(e => e.scope === 'all').map(e => e.expense_date))]
+    const missing = sharedDates.filter(d => !(d in shareCounts))
+    if (missing.length === 0) return
+    let cancelled = false
+    ;(async () => {
+      const results = await Promise.all(missing.map(d => supabase.rpc('expense_share_truck_count', { for_date: d })))
+      if (cancelled) return
+      setShareCounts(prev => {
+        const next = { ...prev }
+        missing.forEach((d, i) => { next[d] = results[i]?.data || 1 })
+        return next
+      })
+    })()
+    return () => { cancelled = true }
+  }, [expenses])
+
+  const filteredDump = useMemo(() => dumpTrips.filter(t => !month || t.trip_date?.startsWith(month)), [dumpTrips, month])
+  const filteredPm = useMemo(() => pmTrips.filter(t => !month || t.trip_date?.startsWith(month)), [pmTrips, month])
+
+  const filteredInvoices = useMemo(() => myInvoices.filter(i => !month || i.invoice_date?.startsWith(month)), [myInvoices, month])
+  const tripsForInvoice = useCallback((invId) => [
+    ...dumpTrips.filter(t => t.invoice_id === invId).map(t => ({ ...t, _kind: 'dump' })),
+    ...pmTrips.filter(t => t.invoice_id === invId).map(t => ({ ...t, _kind: 'pm' })),
+  ], [dumpTrips, pmTrips])
+  const uninvoicedDump = useMemo(() => filteredDump.filter(t => !t.invoice_id), [filteredDump])
+  const uninvoicedPm = useMemo(() => filteredPm.filter(t => !t.invoice_id), [filteredPm])
+
+  const individualExpenses = useMemo(() => expenses.filter(e => e.scope === 'individual' && (!month || e.expense_date?.startsWith(month))), [expenses, month])
+  const sharedExpenses = useMemo(() => expenses.filter(e => e.scope === 'all' && (!month || e.expense_date?.startsWith(month))), [expenses, month])
+  const shareOf = (e) => (parseFloat(e.amount) || 0) / (shareCounts[e.expense_date] || 1)
+
+  const dumpTotal = filteredDump.reduce((s, t) => s + dumpNet(t), 0)
+  const pmTotal = filteredPm.reduce((s, t) => s + pmNet(t), 0)
+  const rows = tab === 'dump' ? filteredDump : filteredPm
+  const total = tab === 'dump' ? dumpTotal : pmTotal
+  const paidCount = rows.filter(t => t.client_paid).length
+  const settledCount = rows.filter(t => t.subcon_paid).length
+
+  const individualTotal = individualExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+  const sharedShareTotal = sharedExpenses.reduce((s, e) => s + shareOf(e), 0)
+  const totalExpenses = individualTotal + sharedShareTotal
+  const tripIncome = dumpTotal + pmTotal
+  const netAfterExpenses = tripIncome - totalExpenses
+
+  if (loading) return <div className="page"><div className="empty-state"><p>Loading your account…</p></div></div>
+
+  return (
+    <div className="page">
+      <div className="page-header">
+        <div>
+          <h1 className="page-title">My Trips & Expenses</h1>
+          <p className="page-sub">
+            {profile?.full_name ? `${profile.full_name} · ` : ''}
+            {viewerPlates.length > 0 ? `Truck${viewerPlates.length > 1 ? 's' : ''}: ${viewerPlates.join(', ')}` : 'No truck assigned yet — contact the office'}
+          </p>
+        </div>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ maxWidth: 170 }} />
+      </div>
+
+      <div style={{ padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 6, fontSize: 12, color: 'var(--accent-dark)', marginBottom: 18 }}>
+        ℹ️ Read-only view of your own trips and expenses. For questions about any figure here, please contact the office.
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        {[{ key: 'trips', label: '🚛 Trips' }, { key: 'expenses', label: '💸 Expenses' }].map(o => (
+          <button key={o.key} onClick={() => setView(o.key)} style={{
+            padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            background: view === o.key ? 'var(--accent)' : 'var(--surface)',
+            color: view === o.key ? '#fff' : 'var(--muted)',
+            border: `1.5px solid ${view === o.key ? 'var(--accent)' : 'var(--border)'}`,
+          }}>{o.label}</button>
+        ))}
+      </div>
+
+      <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+        <div className="card"><div className="muted" style={{ fontSize: 11 }}>Trip Income</div><div style={{ fontSize: 20, fontWeight: 700 }}>₱{fmt(tripIncome)}</div></div>
+        <div className="card"><div className="muted" style={{ fontSize: 11 }}>Expenses</div><div style={{ fontSize: 20, fontWeight: 700, color: 'var(--danger)' }}>₱{fmt(totalExpenses)}</div></div>
+        <div className="card"><div className="muted" style={{ fontSize: 11 }}>Net (after expenses)</div><div style={{ fontSize: 20, fontWeight: 700, color: netAfterExpenses >= 0 ? 'var(--success)' : 'var(--danger)' }}>₱{fmt(netAfterExpenses)}</div></div>
+      </div>
+
+      {view === 'trips' ? (
+        <>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            {[{ key: 'invoice', label: '🧾 By Invoice' }, { key: 'flat', label: '📋 All Trips' }].map(o => (
+              <button key={o.key} onClick={() => setTripView(o.key)} style={{
+                padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                background: tripView === o.key ? 'var(--accent)' : 'var(--surface)',
+                color: tripView === o.key ? '#fff' : 'var(--muted)',
+                border: `1.5px solid ${tripView === o.key ? 'var(--accent)' : 'var(--border)'}`,
+              }}>{o.label}</button>
+            ))}
+          </div>
+
+          {tripView === 'invoice' ? (
+            <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+              {filteredInvoices.length === 0 && uninvoicedDump.length === 0 && uninvoicedPm.length === 0 ? (
+                <div className="empty-state" style={{ padding: 24 }}><p className="muted">No invoices or trips found for this period.</p></div>
+              ) : (
+                <>
+                  {filteredInvoices.map(inv => {
+                    const isOpen = expandedInvoice === inv.invoice_id
+                    const trips = tripsForInvoice(inv.invoice_id)
+                    return (
+                      <div key={inv.invoice_id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <div onClick={() => setExpandedInvoice(isOpen ? null : inv.invoice_id)}
+                          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', cursor: 'pointer' }}>
+                          <div>
+                            <div style={{ fontWeight: 600 }}>{inv.invoice_no || 'Invoice'}</div>
+                            <div className="muted" style={{ fontSize: 11 }}>{fmtDate(inv.invoice_date)} · {inv.my_trip_count} trip{inv.my_trip_count > 1 ? 's' : ''}</div>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                            <div style={{ textAlign: 'right' }}>
+                              <div className="mono" style={{ fontWeight: 700 }}>₱{fmt(inv.my_amount)}</div>
+                              <PaidBadge paid={inv.status === 'Paid'} label={inv.status === 'Paid' ? (inv.date_credited ? fmtDate(inv.date_credited) : 'Paid') : inv.status} />
+                            </div>
+                            <span className="muted">{isOpen ? '▲' : '▼'}</span>
+                          </div>
+                        </div>
+                        {isOpen && (
+                          <div style={{ padding: '0 16px 16px' }}>
+                            <div className="table-wrap">
+                              <table className="table">
+                                <thead>
+                                  <tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Amount</th><th>Settled to You</th></tr>
+                                </thead>
+                                <tbody>
+                                  {trips.map(t => (
+                                    <tr key={t._kind + t.id}>
+                                      <td>{fmtDate(t.trip_date)}</td>
+                                      <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                                      <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
+                                      <td className="text-right mono">₱{fmt(t._kind === 'dump' ? dumpNet(t) : pmNet(t))}</td>
+                                      <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {(uninvoicedDump.length > 0 || uninvoicedPm.length > 0) && (
+                    <div style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 4 }}>⏳ Not Yet Invoiced</div>
+                      <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{uninvoicedDump.length + uninvoicedPm.length} trip(s) not yet on an invoice</div>
+                      <div className="table-wrap">
+                        <table className="table">
+                          <thead><tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Amount</th></tr></thead>
+                          <tbody>
+                            {[...uninvoicedDump.map(t => ({ ...t, _kind: 'dump' })), ...uninvoicedPm.map(t => ({ ...t, _kind: 'pm' }))]
+                              .sort((a, b) => (b.trip_date || '').localeCompare(a.trip_date || ''))
+                              .map(t => (
+                                <tr key={t._kind + t.id}>
+                                  <td>{fmtDate(t.trip_date)}</td>
+                                  <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                                  <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
+                                  <td className="text-right mono">₱{fmt(t._kind === 'dump' ? dumpNet(t) : pmNet(t))}</td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            <>
+          {(dumpTrips.length > 0 && pmTrips.length > 0) && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {[{ key: 'dump', label: '🚛 Dump Truck Trips' }, { key: 'pm', label: '📦 Prime Mover Trips' }].map(o => (
+                <button key={o.key} onClick={() => setTab(o.key)} style={{
+                  padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 500,
+                  background: tab === o.key ? 'var(--accent)' : 'var(--surface)',
+                  color: tab === o.key ? '#fff' : 'var(--muted)',
+                  border: `1.5px solid ${tab === o.key ? 'var(--accent)' : 'var(--border)'}`,
+                }}>{o.label}</button>
+              ))}
+            </div>
+          )}
+
+          <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
+            <div className="card"><div className="muted" style={{ fontSize: 11 }}>Trips</div><div style={{ fontSize: 22, fontWeight: 700 }}>{rows.length}</div></div>
+            <div className="card"><div className="muted" style={{ fontSize: 11 }}>Total Amount</div><div style={{ fontSize: 22, fontWeight: 700 }}>₱{fmt(total)}</div></div>
+            <div className="card"><div className="muted" style={{ fontSize: 11 }}>Client Paid</div><div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success)' }}>{paidCount} / {rows.length}</div></div>
+            <div className="card"><div className="muted" style={{ fontSize: 11 }}>Settled to You</div><div style={{ fontSize: 22, fontWeight: 700, color: 'var(--success)' }}>{settledCount} / {rows.length}</div></div>
+          </div>
+
+          <div className="card">
+            <div className="table-wrap">
+              <table className="table">
+                {tab === 'dump' ? (
+                  <>
+                    <thead>
+                      <tr>
+                        <th>Date</th><th>Truck</th><th>Route</th><th>Commodity</th>
+                        <th className="text-right">Weight (t)</th><th className="text-right">Rate/t</th>
+                        <th className="text-right">Amount</th><th>Client Paid</th><th>Settled</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDump.length === 0 ? (
+                        <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
+                      ) : filteredDump.map(t => (
+                        <tr key={t.id}>
+                          <td>{fmtDate(t.trip_date)}</td>
+                          <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                          <td>{t.route}</td>
+                          <td>{t.commodity}</td>
+                          <td className="text-right mono">{fmt(t.weight_tons)}</td>
+                          <td className="text-right mono">₱{fmt(t.rate_per_ton)}</td>
+                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(dumpNet(t))}</td>
+                          <td><PaidBadge paid={t.client_paid} label={t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Paid') : 'Unpaid'} /></td>
+                          <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </>
+                ) : (
+                  <>
+                    <thead>
+                      <tr>
+                        <th>Date</th><th>Truck</th><th>Trip Code</th><th>Size</th>
+                        <th className="text-right">Amount</th><th>Client Paid</th><th>Settled</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredPm.length === 0 ? (
+                        <tr><td colSpan={7} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
+                      ) : filteredPm.map(t => (
+                        <tr key={t.id}>
+                          <td>{fmtDate(t.trip_date)}</td>
+                          <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                          <td>{t.trip_code}</td>
+                          <td>{t.container_size || '—'}</td>
+                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(pmNet(t))}</td>
+                          <td><PaidBadge paid={t.client_paid} label={t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Paid') : 'Unpaid'} /></td>
+                          <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </>
+                )}
+              </table>
+            </div>
+          </div>
+            </>
+          )}
+        </>
+      ) : (
+        <>
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Charged to Your Truck</h3>
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr><th>Date</th><th>Category</th><th>Description</th><th className="text-right">Amount</th></tr>
+                </thead>
+                <tbody>
+                  {individualExpenses.length === 0 ? (
+                    <tr><td colSpan={4} className="muted" style={{ textAlign: 'center', padding: 24 }}>No expenses charged to your truck for this period.</td></tr>
+                  ) : individualExpenses.map(e => (
+                    <tr key={e.id}>
+                      <td>{fmtDate(e.expense_date)}</td>
+                      <td>{e.category}</td>
+                      <td>{e.description}</td>
+                      <td className="text-right mono">₱{fmt(e.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {individualExpenses.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: 'var(--accent-light)' }}>
+                      <td colSpan={3} style={{ fontWeight: 700 }}>Total</td>
+                      <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(individualTotal)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Shared Company Overhead</h3>
+          <p className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>Split evenly across all active company trucks each day, including yours.</p>
+          <div className="card">
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr><th>Date</th><th>Category</th><th>Description</th><th className="text-right">Full Amount</th><th className="text-right">Trucks Sharing</th><th className="text-right">Your Share</th></tr>
+                </thead>
+                <tbody>
+                  {sharedExpenses.length === 0 ? (
+                    <tr><td colSpan={6} className="muted" style={{ textAlign: 'center', padding: 24 }}>No shared expenses for this period.</td></tr>
+                  ) : sharedExpenses.map(e => (
+                    <tr key={e.id}>
+                      <td>{fmtDate(e.expense_date)}</td>
+                      <td>{e.category}</td>
+                      <td>{e.description}</td>
+                      <td className="text-right mono">₱{fmt(e.amount)}</td>
+                      <td className="text-right mono muted">{shareCounts[e.expense_date] || '…'}</td>
+                      <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(shareOf(e))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {sharedExpenses.length > 0 && (
+                  <tfoot>
+                    <tr style={{ background: 'var(--accent-light)' }}>
+                      <td colSpan={5} style={{ fontWeight: 700 }}>Your Share — Total</td>
+                      <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(sharedShareTotal)}</td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
