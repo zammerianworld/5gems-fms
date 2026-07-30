@@ -340,7 +340,7 @@ export default function Layout({ children }) {
             <div style={{ marginBottom: 20 }}>
               {navLogo
                 ? <img src={navLogo} alt="Logo" style={{ maxHeight: 60, maxWidth: 200, objectFit: 'contain', margin: '0 auto 12px', display: 'block' }} />
-                : <div style={{ fontSize: 36, marginBottom: 12 }}>🐉</div>
+                : <div style={{ fontSize: 36, marginBottom: 12 }}>🚚</div>
               }
               <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>Fleet Management System</div>
               <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 4 }}>Version {appSettings.app_version} — 2026{appSettings.app_beta ? ' · ' + (appSettings.app_beta_label||'BETA') : ''}</div>
@@ -350,8 +350,7 @@ export default function Layout({ children }) {
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--hint)', marginBottom: 4 }}>Developed by</div>
                 <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14 }}>Kenneth Nomar</div>
-                <div style={{ fontSize: 12 }}>Administrative Officer</div>
-                <div style={{ fontSize: 11, color: 'var(--hint)' }}>System Owner & Project Lead</div>
+                <div style={{ fontSize: 12 }}>Independent Developer</div>
               </div>
               <div style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--hint)', marginBottom: 4 }}>Built with</div>
@@ -360,9 +359,6 @@ export default function Layout({ children }) {
               <div style={{ marginBottom: 16 }}>
                 <div style={{ fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--hint)', marginBottom: 4 }}>AI Development Partner</div>
                 <div>Claude (Anthropic)</div>
-              </div>
-              <div style={{ fontStyle: 'italic', color: 'var(--accent)', fontWeight: 500, borderTop: '0.5px solid var(--border)', paddingTop: 12 }}>
-                "Your Business. Our Passion."
               </div>
             </div>
             <button className="btn-ghost" onClick={() => setShowAbout(false)} style={{ width: '100%', marginTop: 16 }}>Close</button>

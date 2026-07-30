@@ -1634,6 +1634,17 @@ begin
   elsif p_table = 'expenses' then delete from public.expenses where id = p_id;
   elsif p_table = 'orcr_records' then delete from public.orcr_records where id = p_id;
   elsif p_table = 'pdc_checks' then delete from public.pdc_checks where id = p_id;
+  elsif p_table = 'clients' then delete from public.clients where id = p_id;
+  elsif p_table = 'extra_income' then delete from public.extra_income where id = p_id;
+  elsif p_table = 'loans' then delete from public.loans where id = p_id;
+  elsif p_table = 'cash_vouchers' then delete from public.cash_vouchers where id = p_id;
+  elsif p_table = 'drivers' then delete from public.drivers where id = p_id;
+  elsif p_table = 'trucks' then delete from public.trucks where id = p_id;
+  elsif p_table = 'commodities' then delete from public.commodities where id = p_id;
+  elsif p_table = 'signatories' then delete from public.signatories where id = p_id;
+  elsif p_table = 'profiles' then delete from public.profiles where id = p_id;
+  elsif p_table = 'check_vouchers' then delete from public.check_vouchers where id = p_id;
+  elsif p_table = 'bank_templates' then delete from public.bank_templates where id = p_id;
   else raise exception 'Invalid table: %', p_table;
   end if;
 
