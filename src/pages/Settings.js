@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, DUMP_TRUCK_ROUTES } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -646,10 +646,21 @@ export default function Settings() {
                 <button className="btn-primary" onClick={addRoute}>Add</button>
               </div>
             </div>
+            <div className="card" style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Built-in Routes</h2>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Always available in Trip Entry — cannot be removed here.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {DUMP_TRUCK_ROUTES.map(r => (
+                  <div key={r} style={{ fontSize: 13, background: 'var(--bg)', border: '0.5px solid var(--border)', borderRadius: 20, padding: '5px 14px', color: 'var(--muted)' }}>
+                    {r}
+                  </div>
+                ))}
+              </div>
+            </div>
             <div className="card">
               <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 12 }}>Custom Routes</h2>
               {routes.length === 0
-                ? <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No custom routes yet. Built-in routes (CDO-Davao, Lagonglong-Davao, etc.) are always available.</p>
+                ? <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No custom routes yet.</p>
                 : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {routes.map(r => (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 20, padding: '5px 10px 5px 14px' }}>

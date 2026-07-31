@@ -79,8 +79,8 @@ const GUIDES = [
           { type: 'table', rows: [
             ['Role', 'Access'],
             ['👤 Staff', 'Trip Entry, Expenses (operation only), Sub-con Trips, Dashboard, My Account'],
-            ['🔑 Admin', 'Everything Staff can do, plus Billing, Reports, Payroll, Settings, Cashflow, Loans, Vouchers'],
-            ['⚡ Superuser', 'Everything Admin can do, plus Users, Activity Logs, Print Layouts, DB Backup, Print Templates'],
+            ['🔑 Admin', 'Everything Staff can do, plus Billing, Reports, Payroll, Settings, Cashflow, Loans, Vouchers, Manage Users'],
+            ['⚡ Superuser', 'Everything Admin can do, plus Activity Logs, DB Backup, granting Admin/Superuser roles, App Version & PWA Icon settings'],
           ]},
         ],
       },
@@ -655,7 +655,7 @@ const GUIDES = [
             'New routes appear immediately in the Route dropdown on Trip Entry and the route filter in Manage Trips.',
             'Click the × on any route pill to remove it.',
           ]},
-          { type: 'note', text: 'Built-in routes (CDO-Davao, Davao-CDO, Lagonglong-Davao, Legazpi-Darong, etc.) are always available and cannot be removed — only custom-added routes can be deleted.' },
+          { type: 'note', text: 'The full list of built-in routes is shown under Settings → Routes for reference — they are always available and cannot be removed; only custom-added routes can be deleted.' },
         ],
       },
       {
@@ -675,12 +675,12 @@ const GUIDES = [
     id: 'users',
     icon: '👥',
     title: 'Manage Users',
-    roles: ['superuser'],
+    roles: ['admin', 'superuser'],
     sections: [
       {
         heading: 'Overview',
         content: [
-          { type: 'text', text: 'Only superuser can manage users. Staff and Admin accounts are created here.' },
+          { type: 'text', text: 'Admin and Superuser can manage users. Staff and Admin accounts can be created by either role — only Superuser can grant the Superuser role itself.' },
         ],
       },
       {
@@ -766,31 +766,6 @@ const GUIDES = [
             'Click Confirm Import. Existing records (same ID) are skipped — no data is overwritten.',
           ]},
           { type: 'note', text: 'Always export a fresh backup before importing. Import only adds new records — it never deletes or overwrites.' },
-        ],
-      },
-    ],
-  },
-  {
-    id: 'print-layouts',
-    icon: '🖨️',
-    title: 'Print Layouts',
-    roles: ['superuser'],
-    sections: [
-      {
-        heading: 'Overview',
-        content: [
-          { type: 'text', text: 'Print Layout Builder lets superuser create and save custom print templates for SOA, invoices, and other documents. Accessible only to superuser via the sidebar.' },
-        ],
-      },
-      {
-        heading: 'Creating a Layout',
-        content: [
-          { type: 'steps', items: [
-            'Go to Print Layouts.',
-            'Click + New Template and give it a name.',
-            'Use the editor to arrange sections, columns, and fields.',
-            'Click Save Template. It becomes available in the print dialog for the relevant document type.',
-          ]},
         ],
       },
     ],

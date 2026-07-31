@@ -1,107 +1,86 @@
-# Dragon Speed Trucking — Fleet Management System
-## Deployment Guide (Step by Step)
+# 5 Gems Trucking Corp. — Fleet Management System
+
+A fleet management system for trip logging, billing/invoicing, expenses, payroll, and reporting.
 
 ---
 
-## STEP 1 — Set up the Database (Supabase)
+## Tech Stack
 
-1. Go to **supabase.com** and open your project
-2. Click **SQL Editor** in the left sidebar
-3. Click **New Query**
-4. Open the file `supabase-setup.sql` (included in this folder)
-5. Copy the entire contents and paste into the SQL editor
-6. Click **Run** (green button)
-7. You should see "Success" — all tables are now created
+- **Frontend:** React (Create React App), deployed on Vercel
+- **Backend:** Supabase (Postgres + Auth + Edge Functions)
+- **Styling:** Plain CSS with custom properties (no framework)
 
 ---
 
-## STEP 2 — Create Your Admin Account
+## Local Development Setup
 
-1. In Supabase, go to **Authentication → Users**
-2. Click **Add User → Create new user**
-3. Enter your email and a strong password
-4. Click **Create User**
-5. Now go to **SQL Editor** and run this (replace with your actual email):
+### 1. Database (Supabase)
 
-```sql
-update public.profiles set role = 'admin' where email = 'YOUR_EMAIL_HERE';
+1. Create a project at [supabase.com](https://supabase.com)
+2. Open **SQL Editor** → New Query
+3. Paste the entire contents of `5gems-setup.sql` and run it
+   - Safe to re-run if needed — every statement is idempotent (`IF NOT EXISTS` / `DROP ... IF EXISTS` throughout)
+4. Go to **Settings → API** and copy your **Project URL**, **anon key**, and **service_role key**
+
+### 2. Environment Variables
+
+Copy `.env.example` to `.env` and fill in the values from step 1:
+
+```
+REACT_APP_SUPABASE_URL=
+REACT_APP_SUPABASE_ANON_KEY=
+REACT_APP_APP_SECRET=
 ```
 
-This gives you full admin access.
+`REACT_APP_APP_SECRET` can be any random string you choose — it just needs to match the `APP_SECRET` secret you'll set on the edge function in step 4. Never commit `.env` — it's already in `.gitignore`.
+
+### 3. Create Your Superuser Account
+
+1. Supabase → **Authentication → Users → Add User** — enter your email + password
+2. Back in **SQL Editor**, run (replace with your actual email):
+   ```sql
+   update public.profiles set role = 'superuser' where email = 'YOUR_EMAIL_HERE';
+   ```
+   `superuser` is the highest role — it's required for Payroll, App Version, PWA Icon settings, and full Manage Users access. `admin` (settable later, from Manage Users) is one level below and doesn't include those.
+
+### 4. Deploy the Edge Function
+
+The `create-user` edge function (used by Manage Users to create staff accounts) is **not** deployed by Vercel — it's separate:
+
+1. Supabase → **Edge Functions** → deploy a new function named `create-user`
+2. Paste in the contents of `supabase/functions/create-user/index.ts`
+3. Add a secret: **Edge Functions → create-user → Secrets** → `APP_SECRET` = the same value you used for `REACT_APP_APP_SECRET`
+
+### 5. Run Locally
+
+```bash
+npm install
+npm start
+```
+
+Opens at `http://localhost:3000`.
 
 ---
 
-## STEP 3 — Upload the Code to GitHub
+## Deploying to Production (Vercel)
 
-1. Go to **github.com** and sign in
-2. Click **+** (top right) → **New repository**
-3. Name it: `dragon-speed-trucking`
-4. Set to **Private**
-5. Click **Create repository**
-6. Upload all the files in this folder to the repository
-   - Drag and drop the entire folder, OR
-   - Use GitHub Desktop app (easier — download at desktop.github.com)
+1. Push this repo to GitHub (private recommended)
+2. In Vercel: **Add New → Project → Import Git Repository**
+3. Add the same three environment variables from step 2 above, plus `SUPABASE_SERVICE_ROLE_KEY` (server-side only — never prefix this with `REACT_APP_`, or it'll be exposed in the browser bundle)
+4. Deploy
+
+Vercel auto-redeploys on every push to `main` after that — no manual steps needed for future updates.
 
 ---
 
-## STEP 4 — Deploy to Vercel
+## Keeping Supabase Active (Free Tier)
 
-1. Go to **vercel.com** and sign in with GitHub
-2. Click **Add New → Project**
-3. Find and select `dragon-speed-trucking` from your repositories
-4. Click **Import**
-5. Under **Environment Variables**, add these two:
-
-   | Name | Value |
-   |------|-------|
-   | `REACT_APP_SUPABASE_URL` | `https://abfegxxcldjnkfwtogik.supabase.co` |
-   | `REACT_APP_SUPABASE_ANON_KEY` | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...` (your full key) |
-
-6. Click **Deploy**
-7. Wait ~2 minutes — Vercel will give you a live URL like:
-   `https://dragon-speed-trucking.vercel.app`
+Supabase pauses free-tier projects after 7 days of inactivity. Logging into the app at least once a week prevents this. Supabase Pro ($25/mo) removes the limit entirely if that becomes a hassle.
 
 ---
 
-## STEP 5 — Test Your Login
+## Project Structure Notes
 
-1. Open the Vercel URL in your browser
-2. Log in with the admin email/password you created in Step 2
-3. You should see the full dashboard with all modules
-
----
-
-## STEP 6 — Create Staff Accounts
-
-1. Log in as admin
-2. Go to **Manage Users** in the sidebar
-3. Click **Add User**
-4. Enter the staff member's name, email, password, and role (Staff)
-5. Share those credentials with them directly
-
----
-
-## KEEPING SUPABASE ACTIVE (Free Tier)
-
-Supabase pauses free projects after 7 days of inactivity.
-To prevent this: just log into the app at least once a week.
-
-Or run this in your browser console to keep it alive (optional):
-You can also upgrade to Supabase Pro ($25/mo) to remove this limitation.
-
----
-
-## UPDATING THE APP
-
-When you need changes (new features, fixes):
-1. Download the updated files from Claude
-2. Upload/replace them in your GitHub repository
-3. Vercel auto-deploys within ~1 minute — no manual steps needed
-
----
-
-## YOUR CREDENTIALS (KEEP SAFE)
-
-- Supabase URL: https://abfegxxcldjnkfwtogik.supabase.co
-- Vercel URL: https://dragon-speed-trucking.vercel.app (after deployment)
-- GitHub Repo: github.com/[yourusername]/dragon-speed-trucking
+- `5gems-setup.sql` — the complete database schema (tables, RLS policies, functions, triggers). Source of truth for the database; keep it updated if you make schema changes directly in Supabase's SQL editor, or future re-deploys will drift from what's actually live.
+- `supabase/functions/create-user/` — the only backend logic outside the database itself; deployed separately from the rest of the app (see step 4).
+- Role hierarchy: `staff` < `admin` < `superuser`, plus a separate `viewer` role for read-only external access (e.g. a subcontractor checking their own trips only).

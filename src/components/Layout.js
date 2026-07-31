@@ -34,7 +34,6 @@ const NAV_SYSTEM = [
   { path: '/settings', label: 'Settings', icon: '⚙️', moduleKey: 'settings' },
   { path: '/backup', label: 'DB Backup', icon: '💾', moduleKey: 'backup' },
   { path: '/trash', label: 'Trash', icon: '🗑️', moduleKey: 'trash' },
-  { path: '/print-layouts', label: 'Print Layouts', icon: '🖨️', superuserOnly: true },
   { path: '/users', label: 'Manage Users', icon: '👥' },
   { path: '/activity', label: 'Activity Feed', icon: '📡' },
   { path: '/logs', label: 'Activity Logs', icon: '📋' },
@@ -194,9 +193,9 @@ export default function Layout({ children }) {
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px', borderTop: '0.5px solid rgba(255,255,255,0.06)', marginTop: 8 }}>System</div>
             <NavItem item={{ path: '/my-account', label: 'My Account', icon: '👤' }} active={location.pathname === '/my-account'} onNav={() => setSidebarOpen(false)} />
             {NAV_SYSTEM.filter(item => {
-              if (item.path === '/users' || item.path === '/logs') return isSuperuser
+              if (item.path === '/users') return isAdmin
+              if (item.path === '/logs') return isSuperuser
               if (item.path === '/activity') return isAdmin || isSuperuser
-              if (item.path === '/print-layouts') return isSuperuser
               return true
             }).filter(item => !item.superuserOnly || isSuperuser)
               .filter(item => !item.moduleKey || hasModule(item.moduleKey))

@@ -294,7 +294,7 @@ export default function Loans() {
     <div className="page">
       {/* Tab switcher */}
       <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom:16, gap:2 }}>
-        {[['loans','🏦 DSTC Loans'],['lending','💸 Company Lending']].map(([key,label]) => (
+        {[['loans','🏦 Company Loans'],['lending','💸 Company Lending']].map(([key,label]) => (
           <button key={key} onClick={() => setActiveTab(key)}
             style={{ padding:'8px 18px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight: activeTab===key?600:400, color: activeTab===key?'var(--accent)':'var(--muted)', borderBottom: activeTab===key?'2px solid var(--accent)':'2px solid transparent', marginBottom:-1 }}>
             {label}
@@ -525,7 +525,7 @@ export default function Loans() {
                 <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--muted)' }}>
                   <div style={{ fontSize:36, marginBottom:12 }}>💸</div>
                   <div style={{ fontWeight:600 }}>No loans recorded</div>
-                  <div style={{ fontSize:13, marginTop:6 }}>Track money lent out by DSTC.</div>
+                  <div style={{ fontSize:13, marginTop:6 }}>Track money lent out by the company.</div>
                 </div>
               ) : companyLoans.filter(l => !clFilterStatus || l.status === clFilterStatus).map(loan => {
                 const isExpanded = expandedCl === loan.id

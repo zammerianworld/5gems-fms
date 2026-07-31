@@ -26,7 +26,6 @@ import ExtraIncome from './pages/ExtraIncome'
 import CashVouchers from './pages/CashVouchers'
 import HistoricalData from './pages/HistoricalData'
 import Trash from './pages/Trash'
-import PrintLayouts from './pages/PrintLayouts'
 import Payroll from './pages/Payroll'
 import HowTo from './pages/HowTo'
 import MyTrips from './pages/MyTrips'
@@ -62,7 +61,7 @@ function AppRoutes() {
       <Route path="/midyear-report" element={<ProtectedRoute adminOnly moduleKey="reports"><MidyearReport /></ProtectedRoute>} />
       <Route path="/summary" element={<ProtectedRoute adminOnly moduleKey="summary"><Summary /></ProtectedRoute>} />
       <Route path="/vouchers" element={<ProtectedRoute adminOnly moduleKey="vouchers"><CheckVouchers /></ProtectedRoute>} />
-      <Route path="/users" element={<ProtectedRoute superuserOnly><Users /></ProtectedRoute>} />
+      <Route path="/users" element={<ProtectedRoute adminOnly><Users /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute adminOnly moduleKey="settings"><Settings /></ProtectedRoute>} />
       <Route path="/my-account" element={<ProtectedRoute viewerAllowed><MyAccount /></ProtectedRoute>} />
       <Route path="/my-trips" element={<ProtectedRoute viewerAllowed><MyTrips /></ProtectedRoute>} />
@@ -79,7 +78,6 @@ function AppRoutes() {
       <Route path="/cash-vouchers" element={<ProtectedRoute adminOnly moduleKey="cash_vouchers"><CashVouchers /></ProtectedRoute>} />
       <Route path="/historical" element={<ProtectedRoute adminOnly moduleKey="historical"><HistoricalData /></ProtectedRoute>} />
       <Route path="/trash" element={<ProtectedRoute adminOnly moduleKey="trash"><Trash /></ProtectedRoute>} />
-      <Route path="/print-layouts" element={<ProtectedRoute adminOnly><PrintLayouts /></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute adminOnly moduleKey="payroll"><Payroll /></ProtectedRoute>} />
       <Route path="/how-to" element={<ProtectedRoute moduleKey="how_to"><HowTo /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

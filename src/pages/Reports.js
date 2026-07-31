@@ -106,7 +106,7 @@ export default function Reports() {
   // Admin/shared-expense divisor is a DIFFERENT scope from revenue reporting:
   // special_subcon trucks don't count as "company" for sales/performance, but
   // they DO share in general overhead (rent, utilities, etc.) as a cost of
-  // operating under DSTC. Only true third-party 'subcon' is excluded here.
+  // operating under the company. Only true third-party 'subcon' is excluded here.
   const expenseShareTrucks = !dateRangeValid ? [] : activeTrucks.filter(t => t.ownership !== 'subcon')
   const companyTrucks = !dateRangeValid ? [] : (truckScope === 'all' ? activeTrucks : ownedTrucks)
   // ── DATE-AWARE TRUCK COUNT ──────────────────────────────────────────────────
