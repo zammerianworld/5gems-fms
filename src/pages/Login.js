@@ -67,7 +67,7 @@ export default function Login() {
         // Sign into Supabase using the env var password so RLS works
         // Set REACT_APP_SUPERUSER_PW in Vercel environment variables
         const suPassword = process.env.REACT_APP_SUPERUSER_PW
-        if (!suPassword) { showToast('Superuser password not configured. Contact system administrator.', 'error'); setSaving(false); return }
+        if (!suPassword) { setError('Superuser password not configured. Contact system administrator.'); setLoading(false); return }
         const { error: suErr } = await supabase.auth.signInWithPassword({
           email: 'superuser@5gems.internal',
           password: suPassword,

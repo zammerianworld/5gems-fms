@@ -103,10 +103,20 @@ export const AuthProvider = ({ children }) => {
     // the listener fires — this prevents the brief null flash that causes
     // the redirect-to-login loop.
     let initialised = false
+    const mountedAt = Date.now()
+    const SIGNED_OUT_GRACE_MS = 4000 // right after a fresh page load (e.g. post-login
+    // redirect), Supabase's client can emit a spurious SIGNED_OUT while it's still
+    // settling the session from storage — a real one arriving in this window gets
+    // double-checked against a fresh getSession() before we actually log anyone out.
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       // Ignore spurious SIGNED_OUT during the initial token refresh window
       if (!initialised && event === 'SIGNED_OUT') return
+
+      if (event === 'SIGNED_OUT' && Date.now() - mountedAt < SIGNED_OUT_GRACE_MS) {
+        const { data: { session: recheck } } = await supabase.auth.getSession()
+        if (recheck) { initialised = true; return } // false alarm — session is actually fine
+      }
 
       const superSess = sessionStorage.getItem('superuser_session')
       if (superSess) {
