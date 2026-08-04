@@ -140,18 +140,23 @@ export default function Reports() {
       })
       .reduce((ss, ins) => ss + (ins.annual_amount||0)/(ins.truck_ids?.length||1)/12, 0), 0)
   const getOpExpenses = (truckId, category) => {
+    const isSubcon = activeTrucks.find(t => t.id === truckId)?.ownership === 'subcon'
     const relevant = expenses.filter(e => {
       if (e.expense_type !== 'operation') return false
       if (category && e.category !== category) return false
       if (!inPeriod(e.expense_date)) return false
       if (e.scope === 'individual') return e.truck_id === truckId
-      return e.scope === 'all'
+      // Shared (scope='all') expenses don't apply to pure subcon trucks — they
+      // don't participate in overhead sharing (special_subcon does, so this
+      // only excludes true third-party 'subcon').
+      return e.scope === 'all' && !isSubcon
     })
     const amount = relevant.reduce((s, e) => s + (e.scope === 'all' ? (e.amount||0)/getActiveTruckCount(e.expense_date) : (e.amount||0)), 0)
     const descs = [...new Set(relevant.map(e => e.description).filter(Boolean))].slice(0,2)
     return { amount, desc: descs.join(', ') }
   }
-  const getAdminShare = () => {
+  const getAdminShare = (truckId) => {
+    if (activeTrucks.find(t => t.id === truckId)?.ownership === 'subcon') return { amount: 0, desc: '' }
     const relevant = expenses.filter(e => e.expense_type === 'admin' && inPeriod(e.expense_date))
     // FIX: divide each admin expense by the number of trucks active on that expense's date
     const total = relevant.reduce((s, e) => s + (e.amount||0) / getActiveTruckCount(e.expense_date), 0)
@@ -221,7 +226,7 @@ export default function Reports() {
         amount = getInsForPeriod(truck.id, 'Own Damage Insurance')
         basis = 'Annual ÷ 12'
       } else if (cat === 'Admin Expenses') {
-        const r = getAdminShare()
+        const r = getAdminShare(truck.id)
         amount = r.amount; basis = r.desc
       } else {
         const r = getOpExpenses(truck.id, cat)

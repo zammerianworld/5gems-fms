@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase, fmt, fmtDate, fetchAllRows } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+import ExcelJS from 'exceljs'
 
 // SMC trip_code stores supplier_amount + stripping_fee as VAT-inclusive; divide by 1.12 for net.
 const pmNet = (t) => {
@@ -31,6 +34,8 @@ export default function MyTrips() {
   const [tripView, setTripView] = useState('invoice')
   const [expandedInvoice, setExpandedInvoice] = useState(null)
   const [month, setMonth] = useState('')
+  const [sharesOverhead, setSharesOverhead] = useState(true) // default true avoids a misleading flash before the check resolves
+  const [settings, setSettings] = useState({})
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -39,16 +44,20 @@ export default function MyTrips() {
     // Invoices never come from the shared invoices table directly (one
     // invoice can cover multiple trucks) — get_my_invoices() returns only
     // this account's own trip totals per invoice.
-    const [dt, pt, ex, inv] = await Promise.all([
+    const [dt, pt, ex, inv, shares, st] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('expenses').select('*').order('expense_date', { ascending: false })),
       supabase.rpc('get_my_invoices'),
+      supabase.rpc('viewer_shares_overhead'),
+      supabase.from('company_settings').select('company_name').eq('id', 1).maybeSingle(),
     ])
     if (dt.data) setDumpTrips(dt.data)
     if (pt.data) setPmTrips(pt.data)
     if (ex.data) setExpenses(ex.data)
     if (inv.data) setMyInvoices(inv.data)
+    if (typeof shares.data === 'boolean') setSharesOverhead(shares.data)
+    if (st.data) setSettings(st.data)
     setLoading(false)
   }, [])
 
@@ -101,10 +110,180 @@ export default function MyTrips() {
   const settledCount = rows.filter(t => t.subcon_paid).length
 
   const individualTotal = individualExpenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-  const sharedShareTotal = sharedExpenses.reduce((s, e) => s + shareOf(e), 0)
+  const sharedShareTotal = sharesOverhead ? sharedExpenses.reduce((s, e) => s + shareOf(e), 0) : 0
   const totalExpenses = individualTotal + sharedShareTotal
   const tripIncome = dumpTotal + pmTotal
   const netAfterExpenses = tripIncome - totalExpenses
+
+  const monthLabel = (ym) => ym ? new Date(ym + '-01T00:00:00').toLocaleDateString('en-PH', { month: 'long', year: 'numeric' }) : 'All Time'
+  const periodLabel = monthLabel(month)
+  const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
+
+  const handleExportPDF = () => {
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' })
+    const W = 215.9
+    doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+    doc.text(companyName, W / 2, 14, { align: 'center' })
+    doc.setFontSize(11)
+    doc.text('My Trips & Expenses', W / 2, 20, { align: 'center' })
+    doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    doc.text(`${viewerPlates.join(', ') || 'No truck assigned'}  ·  ${periodLabel}`, W / 2, 26, { align: 'center' })
+
+    let y = 34
+    doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+    doc.text(`Trip Income: PHP ${fmt(tripIncome)}      Expenses: PHP ${fmt(totalExpenses)}      Net: PHP ${fmt(netAfterExpenses)}`, W / 2, y, { align: 'center' })
+    y += 8
+
+    if (filteredDump.length > 0) {
+      doc.setFontSize(10); doc.text('Dump Truck Trips', 14, y); y += 2
+      autoTable(doc, {
+        startY: y, margin: { left: 14, right: 14 },
+        head: [['Date', 'Truck', 'Route', 'Commodity', 'Weight (t)', 'Rate/t', 'Amount', 'Client Paid', 'Settled']],
+        body: filteredDump.map(t => [
+          fmtDate(t.trip_date), t.truck_plate, t.route, t.commodity,
+          fmt(t.weight_tons), `PHP ${fmt(t.rate_per_ton)}`, `PHP ${fmt(dumpNet(t))}`,
+          t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
+        ]),
+        styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+
+    if (filteredPm.length > 0) {
+      if (y > 250) { doc.addPage(); y = 16 }
+      doc.setFontSize(10); doc.text('Prime Mover Trips', 14, y); y += 2
+      autoTable(doc, {
+        startY: y, margin: { left: 14, right: 14 },
+        head: [['Date', 'Truck', 'Trip Code', 'Size', 'Amount', 'Client Paid', 'Settled']],
+        body: filteredPm.map(t => [
+          fmtDate(t.trip_date), t.truck_plate, t.trip_code, t.container_size || '—',
+          `PHP ${fmt(pmNet(t))}`, t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
+        ]),
+        styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+
+    if (individualExpenses.length > 0) {
+      if (y > 250) { doc.addPage(); y = 16 }
+      doc.setFontSize(10); doc.text('Charged to Your Truck', 14, y); y += 2
+      autoTable(doc, {
+        startY: y, margin: { left: 14, right: 14 },
+        head: [['Date', 'Category', 'Description', 'Amount']],
+        body: individualExpenses.map(e => [fmtDate(e.expense_date), e.category, e.description, `PHP ${fmt(e.amount)}`]),
+        foot: [['', '', 'Total', `PHP ${fmt(individualTotal)}`]],
+        styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] }, footStyles: { fillColor: [254, 249, 195], textColor: 0, fontStyle: 'bold' },
+      })
+      y = doc.lastAutoTable.finalY + 8
+    }
+
+    if (sharedExpenses.length > 0) {
+      if (y > 240) { doc.addPage(); y = 16 }
+      doc.setFontSize(10); doc.text('Shared Company Overhead', 14, y); y += 2
+      doc.setFontSize(7.5); doc.setFont('helvetica', 'italic')
+      doc.text(sharesOverhead ? 'Split evenly across all active company trucks each day, including yours.' : "Shown for transparency — your truck doesn't participate in shared overhead costs.", 14, y + 3)
+      y += 6
+      autoTable(doc, {
+        startY: y, margin: { left: 14, right: 14 },
+        head: [['Date', 'Category', 'Description', 'Full Amount', 'Trucks Sharing', 'Your Share']],
+        body: sharedExpenses.map(e => [
+          fmtDate(e.expense_date), e.category, e.description, `PHP ${fmt(e.amount)}`,
+          sharesOverhead ? (shareCounts[e.expense_date] || '—') : '—',
+          sharesOverhead ? `PHP ${fmt(shareOf(e))}` : 'N/A',
+        ]),
+        foot: [['', '', '', '', 'Your Share — Total', sharesOverhead ? `PHP ${fmt(sharedShareTotal)}` : 'PHP 0.00']],
+        styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] }, footStyles: { fillColor: [254, 249, 195], textColor: 0, fontStyle: 'bold' },
+      })
+    }
+
+    doc.save(`My-Trips-Expenses-${month || 'All-Time'}.pdf`)
+  }
+
+  const handleExportExcel = async () => {
+    const wb = new ExcelJS.Workbook()
+    const thin = { style: 'thin', color: { argb: 'FFAAAAAA' } }
+    const allB = { top: thin, left: thin, bottom: thin, right: thin }
+    const hdrFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }
+    const hdrFont = { bold: true, color: { argb: 'FFFFFFFF' }, size: 9 }
+    const addHeaderRow = (ws, rowNum, labels) => {
+      const row = ws.getRow(rowNum)
+      labels.forEach((l, i) => { const c = row.getCell(i + 1); c.value = l; c.font = hdrFont; c.fill = hdrFill; c.border = allB })
+    }
+
+    const tws = wb.addWorksheet('Trips')
+    tws.mergeCells('A1:I1'); tws.getCell('A1').value = companyName; tws.getCell('A1').font = { bold: true, size: 13 }; tws.getCell('A1').alignment = { horizontal: 'center' }
+    tws.mergeCells('A2:I2'); tws.getCell('A2').value = `MY TRIPS — ${periodLabel.toUpperCase()}`; tws.getCell('A2').font = { bold: true, size: 11 }; tws.getCell('A2').alignment = { horizontal: 'center' }
+    tws.columns = [{ width: 12 }, { width: 8 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }]
+    addHeaderRow(tws, 4, ['Date', 'Type', 'Truck', 'Route / Trip Code', 'Weight (t)', 'Commodity / Size', 'Amount', 'Client Paid', 'Settled'])
+    let r = 5
+    const allTrips = [
+      ...filteredDump.map(t => ({ date: t.trip_date, type: 'Dump', truck: t.truck_plate, route: t.route, weight: t.weight_tons, extra: t.commodity, amount: dumpNet(t), paid: t.client_paid, settled: t.subcon_paid })),
+      ...filteredPm.map(t => ({ date: t.trip_date, type: 'PM', truck: t.truck_plate, route: t.trip_code, weight: '', extra: t.container_size, amount: pmNet(t), paid: t.client_paid, settled: t.subcon_paid })),
+    ].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    allTrips.forEach(t => {
+      const row = tws.getRow(r); const bg = (r % 2 === 0) ? 'FFFFFFFF' : 'FFF9FAFB'
+      ;[fmtDate(t.date), t.type, t.truck, t.route, t.weight, t.extra, t.amount, t.paid ? 'Paid' : 'Unpaid', t.settled ? 'Settled' : 'Pending'].forEach((v, ci) => {
+        const c = row.getCell(ci + 1); c.value = v; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+        if (ci === 6) c.numFmt = '#,##0.00'
+      })
+      r++
+    })
+    const tTotalRow = tws.getRow(r)
+    ;['', '', '', '', '', 'TOTAL', tripIncome, '', ''].forEach((v, ci) => {
+      const c = tTotalRow.getCell(ci + 1); c.value = v; c.font = { bold: true }; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }
+      if (ci === 6) c.numFmt = '#,##0.00'
+    })
+    tws.views = [{ showGridLines: false, state: 'frozen', ySplit: 4 }]
+
+    const ews = wb.addWorksheet('Expenses')
+    ews.mergeCells('A1:D1'); ews.getCell('A1').value = companyName; ews.getCell('A1').font = { bold: true, size: 13 }; ews.getCell('A1').alignment = { horizontal: 'center' }
+    ews.mergeCells('A2:D2'); ews.getCell('A2').value = `MY EXPENSES — ${periodLabel.toUpperCase()}`; ews.getCell('A2').font = { bold: true, size: 11 }; ews.getCell('A2').alignment = { horizontal: 'center' }
+    ews.columns = [{ width: 12 }, { width: 16 }, { width: 26 }, { width: 15 }]
+    ews.getCell('A4').value = 'Charged to Your Truck'; ews.getCell('A4').font = { bold: true }
+    addHeaderRow(ews, 5, ['Date', 'Category', 'Description', 'Amount'])
+    let er = 6
+    individualExpenses.forEach(e => {
+      const row = ews.getRow(er); const bg = (er % 2 === 0) ? 'FFFFFFFF' : 'FFF9FAFB'
+      ;[fmtDate(e.expense_date), e.category, e.description, parseFloat(e.amount) || 0].forEach((v, ci) => {
+        const c = row.getCell(ci + 1); c.value = v; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+        if (ci === 3) c.numFmt = '#,##0.00'
+      })
+      er++
+    })
+    const iTotalRow = ews.getRow(er)
+    ;['', '', 'Total', individualTotal].forEach((v, ci) => {
+      const c = iTotalRow.getCell(ci + 1); c.value = v; c.font = { bold: true }; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }
+      if (ci === 3) c.numFmt = '#,##0.00'
+    })
+    er += 2
+    ews.getCell(`A${er}`).value = 'Shared Company Overhead'; ews.getCell(`A${er}`).font = { bold: true }; er++
+    ews.getCell(`A${er}`).value = sharesOverhead ? 'Split evenly across all active company trucks each day, including yours.' : "Shown for transparency — your truck doesn't participate in shared overhead costs."
+    ews.getCell(`A${er}`).font = { italic: true, size: 9 }; er++
+    addHeaderRow(ews, er, ['Date', 'Category', 'Description', 'Amount']); er++
+    ews.getCell(`E${er - 1}`).value = 'Trucks Sharing'; ews.getCell(`E${er - 1}`).font = hdrFont; ews.getCell(`E${er - 1}`).fill = hdrFill; ews.getCell(`E${er - 1}`).border = allB
+    ews.getCell(`F${er - 1}`).value = 'Your Share'; ews.getCell(`F${er - 1}`).font = hdrFont; ews.getCell(`F${er - 1}`).fill = hdrFill; ews.getCell(`F${er - 1}`).border = allB
+    ews.getColumn(5).width = 14; ews.getColumn(6).width = 14
+    sharedExpenses.forEach(e => {
+      const row = ews.getRow(er); const bg = (er % 2 === 0) ? 'FFFFFFFF' : 'FFF9FAFB'
+      const vals = [fmtDate(e.expense_date), e.category, e.description, parseFloat(e.amount) || 0, sharesOverhead ? (shareCounts[e.expense_date] || '') : '—', sharesOverhead ? shareOf(e) : 0]
+      vals.forEach((v, ci) => {
+        const c = row.getCell(ci + 1); c.value = v; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
+        if (ci === 3 || ci === 5) c.numFmt = '#,##0.00'
+      })
+      er++
+    })
+    const sTotalRow = ews.getRow(er)
+    ;['', '', '', '', 'Your Share — Total', sharesOverhead ? sharedShareTotal : 0].forEach((v, ci) => {
+      const c = sTotalRow.getCell(ci + 1); c.value = v; c.font = { bold: true }; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }
+      if (ci === 5) c.numFmt = '#,##0.00'
+    })
+    ews.views = [{ showGridLines: false }]
+
+    const buf = await wb.xlsx.writeBuffer()
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+    const url = URL.createObjectURL(blob); const a = document.createElement('a')
+    a.href = url; a.download = `My-Trips-Expenses-${month || 'All-Time'}.xlsx`; a.click(); URL.revokeObjectURL(url)
+  }
 
   if (loading) return <div className="page"><div className="empty-state"><p>Loading your account…</p></div></div>
 
@@ -134,6 +313,10 @@ export default function MyTrips() {
             border: `1.5px solid ${view === o.key ? 'var(--accent)' : 'var(--border)'}`,
           }}>{o.label}</button>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+          <button className="btn-ghost btn-sm" onClick={handleExportPDF}>📄 Export PDF</button>
+          <button className="btn-ghost btn-sm" onClick={handleExportExcel}>📊 Export Excel</button>
+        </div>
       </div>
 
       <div className="grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 20 }}>
@@ -348,7 +531,11 @@ export default function MyTrips() {
           </div>
 
           <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Shared Company Overhead</h3>
-          <p className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>Split evenly across all active company trucks each day, including yours.</p>
+          <p className="muted" style={{ fontSize: 11.5, marginBottom: 8 }}>
+            {sharesOverhead
+              ? 'Split evenly across all active company trucks each day, including yours.'
+              : "Shown for transparency — your truck doesn't participate in shared overhead costs, so none of this is deducted from you."}
+          </p>
           <div className="card">
             <div className="table-wrap">
               <table className="table">
@@ -364,8 +551,8 @@ export default function MyTrips() {
                       <td>{e.category}</td>
                       <td>{e.description}</td>
                       <td className="text-right mono">₱{fmt(e.amount)}</td>
-                      <td className="text-right mono muted">{shareCounts[e.expense_date] || '…'}</td>
-                      <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(shareOf(e))}</td>
+                      <td className="text-right mono muted">{sharesOverhead ? (shareCounts[e.expense_date] || '…') : '—'}</td>
+                      <td className="text-right mono" style={{ fontWeight: 600 }}>{sharesOverhead ? `₱${fmt(shareOf(e))}` : 'Not applicable'}</td>
                     </tr>
                   ))}
                 </tbody>

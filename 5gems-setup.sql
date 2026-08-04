@@ -1715,6 +1715,20 @@ begin
   return true;
 end; $function$;
 
+CREATE OR REPLACE FUNCTION public.viewer_shares_overhead()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+AS $function$
+  select exists (
+    select 1 from public.trucks
+    where plate = any(public.viewer_plates())
+      and coalesce(ownership, '') <> 'subcon'
+  );
+$function$;
+
+grant execute on function public.viewer_shares_overhead() to authenticated;
+
 CREATE OR REPLACE FUNCTION public.viewer_truck_ids()
  RETURNS text[]
  LANGUAGE sql
