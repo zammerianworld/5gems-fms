@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase, DUMP_TRUCK_ROUTES } from '../lib/supabase'
+import { EULA_SECTIONS, DMCA_SECTIONS, PRIVACY_SECTIONS, LEGAL_LAST_UPDATED } from '../lib/legalDocs'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -28,7 +29,8 @@ export default function Settings() {
   const [appBeta, setAppBeta] = useState(true)
   const [appBetaLabel, setAppBetaLabel] = useState('BETA — Testing Phase')
   const [versionSaving, setVersionSaving] = useState(false)
-  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Drivers', 'Clientele', 'Commodities', 'Routes', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Drivers', 'Clientele', 'Commodities', 'Routes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const [legalDoc, setLegalDoc] = useState('eula')
   const [tab, setTab] = useState('Company Info')
   const [confirmState, setConfirmState] = useState(null)
   const [settings, setSettings] = useState({
@@ -672,6 +674,37 @@ export default function Settings() {
               }
             </div>
           </>
+        )}
+        {tab === 'Legal' && (
+          <div className="card" style={{ maxWidth: 780 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {[{ key: 'eula', label: 'EULA' }, { key: 'privacy', label: 'Privacy Policy' }, { key: 'dmca', label: 'DMCA / Copyright Policy' }].map(o => (
+                <button key={o.key} onClick={() => setLegalDoc(o.key)} style={{
+                  padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                  background: legalDoc === o.key ? 'var(--accent)' : 'var(--bg)',
+                  color: legalDoc === o.key ? '#fff' : 'var(--muted)',
+                  border: `1.5px solid ${legalDoc === o.key ? 'var(--accent)' : 'var(--border)'}`,
+                }}>{o.label}</button>
+              ))}
+            </div>
+            <h2 style={{ fontSize: 16, fontWeight: 600, marginBottom: 2 }}>
+              {legalDoc === 'eula' ? 'End User License Agreement' : legalDoc === 'privacy' ? 'Privacy Policy' : 'DMCA / Copyright & Intellectual Property Policy'}
+            </h2>
+            <p style={{ fontSize: 11, color: 'var(--hint)', marginBottom: 16 }}>Last updated: {LEGAL_LAST_UPDATED}</p>
+            <div style={{ maxHeight: 520, overflowY: 'auto', paddingRight: 8, fontSize: 13, lineHeight: 1.6, color: 'var(--text)' }}>
+              {(legalDoc === 'eula' ? EULA_SECTIONS : legalDoc === 'privacy' ? PRIVACY_SECTIONS : DMCA_SECTIONS).map((s, i) => (
+                <div key={i} style={{ marginBottom: 18 }}>
+                  <h3 style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 6 }}>{s.heading}</h3>
+                  {s.body.map((p, j) => (
+                    <p key={j} style={{ marginBottom: 8, color: 'var(--muted)' }}>{p}</p>
+                  ))}
+                </div>
+              ))}
+              <p style={{ fontSize: 11, color: 'var(--hint)', fontStyle: 'italic', borderTop: '0.5px solid var(--border)', paddingTop: 12, marginTop: 8 }}>
+                This document is a general template and does not constitute legal advice. Consult a licensed Philippine attorney to confirm its suitability for your specific business circumstances.
+              </p>
+            </div>
+          </div>
         )}
         {tab === 'PWA Icons' && isSuperuser && (
           <div className="card" style={{ maxWidth: 520 }}>

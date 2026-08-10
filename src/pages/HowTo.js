@@ -641,6 +641,7 @@ const GUIDES = [
             ['Clientele', 'Add/edit clients and their billing details'],
             ['Commodities', 'Add/edit commodity types used in trip entry'],
             ['Routes', 'Add/remove custom Dump Truck routes — appear in Trip Entry and Manage Trips filter'],
+            ['Legal', 'View the End User License Agreement, Privacy Policy, and DMCA / Copyright Policy'],
             ['PWA Icons', 'Superuser only — app icon for install-to-homescreen'],
           ]},
         ],
