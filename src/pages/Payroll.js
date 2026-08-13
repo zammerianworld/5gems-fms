@@ -295,7 +295,7 @@ export default function Payroll() {
     const total13th = data.reduce((s,r) => s + r[r.length-1], 0)
     totals.push(Math.round(totalEarned * 100) / 100, Math.round(total13th * 100) / 100)
     const ws = XLSX.utils.aoa_to_sheet([
-      ['DRAGON SPEED TRUCKING CORPORATION'],
+      [(settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()],
       [`13th Month Pay — ${thirteenthYear}`],
       ['Computed per PD 851: Total Basic Salary Earned ÷ 12'],
       [],
@@ -326,7 +326,7 @@ export default function Payroll() {
     const f2 = n => Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     doc.setFontSize(13); doc.setFont(undefined,'bold')
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', doc.internal.pageSize.width/2, 15, { align:'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), doc.internal.pageSize.width/2, 15, { align:'center' })
     doc.setFontSize(11); doc.setFont(undefined,'normal')
     doc.text(`13th Month Pay — ${thirteenthYear}`, doc.internal.pageSize.width/2, 22, { align:'center' })
     doc.setFontSize(8)
@@ -603,7 +603,7 @@ export default function Payroll() {
   const handlePrintPayslip = () => {
     const p2 = v => parseFloat(String(v||'0').replace(/,/g,''))||0
     const f2 = n => Number(n||0).toLocaleString('en-PH', { minimumFractionDigits:2 })
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const logo = settings.logo_url || localStorage.getItem('ds_logo') || ''
     const fmtD = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { month:'long', day:'numeric', year:'numeric' }) : '—'
 
@@ -1855,7 +1855,7 @@ function PrintPayroll({ entries, sigs = [], selectedCutoff, calcEarnings, calcDe
     hour: '2-digit', minute: '2-digit', second: '2-digit'
   })
 
-  const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+  const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
   const address = settings.address || ''
   const contact = settings.contact || ''
   const email = settings.email || ''

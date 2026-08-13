@@ -189,7 +189,7 @@ export default function PaidInvoices() {
   }
 
   const handleSaveSummaryPDF = () => {
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     const W = 279.4
     doc.setFontSize(13); doc.setFont('helvetica', 'bold')
@@ -217,7 +217,7 @@ export default function PaidInvoices() {
   }
 
   const handleSaveSummaryExcel = async () => {
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Sales Invoice Summary')
     ws.columns = [{ width: 30 }, { width: 20 }, { width: 16 }, { width: 22 }, { width: 18 }, { width: 18 }]
@@ -270,17 +270,18 @@ export default function PaidInvoices() {
     // drop any invoice with nothing in scope — mirrors how the Summary tab
     // already handles this, just at invoice level instead of trip level.
     const rows = candidates.map(inv => {
-      if (truckScope === 'all') return { ...inv, _net: inv.total_sales_net || 0 }
+      if (truckScope === 'all') return { ...inv, _net: inv.total_sales_net || 0, _fullyInScope: true }
       const tbl = inv.truck_type === 'Dump Truck' ? dumpTrips : pmTrips
       const invTrips = tbl.filter(t => t.invoice_id === inv.id && inScope(t.truck_plate))
       const net = inv.truck_type === 'Dump Truck'
         ? invTrips.reduce((s, t) => s + (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0), 0)
         : invTrips.reduce((s, t) => s + pmNet(t), 0)
-      return { ...inv, _net: net }
+      const fullyInScope = Math.abs(net - (inv.total_sales_net || 0)) < 1
+      return { ...inv, _net: net, _fullyInScope: fullyInScope }
     }).filter(inv => inv._net > 0)
 
     if (rows.length === 0) { showToast('No paid invoices in this selection.', 'error'); return }
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Paid Invoices')
     ws.columns = [
@@ -312,7 +313,7 @@ export default function PaidInvoices() {
       // If scoped to company-only and this invoice also had subcon trips, the
       // full actual_amount_credited isn't this invoice's company-only share —
       // fall back to the 1.10 estimate on the adjusted net instead.
-      const received = (truckScope === 'all' && parseFloat(inv.actual_amount_credited))
+      const received = (parseFloat(inv.actual_amount_credited) && (truckScope === 'all' || inv._fullyInScope))
         ? parseFloat(inv.actual_amount_credited)
         : (net * 1.10)
       totals.net += net; totals.vat += vat; totals.wht += wht; totals.received += received
@@ -341,7 +342,7 @@ export default function PaidInvoices() {
   }
 
   const handlePrintSummary = () => {
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const rowsHtml = summaryRows.map(r => `
       <tr>
         <td style="font-weight:600;padding:8px 10px;border:1px solid #333;">${r.label}</td>

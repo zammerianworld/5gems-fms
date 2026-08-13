@@ -93,7 +93,7 @@ export default function ORCR() {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     const W = 279.4
     doc.setFontSize(13); doc.setFont('helvetica', 'bold')
-    doc.text((settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase(), W / 2, 12, { align: 'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W / 2, 12, { align: 'center' })
     doc.setFontSize(10); doc.setFont('helvetica', 'normal')
     doc.text(`OR Expiry Report — Generated ${new Date().toLocaleDateString('en-PH')}`, W / 2, 18, { align: 'center' })
     doc.setDrawColor(200); doc.line(14, 22, W - 14, 22)
@@ -177,7 +177,7 @@ export default function ORCR() {
   }
 
   const doExcel = async (sigs) => {
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const COLS = 9
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('OR-CR Report')
@@ -255,7 +255,7 @@ export default function ORCR() {
           ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
           const tc = ws.getCell(sigRowTitle, startCol)
           tc.value = s.title
-          tc.font = { size:7.5, color:{argb:'FFF17200'} }
+          tc.font = { size:7.5, color:{argb:'FFFF1E00'} }
           tc.alignment = { horizontal:'center' }
         }
       })

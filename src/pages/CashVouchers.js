@@ -75,7 +75,7 @@ export default function CashVouchers() {
     if (!v) return
     const doc = new jsPDF({ unit: 'mm', format: 'letter' })
     const W = 215.9
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
 
     // Header
     doc.setFontSize(13); doc.setFont('helvetica','bold')

@@ -109,7 +109,7 @@ export default function Loans() {
     const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'letter' })
     const W = 279.4
     doc.setFontSize(13); doc.setFont(undefined,'bold')
-    doc.text((loanSettings.company_name||'DRAGON SPEED TRUCKING CORPORATION').toUpperCase(), W/2, 12, {align:'center'})
+    doc.text((loanSettings.company_name||'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 12, {align:'center'})
     doc.setFontSize(8); doc.setFont(undefined,'normal')
     if (loanSettings.vat_tin) doc.text(`VAT REG. TIN: ${loanSettings.vat_tin}`, W/2, 17, {align:'center'})
     if (loanSettings.address) doc.text(loanSettings.address, W/2, 21, {align:'center'})

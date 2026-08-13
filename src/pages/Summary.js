@@ -155,6 +155,7 @@ export default function Summary() {
     const activeTrucks = trucks.filter(t => t.active !== false)
     const companyTrucks = activeTrucks.filter(t => t.ownership !== 'subcon' && t.ownership !== 'special_subcon')
     const f2 = (n) => Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2})
+    const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'letter'})
     let firstPage = true
 
@@ -165,7 +166,7 @@ export default function Summary() {
       firstPage = false
 
       doc.setFontSize(11); doc.setFont(undefined,'bold')
-      doc.text('DRAGON SPEED TRUCKING CORPORATION', 14, 12)
+      doc.text(companyName, 14, 12)
       doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(100)
       doc.text(`Overall Trip Summary — ${periodLabel}`, 14, 17)
       doc.text(`TRUCK: ${truck.plate} — ${truck.truck_type}`, 14, 21)
@@ -219,7 +220,7 @@ export default function Summary() {
     if (companyTrucks.some(t => getTruckSummary(t).totalTrips > 0)) {
       doc.addPage()
       doc.setFontSize(11); doc.setFont(undefined,'bold')
-      doc.text('DRAGON SPEED TRUCKING CORPORATION', 14, 12)
+      doc.text(companyName, 14, 12)
       doc.setFontSize(8); doc.setFont(undefined,'normal'); doc.setTextColor(0)
       doc.text(`Fleet Summary — ${periodLabel}`, 14, 17); doc.setTextColor(0)
 

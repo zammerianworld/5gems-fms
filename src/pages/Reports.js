@@ -252,7 +252,7 @@ export default function Reports() {
     setSigDialog(false)
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' })
     let firstPage = true
-    const coName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const coName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     reportTrucks.forEach(truck => {
       const r = getTruckReport(truck)
       if (!firstPage) doc.addPage()
@@ -390,7 +390,7 @@ export default function Reports() {
       ]
       const ws = XLSX.utils.aoa_to_sheet(data)
       ws['!cols'] = [{ wch: 34 }, { wch: 14 }, { wch: 18 }, { wch: 12 }]
-      styleCell(ws, 'A1', true, 'F17200', 'FFFFFF', 'left')
+      styleCell(ws, 'A1', true, 'FF1E00', 'FFFFFF', 'left')
       styleCell(ws, 'A2', false, 'FFF3E0', '333333', 'left')
       styleCell(ws, 'A3', true, null, '333333', 'left')
       const salesRow = 5; ['A','B','C','D'].forEach(c => styleCell(ws, `${c}${salesRow}`, true, '1F2937', 'FFFFFF', c === 'A' ? 'left' : 'right'))
@@ -411,17 +411,17 @@ export default function Reports() {
     const wsSum = XLSX.utils.aoa_to_sheet(summaryData)
     wsSum['!cols'] = [{wch:14},{wch:20},{wch:8},{wch:18},{wch:18},{wch:18},{wch:12}]
     const styleCell2 = (ws, addr, bold, bg, color, align) => { if (!ws[addr]) return; ws[addr].s = { font: { bold: !!bold, color: color ? { rgb: color } : undefined }, fill: bg ? { fgColor: { rgb: bg }, patternType: 'solid' } : undefined, alignment: { horizontal: align || 'left' }, border: { bottom: { style: 'thin', color: { rgb: 'CCCCCC' } } } } }
-    styleCell2(wsSum, 'A1', true, 'F17200', 'FFFFFF', 'left')
+    styleCell2(wsSum, 'A1', true, 'FF1E00', 'FFFFFF', 'left')
     styleCell2(wsSum, 'A2', false, 'FFF3E0', '333333', 'left')
     ;['A','B','C','D','E','F','G'].forEach(c => styleCell2(wsSum, `${c}4`, true, '1F2937', 'FFFFFF', c==='A'?'left':'right'))
     reportTrucks.forEach((_, i) => { const row = 5 + i; ['A','B','C','D','E','F','G'].forEach(c => styleCell2(wsSum, `${c}${row}`, false, i%2===0?'FAFAFA':null, '374151', c==='A'?'left':'right')) })
     const totRow = 5 + reportTrucks.length + 1; ['A','B','C','D','E','F','G'].forEach(c => styleCell2(wsSum, `${c}${totRow}`, true, 'FEF9C3', '374151', c==='A'?'left':'right'))
     XLSX.utils.book_append_sheet(wb, wsSum, 'Fleet Summary')
     if (wb.SheetNames.length > 1) { const sumIdx = wb.SheetNames.indexOf('Fleet Summary'); wb.SheetNames.splice(sumIdx, 1); wb.SheetNames.unshift('Fleet Summary') }
-    const companyNameR = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyNameR = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const f2r = (n) => Number(n||0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
     let htmlR = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"><style>body{font-family:Calibri,Arial;font-size:9pt;}table{border-collapse:collapse;width:100%;page-break-after:always;}th{background:#1F2937;color:#fff;font-weight:bold;font-size:8pt;padding:4px 6px;border:1px solid #999;}td{font-size:8pt;padding:3px 5px;border:1px solid #ddd;}</style></head><body>`
-    htmlR += `<table><tr><td colspan="7" style="background:#F17200;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyNameR}</td></tr><tr><td colspan="7" style="background:#1F2937;color:#fff;font-weight:bold;font-size:10pt;text-align:center;padding:5px">${mode} — ${periodLabel} — Fleet Summary</td></tr><tr><th>Truck</th><th>Driver</th><th>Trips</th><th>Total Sales (₱)</th><th>Total Expenses (₱)</th><th>Net Income (₱)</th><th>% of Sales</th></tr>`
+    htmlR += `<table><tr><td colspan="7" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyNameR}</td></tr><tr><td colspan="7" style="background:#1F2937;color:#fff;font-weight:bold;font-size:10pt;text-align:center;padding:5px">${mode} — ${periodLabel} — Fleet Summary</td></tr><tr><th>Truck</th><th>Driver</th><th>Trips</th><th>Total Sales (₱)</th><th>Total Expenses (₱)</th><th>Net Income (₱)</th><th>% of Sales</th></tr>`
     reportTrucks.forEach((truck, i) => {
       const r2 = getTruckReport(truck)
       const bg = i%2===0?'#FFFFFF':'#F5F5F5'
@@ -434,7 +434,7 @@ export default function Reports() {
     htmlR += `<tr style="background:#FEF9C3;font-weight:bold"><td>TOTAL</td><td></td><td style="text-align:center">${reportTrucks.reduce((s,t)=>s+getTruckReport(t).tripCount,0)}</td><td style="text-align:right">${f2r(totSales)}</td><td style="text-align:right;color:#DC2626">${f2r(totExp)}</td><td style="text-align:right;color:${totNet>=0?'#166534':'#991B1B'}">${f2r(totNet)}</td><td style="text-align:center">${pct(totNet,totSales)}</td></tr></table>`
     reportTrucks.forEach(truck => {
       const r2 = getTruckReport(truck)
-      htmlR += `<table><tr><td colspan="4" style="background:#F17200;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyNameR}</td></tr><tr><td colspan="4" style="background:#FFF3E0;color:#374151;text-align:center;font-size:9pt;padding:3px">${mode} — ${periodLabel}</td></tr><tr><td colspan="4" style="font-weight:bold;font-size:10pt;padding:4px">${truck.truck_code||truck.plate} | ${truck.plate}${r2.driver?' | '+r2.driver.driver_name:''}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">SALES</td></tr><tr><th>Route / Trip Code</th><th>No. of Trips</th><th>Sales (₱)</th><th>% of Sales</th></tr>`
+      htmlR += `<table><tr><td colspan="4" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyNameR}</td></tr><tr><td colspan="4" style="background:#FFF3E0;color:#374151;text-align:center;font-size:9pt;padding:3px">${mode} — ${periodLabel}</td></tr><tr><td colspan="4" style="font-weight:bold;font-size:10pt;padding:4px">${truck.truck_code||truck.plate} | ${truck.plate}${r2.driver?' | '+r2.driver.driver_name:''}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">SALES</td></tr><tr><th>Route / Trip Code</th><th>No. of Trips</th><th>Sales (₱)</th><th>% of Sales</th></tr>`
       Object.entries(r2.byRoute).forEach(([route,d],i) => { const bg=i%2===0?'#FFFFFF':'#F5F5F5'; htmlR += `<tr style="background:${bg}"><td>${route}</td><td style="text-align:center">${d.trips}</td><td style="text-align:right">${f2r(d.sales)}</td><td style="text-align:center">${pct(d.sales,r2.totalSales)}</td></tr>` })
       htmlR += `<tr style="background:#FEF9C3;font-weight:bold"><td>Total Sales Net of VAT</td><td style="text-align:center">${r2.tripCount}</td><td style="text-align:right">${f2r(r2.totalSales)}</td><td style="text-align:center">100.00%</td></tr><tr><td>  Withholding Tax (2%)</td><td></td><td style="text-align:right;color:#DC2626">${f2r(-r2.wht2)}</td><td style="text-align:center">2.00%</td></tr><tr><td>Net Receivable</td><td></td><td style="text-align:right">${f2r(r2.totalSales-r2.wht2)}</td><td style="text-align:center">${pct(r2.totalSales-r2.wht2,r2.totalSales)}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">EXPENSES</td></tr><tr><th>Category</th><th>Basis / Note</th><th>Amount (₱)</th><th>% of Sales</th></tr>`
       r2.expenseLines.forEach((e,i) => { const bg=i%2===0?'#FFFFFF':'#F5F5F5'; htmlR += `<tr style="background:${bg}"><td>${e.cat}</td><td>${e.basis||''}</td><td style="text-align:right;color:#DC2626">${f2r(e.amount)}</td><td style="text-align:center">${pct(e.amount,r2.totalSales)}</td></tr>` })

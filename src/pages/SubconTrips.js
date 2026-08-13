@@ -8,7 +8,6 @@ import autoTable from 'jspdf-autotable'
 import ExcelJS from 'exceljs'
 const today = () => new Date().toISOString().slice(0, 10)
 const currentMonth = () => new Date().toISOString().slice(0, 7)
-const COMPANY = 'DRAGON SPEED TRUCKING CORPORATION'
 const pf = (n) => 'P' + Number(n||0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 const getPaymentStatus = (t, tab) => {
   const clientPaid = t.client_paid
@@ -67,7 +66,7 @@ export default function SubconTrips() {
       supabase.from('trucks').select('id,plate,truck_type,ownership,subcon_name,start_date,end_date').in('ownership', ['subcon', 'special_subcon']),
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
-      fetchAllRows(() => supabase.from('invoices').select('id,invoice_no,status,date_credited,client').is('deleted_at', null).order('invoice_date', { ascending: false })),
+      fetchAllRows(() => supabase.from('invoices').select('id,invoice_no,status,date_credited,client,actual_amount_credited,total_sales_net').is('deleted_at', null).order('invoice_date', { ascending: false })),
       fetchAllRows(() => supabase.from('expenses').select('*').is('deleted_at', null)),
       supabase.from('amortizations').select('*'),
       supabase.from('insurances').select('*'),
@@ -140,15 +139,41 @@ export default function SubconTrips() {
 
   const getTripAmount = (t, type) => type === 'dump'
     ? (t.weight_tons || 0) * (t.rate_per_ton || 0)
-    : (t.supplier_amount || 0) + (t.stripping_fee || 0)
+    : (t.trip_code === 'SMC' ? ((t.supplier_amount || 0) + (t.stripping_fee || 0)) / 1.12 : (t.supplier_amount || 0) + (t.stripping_fee || 0))
   const regularTrucks = trucks.filter(t => t.ownership === 'subcon')
   const specialTrucks = trucks.filter(t => t.ownership === 'special_subcon')
   const subconTrucks = subconTab === 'regular' ? regularTrucks : specialTrucks
   const subconPlateSet = new Set(subconTrucks.map(t => t.plate))
+  // "Collected"/"Credited"/"DS Billing" for special subcon reflects what Paid
+  // Invoices actually shows as collected from the client (see creditedAmount
+  // above). Regular subcon's cost/profit margin intentionally stays on the
+  // net basis, since VAT/WHT aren't real profit, they're a pass-through.
+  const billingAmount = (t) => subconTab === 'special' ? t._vatIncAmount : t._amount
+  // Backed into from VAT-inclusive minus the actual credited amount (real or
+  // estimated), rather than a flat 2% of net — stays accurate even when a
+  // real actual_amount_credited doesn't land exactly on the standard formula.
+  const whtAmount = (t) => (t._amount * 1.12) - t._vatIncAmount
+  // Each invoice's total net across ALL its linked trips (any truck), needed to
+  // proportion a real actual_amount_credited down to a single trip's share.
+  const invoiceNetTotals = {}
+  dumpTrips.forEach(t => { if (t.invoice_id) invoiceNetTotals[t.invoice_id] = (invoiceNetTotals[t.invoice_id] || 0) + getTripAmount(t, 'dump') })
+  pmTrips.forEach(t => { if (t.invoice_id) invoiceNetTotals[t.invoice_id] = (invoiceNetTotals[t.invoice_id] || 0) + getTripAmount(t, 'pm') })
+  // Always base "credited" on what Paid Invoices actually shows for that
+  // invoice: the real actual_amount_credited (prorated by this trip's share
+  // of the invoice's total net) when present, otherwise the SAME estimate
+  // Paid Invoices itself falls back to — net × 1.12 (VAT) − net × 0.02 (2%
+  // withholding tax) = net × 1.10. Never just net × 1.12 alone.
+  const creditedAmount = (t, amt) => {
+    const inv = invoiceMap[t.invoice_id]
+    const invNet = invoiceNetTotals[t.invoice_id] || 0
+    const realCredited = inv && parseFloat(inv.actual_amount_credited)
+    if (realCredited && invNet > 0) return (amt / invNet) * parseFloat(inv.actual_amount_credited)
+    return amt * 1.10
+  }
   // FIX 1: renamed to enrichedTrips to avoid conflict with Running Balance's allTrips
   const enrichedTrips = [
-    ...dumpTrips.map(t => enrichTrip({ ...t, _type: 'dump', _amount: getTripAmount(t, 'dump') })),
-    ...pmTrips.map(t => enrichTrip({ ...t, _type: 'pm', _amount: getTripAmount(t, 'pm') })),
+    ...dumpTrips.map(t => { const amt = getTripAmount(t, 'dump'); return enrichTrip({ ...t, _type: 'dump', _amount: amt, _vatIncAmount: creditedAmount(t, amt) }) }),
+    ...pmTrips.map(t => { const amt = getTripAmount(t, 'pm'); return enrichTrip({ ...t, _type: 'pm', _amount: amt, _vatIncAmount: creditedAmount(t, amt) }) }),
   ].sort((a, b) => b.trip_date?.localeCompare(a.trip_date))
   const applyFilters = (trips) => trips.filter(t => {
     if (!subconPlateSet.has(t.truck_plate)) return false
@@ -167,13 +192,13 @@ export default function SubconTrips() {
   })
   const filtered = sortRows(applyFilters(enrichedTrips), sortKey, sortDir)
   const totalBilled = filtered.reduce((s, t) => s + t._amount, 0)
-  const totalCollected = filtered.filter(t => t.client_paid).reduce((s, t) => s + t._amount, 0)
+  const totalCollected = filtered.filter(t => t.client_paid).reduce((s, t) => s + billingAmount(t), 0)
   const totalSubconCost = filtered.reduce((s, t) => s + (t.subcon_cost || 0), 0)
   const totalSubconPaid = filtered.filter(t => t.subcon_paid).reduce((s, t) => s + (t.subcon_cost || 0), 0)
   const totalProfit = totalBilled - totalSubconCost
   const netHolding = totalCollected - totalSubconPaid
   const totalExpenseShare = filtered.reduce((s, t) => s + (t.subcon_expense_share || 0), 0)
-  const totalCredited = filtered.filter(t => t.client_paid).reduce((s, t) => s + (t._amount - (t.subcon_expense_share || 0)), 0)
+  const totalCredited = filtered.filter(t => t.client_paid).reduce((s, t) => s + (t._vatIncAmount - (t.subcon_expense_share || 0)), 0)
   const handleBulkClientPaid = async () => {
     if (!bulkSelected.length) return
     setBulkSaving(true)
@@ -221,7 +246,7 @@ export default function SubconTrips() {
     const doc = new jsPDF({ orientation, unit: 'mm', format: 'letter' })
     const W = isLandscape ? 279.4 : 215.9
     doc.setFontSize(12); doc.setFont('helvetica', 'bold')
-    doc.text(COMPANY, W / 2, 12, { align: 'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W / 2, 12, { align: 'center' })
     doc.setFontSize(9.5); doc.setFont('helvetica', 'normal')
     doc.text(title, W / 2, 18, { align: 'center' })
     if (subtitle) { doc.setFontSize(8); doc.text(subtitle, W / 2, 23, { align: 'center' }) }
@@ -257,7 +282,7 @@ export default function SubconTrips() {
     })
   }
   const regCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'DS Billing', 'Sub-con Cost', 'Profit', 'Client Paid', 'Sub-con Paid', 'CV/Check No.']
-  const spcCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'DS Billing', 'Exp. Share', 'Net Credited', 'Client Paid', 'CV/Check No.']
+  const spcCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Exp. Share', 'Net Credited', 'Client Paid', 'CV/Check No.']
   const toRegRow = (t) => {
     const inv = invoiceMap[t.invoice_id]
     return [fmtDate(t.trip_date), t.truck_plate, getPartnerName(t.truck_plate), t.client || '—',
@@ -271,7 +296,8 @@ export default function SubconTrips() {
     const inv = invoiceMap[t.invoice_id]
     return [fmtDate(t.trip_date), t.truck_plate, getPartnerName(t.truck_plate), t.client || '—',
       inv?.invoice_no || '—', t._type === 'dump' ? 'Dump' : 'PM',
-      pf(t._amount), pf(t.subcon_expense_share || 0), pf(t._amount - (t.subcon_expense_share || 0)),
+      pf(t._amount), pf(t._amount * 1.12), pf(whtAmount(t)), pf(t._vatIncAmount),
+      pf(t.subcon_expense_share || 0), pf(t._vatIncAmount - (t.subcon_expense_share || 0)),
       t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Yes') : '—',
       t.subcon_voucher_no || '—']
   }
@@ -283,7 +309,7 @@ export default function SubconTrips() {
     ws.columns = headers.map((h,i) => ({ width: i===0 ? 12 : h.toLowerCase().includes('client')||h.toLowerCase().includes('partner') ? 18 : 14 }))
     const thin = { style:'thin', color:{argb:'FFAAAAAA'} }
     const allBorders = { top:thin, left:thin, bottom:thin, right:thin }
-    const companyName = (settings.company_name || COMPANY).toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
 
     let r = 1
     ws.mergeCells(r,1,r,COLS)
@@ -367,7 +393,7 @@ export default function SubconTrips() {
           ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
           const tc = ws.getCell(sigRowTitle, startCol)
           tc.value = s.title
-          tc.font = { size:7.5, color:{argb:'FFF17200'} }
+          tc.font = { size:7.5, color:{argb:'FFFF1E00'} }
           tc.alignment = { horizontal:'center' }
         }
       })
@@ -409,21 +435,24 @@ export default function SubconTrips() {
   }
 
   const buildSummarySpc = (trips) => {
-    const headers = ['Invoice No.','Client','Plate','Trips','DS Billing','Exp. Share','Net Credited','Client Paid Date','Voucher No.']
+    const headers = ['Invoice No.','Client','Plate','Trips','VAT Ex.','VAT In.','WHT (2%)','Net Total','Exp. Share','Net Credited','Client Paid Date','Voucher No.']
     const groups = {}
     trips.forEach(t => {
       const inv = invoiceMap[t.invoice_id]
       const key = inv?.invoice_no || 'No Invoice'
-      if (!groups[key]) groups[key] = { invoice_no: key, client: t.client, plate: t.truck_plate, trips: 0, billed: 0, share: 0, client_paid_date: t.client_paid_date, voucher: t.subcon_voucher_no }
+      if (!groups[key]) groups[key] = { invoice_no: key, client: t.client, plate: t.truck_plate, trips: 0, vatEx: 0, vatIn: 0, wht: 0, billed: 0, share: 0, client_paid_date: t.client_paid_date, voucher: t.subcon_voucher_no }
       groups[key].trips++
-      groups[key].billed += t._amount || 0
+      groups[key].vatEx += t._amount || 0
+      groups[key].vatIn += (t._amount || 0) * 1.12
+      groups[key].wht += whtAmount(t)
+      groups[key].billed += t._vatIncAmount || 0
       groups[key].share += t.subcon_expense_share || 0
       if (t.client_paid_date && (!groups[key].client_paid_date || t.client_paid_date > groups[key].client_paid_date)) groups[key].client_paid_date = t.client_paid_date
       if (t.subcon_voucher_no) groups[key].voucher = t.subcon_voucher_no
     })
-    const rows = Object.values(groups).map(g => [g.invoice_no, g.client||'—', g.plate, g.trips, r2(g.billed), r2(g.share), r2(g.billed-g.share), g.client_paid_date?fmtDate(g.client_paid_date):'—', g.voucher||'—'])
-    const total = Object.values(groups).reduce((s,g)=>({ trips: s.trips+g.trips, billed: s.billed+g.billed, share: s.share+g.share }),{trips:0,billed:0,share:0})
-    rows.push(['TOTAL', '', '', total.trips, r2(total.billed), r2(total.share), r2(total.billed-total.share), '', ''])
+    const rows = Object.values(groups).map(g => [g.invoice_no, g.client||'—', g.plate, g.trips, r2(g.vatEx), r2(g.vatIn), r2(g.wht), r2(g.billed), r2(g.share), r2(g.billed-g.share), g.client_paid_date?fmtDate(g.client_paid_date):'—', g.voucher||'—'])
+    const total = Object.values(groups).reduce((s,g)=>({ trips: s.trips+g.trips, vatEx: s.vatEx+g.vatEx, vatIn: s.vatIn+g.vatIn, wht: s.wht+g.wht, billed: s.billed+g.billed, share: s.share+g.share }),{trips:0,vatEx:0,vatIn:0,wht:0,billed:0,share:0})
+    rows.push(['TOTAL', '', '', total.trips, r2(total.vatEx), r2(total.vatIn), r2(total.wht), r2(total.billed), r2(total.share), r2(total.billed-total.share), '', ''])
     return { headers, rows }
   }
 
@@ -505,7 +534,7 @@ export default function SubconTrips() {
     const W = isLandscape ? 279.4 : 215.9
     const f2 = (n) => Number(n||0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
     doc.setFontSize(12); doc.setFont('helvetica', 'bold')
-    doc.text(COMPANY, W/2, 12, { align: 'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 12, { align: 'center' })
     doc.setFontSize(9.5); doc.setFont('helvetica', 'normal')
     doc.text(`Special Sub-con — ${filterCreditMonth ? 'Credit Month: ' + filterCreditMonth : filterMonth || 'All'}`, W/2, 18, { align: 'center' })
     doc.setFontSize(8)
@@ -523,7 +552,7 @@ export default function SubconTrips() {
     let startY = 30
     let grandCollected = 0, grandShare = 0, grandNet = 0
     sortedMonths.forEach(([mo, group], idx) => {
-      const totalCollected = group.trips.reduce((s,t) => s + t._amount, 0)
+      const totalCollected = group.trips.reduce((s,t) => s + t._vatIncAmount, 0)
       const sampleTruck = trucks.find(tr => tr.plate === group.trips[0]?.truck_plate)
       const expShare = mo !== 'uncredited' && sampleTruck ? calcExpenseShare(sampleTruck.id, mo + '-01') : 0
       const netCredited = totalCollected - expShare
@@ -544,9 +573,9 @@ export default function SubconTrips() {
           fmtDate(t.trip_date), t.truck_plate, getPartnerName(t.truck_plate),
           t.client || '—', inv?.invoice_no || '—',
           t._type === 'dump' ? 'Dump' : 'PM',
-          pf(t._amount),
+          pf(t._vatIncAmount),
           pf(t.subcon_expense_share || 0),
-          pf(t._amount - (t.subcon_expense_share || 0)),
+          pf(t._vatIncAmount - (t.subcon_expense_share || 0)),
           t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Yes') : '—',
           t.subcon_voucher_no || '—'
         ]
@@ -588,7 +617,7 @@ export default function SubconTrips() {
     const trips = enrichedTrips.filter(t => subconPlateSet.has(t.truck_plate) && t.invoice_id === inv.id)
     const isReg = subconTab === 'regular'
     const rows = trips.map(t => isReg ? toRegRow(t) : toSpcRow(t))
-    const total = trips.reduce((s, t) => s + t._amount, 0)
+    const total = trips.reduce((s, t) => s + billingAmount(t), 0)
     const doc = buildPDF(rows, `Sub-contractor Trips — Invoice ${printInvoice}`, `Client: ${inv.client}  |  Status: ${inv.status}`, isReg ? regCols : spcCols, `Total: ${pf(total)}  |  Trips: ${trips.length}`, printOrientation)
     const W2 = printOrientation === 'landscape' ? 279.4 : 215.9
     addSigsToDoc(doc, sigs, W2)
@@ -604,7 +633,7 @@ export default function SubconTrips() {
     const trips = enrichedTrips.filter(t => subconPlateSet.has(t.truck_plate) && t.client_paid_date?.slice(0, 7) === printCreditMonth)
     const isReg = subconTab === 'regular'
     const rows = trips.map(t => isReg ? toRegRow(t) : toSpcRow(t))
-    const total = trips.reduce((s, t) => s + t._amount, 0)
+    const total = trips.reduce((s, t) => s + billingAmount(t), 0)
     const doc = buildPDF(rows, `${isReg ? 'Regular' : 'Special'} Sub-con — Credit Month: ${printCreditMonth}`, 'All trips where client payment was credited in this month', isReg ? regCols : spcCols, `Total Collected: ${pf(total)}  |  Trips: ${trips.length}`, printOrientation)
     const W3 = printOrientation === 'landscape' ? 279.4 : 215.9
     addSigsToDoc(doc, sigs, W3)
@@ -813,9 +842,9 @@ export default function SubconTrips() {
                       </div>
                       <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3, display: 'block' }}>Auto-calculated from admin + fleet expenses for this trip's month</span>
                     </div>
-                    {editingTrip._amount > 0 && (
+                    {editingTrip._vatIncAmount > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 500, marginBottom: 8 }}>
-                        Net to sub-con: ₱{fmt(editingTrip._amount - (parseFloat(editingTrip.subcon_expense_share) || 0))}
+                        Net to sub-con: ₱{fmt(editingTrip._vatIncAmount - (parseFloat(editingTrip.subcon_expense_share) || 0))}
                       </div>
                     )}
                     <div className="form-group" style={{ margin: 0 }}>
@@ -897,7 +926,7 @@ export default function SubconTrips() {
             return (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {sortedMonths.map(([mo, group]) => {
-                  const totalCollected = group.trips.reduce((s,t) => s + t._amount, 0)
+                  const totalCollected = group.trips.reduce((s,t) => s + t._vatIncAmount, 0)
                   // Get any special subcon truck in this group to find truck id
                   const sampleTruck = trucks.find(tr => tr.plate === group.trips[0]?.truck_plate)
                   const expShare = mo !== 'uncredited' && sampleTruck
@@ -945,7 +974,7 @@ export default function SubconTrips() {
                                   <td>{t.client}</td>
                                   <td className="mono muted">{inv?.invoice_no || '—'}</td>
                                   <td className="muted">{t._type === 'dump' ? (t.route || '—') : `${t.trip_code || '—'} · ${t.container_size || ''}`}</td>
-                                  <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt(t._amount)}</td>
+                                  <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt(t._vatIncAmount)}</td>
                                   <td><span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 500, background: ps.bg, color: ps.color }}>{ps.label}</span></td>
                                   <td><button className="btn-ghost btn-sm" onClick={() => setEditingTrip({ ...t })}>Edit</button></td>
                                 </tr>
@@ -1055,7 +1084,7 @@ export default function SubconTrips() {
                   <tbody>
                     {filtered.map(t => {
                       const profit = t._amount - (t.subcon_cost || 0)
-                      const netCredited = t._amount - (t.subcon_expense_share || 0)
+                      const netCredited = t._vatIncAmount - (t.subcon_expense_share || 0)
                       const hasCost = (t.subcon_cost || 0) > 0
                       const ps = getPaymentStatus(t, subconTab)
                       const inv = invoiceMap[t.invoice_id]
@@ -1068,7 +1097,7 @@ export default function SubconTrips() {
                           <td style={{ fontSize: 12 }}>{t.client}</td>
                           <td style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{inv?.invoice_no || '—'}</td>
                           <td style={{ fontSize: 11, color: 'var(--muted)' }}>{t._type === 'dump' ? (t.route || '—') : `${t.trip_code || '—'} · ${t.container_size || ''}`}</td>
-                          <td className="text-right mono" style={{ fontSize: 12 }}>₱{fmt(t._amount)}</td>
+                          <td className="text-right mono" style={{ fontSize: 12 }}>₱{fmt(billingAmount(t))}</td>
                           {subconTab === 'regular' && <td className="text-right mono" style={{ fontSize: 12, color: hasCost ? 'var(--danger)' : 'var(--hint)' }}>{hasCost ? `₱${fmt(t.subcon_cost)}` : '—'}</td>}
                           {subconTab === 'regular' && <td className="text-right mono" style={{ fontSize: 12, fontWeight: hasCost ? 500 : 400, color: hasCost ? (profit >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--hint)' }}>{hasCost ? `₱${fmt(profit)}` : '—'}</td>}
                           {subconTab === 'special' && <td className="text-right mono" style={{ fontSize: 12, color: 'var(--danger)' }}>{t.subcon_expense_share > 0 ? `₱${fmt(t.subcon_expense_share)}` : '—'}</td>}

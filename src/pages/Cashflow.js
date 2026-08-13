@@ -13,6 +13,7 @@ export default function Cashflow() {
   const [expenses, setExpenses] = useState([])
   const [extraIncome, setExtraIncome] = useState([])
   const [historicalBookkeeper, setHistoricalBookkeeper] = useState([])
+  const [settings, setSettings] = useState({})
   const [showExpenseBreakdown, setShowExpenseBreakdown] = useState(false)
   const [showSalesBreakdown, setShowSalesBreakdown] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
@@ -29,7 +30,7 @@ export default function Cashflow() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [v, am, ins, inv, sd, sp, ln, ex, ei, hd] = await Promise.all([
+    const [v, am, ins, inv, sd, sp, ln, ex, ei, hd, st] = await Promise.all([
       supabase.from('check_vouchers').select('*').order('voucher_date'),
       supabase.from('amortizations').select('*'),
       supabase.from('insurances').select('*'),
@@ -40,6 +41,7 @@ export default function Cashflow() {
       fetchAllRows(() => supabase.from('expenses').select('*').is('deleted_at', null).order('expense_date')),
       fetchAllRows(() => supabase.from('extra_income').select('*').order('income_date')),
       fetchAllRows(() => supabase.from('historical_data').select('*').eq('entry_type','simple_bookkeeper')),
+      supabase.from('company_settings').select('company_name').eq('id', 1).maybeSingle(),
     ])
     if (v.data) setVouchers(v.data)
     if (am.data) setAmortizations(am.data)
@@ -51,6 +53,7 @@ export default function Cashflow() {
     if (ex.data) setExpenses(ex.data)
     if (ei.data) setExtraIncome(ei.data)
     if (hd.data) setHistoricalBookkeeper(hd.data)
+    if (st.data) setSettings(st.data)
     setLoading(false)
   }, [])
 
@@ -191,7 +194,7 @@ export default function Cashflow() {
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' })
     const W = 215.9
     doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(0)
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', W / 2, 14, { align: 'center' })
+    doc.text((settings?.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W / 2, 14, { align: 'center' })
     doc.setFontSize(10); doc.setFont('helvetica', 'normal')
     doc.text('CASHFLOW REPORT', W / 2, 20, { align: 'center' })
     doc.text(monthLabel.toUpperCase(), W / 2, 26, { align: 'center' })
@@ -273,7 +276,7 @@ export default function Cashflow() {
 
   const handleExport = () => {
     const f2 = (n) => Number(n||0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
-    const companyName = (settings?.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings?.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const title = `CASHFLOW STATEMENT — ${monthLabel}`
     const isDetail = exportDetail === 'detail'
 
@@ -281,7 +284,7 @@ export default function Cashflow() {
       let html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
       <head><meta charset="UTF-8"><style>body{font-family:Calibri,Arial;font-size:9pt;}table{border-collapse:collapse;width:100%;}th{background:#1F2937;color:#fff;font-weight:bold;padding:4px 8px;border:1px solid #999;}td{padding:3px 8px;border:1px solid #ddd;font-size:9pt;}</style></head><body>
       <table>
-        <tr><td colspan="2" style="background:#F17200;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
+        <tr><td colspan="2" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
         <tr><td colspan="2" style="background:#1F2937;color:#fff;font-weight:bold;font-size:11pt;text-align:center;padding:5px">${title}</td></tr>
         <tr><td colspan="2"></td></tr>
         <tr><th>Item</th><th>Amount (₱)</th></tr>

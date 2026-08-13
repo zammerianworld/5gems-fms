@@ -96,7 +96,7 @@ export default function Backup() {
     setLoading(true)
     setProgress('Starting backup…')
     try {
-      const companyName = (localStorage.getItem('ds_company_name') || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+      const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
       const exportDate = new Date().toLocaleString('en-PH')
       const newCounts = {}
       const sheetBlocks = []
@@ -114,13 +114,13 @@ export default function Backup() {
         })
 
         if (flat.length === 0) {
-          sheetBlocks.push(`<table><tr><td colspan="2" style="background:#F17200;color:#fff;font-weight:bold;font-size:11pt;text-align:center;padding:5px">${table.label}</td></tr><tr><td>No data</td></tr></table>`)
+          sheetBlocks.push(`<table><tr><td colspan="2" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:11pt;text-align:center;padding:5px">${table.label}</td></tr><tr><td>No data</td></tr></table>`)
           continue
         }
 
         const keys = Object.keys(flat[0])
         let tbl = `<table>
-          <tr><td colspan="${keys.length}" style="background:#F17200;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
+          <tr><td colspan="${keys.length}" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
           <tr><td colspan="${keys.length}" style="background:#1F2937;color:#fff;font-weight:bold;font-size:10pt;text-align:center;padding:5px">${table.label.toUpperCase()}</td></tr>
           <tr><td colspan="${keys.length}" style="background:#FFF3E0;color:#374151;text-align:center;font-size:8pt;padding:3px">Exported: ${exportDate} — ${flat.length} records</td></tr>
           <tr>${keys.map(k => `<th style="background:#374151;color:#fff;font-weight:bold;font-size:8pt;padding:4px 6px;border:1px solid #999;text-align:center">${k.replace(/_/g,' ').toUpperCase()}</th>`).join('')}</tr>`
@@ -134,7 +134,7 @@ export default function Backup() {
 
       // Summary block
       const summaryTbl = `<table>
-        <tr><td colspan="3" style="background:#F17200;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
+        <tr><td colspan="3" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyName}</td></tr>
         <tr><td colspan="3" style="background:#1F2937;color:#fff;font-weight:bold;font-size:10pt;text-align:center;padding:5px">BACKUP SUMMARY</td></tr>
         <tr><td colspan="3" style="background:#FFF3E0;text-align:center;font-size:8pt;padding:3px">${exportDate}</td></tr>
         <tr>
@@ -316,7 +316,7 @@ export default function Backup() {
               </label>
             </div>
             {importPreview && (
-          <div style={{ marginTop: 12, padding: '12px 14px', background: '#FFF3E0', border: '1px solid #F17200', borderRadius: 8 }}>
+          <div style={{ marginTop: 12, padding: '12px 14px', background: '#FFF3E0', border: '1px solid #FF1E00', borderRadius: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8, color: '#C05300' }}>📋 Preview — Review before importing</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
               {Object.values(importPreview.preview).map(t => (

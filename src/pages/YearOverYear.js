@@ -109,7 +109,7 @@ export default function YearOverYear() {
     const totalExp = useHist && hasHistorical && histExp > 0 ? histExp : liveExp
     const dumpTripsCount = mode === 'historical' ? null : mode === 'live' ? yearDumpTrips.length : (hasHistorical ? liveOnlyDumpTrips.length : (hasLive ? yearDumpTrips.length : null))
     const pmTripsCount = mode === 'historical' ? null : mode === 'live' ? yearPmTrips.length : (hasHistorical ? liveOnlyPmTrips.length : (hasLive ? yearPmTrips.length : null))
-    const paidInv = invoices.filter(i => i.status === 'Paid' && i.invoice_date?.startsWith(year))
+    const paidInv = invoices.filter(i => i.status === 'Paid' && (i.date_credited || '').startsWith(String(year)))
     const totalCollected = paidInv.reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10), 0)
 
     const monthly = MONTHS.map((_, mi) => {
@@ -229,7 +229,7 @@ export default function YearOverYear() {
 
   const handleSaveYESpdf = (sigs = []) => {
     const d = getYearEndData(summaryYear)
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const isPort = yesOrientation === 'portrait'
     const doc = new jsPDF({ orientation: yesOrientation, unit:'mm', format:'letter' })
     const W = isPort ? 215.9 : 279.4
@@ -306,7 +306,7 @@ export default function YearOverYear() {
 
   const handleSaveYESexcel = async (sigs = []) => {
     const d = getYearEndData(summaryYear)
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const wb = new ExcelJS.Workbook()
     const thin = { style:'thin', color:{argb:'FFAAAAAA'} }
     const allB = { top:thin, left:thin, bottom:thin, right:thin }
@@ -418,7 +418,7 @@ export default function YearOverYear() {
           if (s.title) {
             ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
             const tc = ws.getCell(sigRowTitle, startCol)
-            tc.value=s.title; tc.font={size:7.5,color:{argb:'FFF17200'}}; tc.alignment={horizontal:'center'}
+            tc.value=s.title; tc.font={size:7.5,color:{argb:'FFFF1E00'}}; tc.alignment={horizontal:'center'}
           }
         })
         ws.views = [{showGridLines:false}]
@@ -437,7 +437,7 @@ export default function YearOverYear() {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     const W = 279.4
     doc.setFontSize(12); doc.setFont('helvetica', 'bold')
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', W / 2, 12, { align: 'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W / 2, 12, { align: 'center' })
     doc.setFontSize(10); doc.setFont('helvetica', 'normal')
     doc.text(`YEAR-OVER-YEAR COMPARISON — ${yearA} vs ${yearB}`, W / 2, 18, { align: 'center' })
     doc.setDrawColor(200); doc.line(14, 22, W - 14, 22)

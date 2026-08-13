@@ -90,7 +90,7 @@ export default function MidyearReport() {
   }, [])
   useEffect(() => { fetchAll() }, [fetchAll])
 
-  const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+  const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
 
   // ── SCOPE — company-owned, active trucks only (matches Reports.js) ────────
   const activeTrucks = trucks.filter(t => t.active !== false)

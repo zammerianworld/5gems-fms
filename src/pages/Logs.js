@@ -150,7 +150,7 @@ export default function Logs() {
       fetchAllRows(() => supabase.from('audit_logs').select('*').eq('tab', 'destructive').order('created_at')),
       fetchAllRows(() => supabase.from('audit_logs').select('*').eq('tab', 'generate').order('created_at')),
     ])
-    const companyName = (localStorage.getItem('ds_company_name') || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const makeSheetHtml = (data, label, hdrBg) => {
       if (!data?.length) return `<table><tr><td>No ${label} data</td></tr></table>`
       const keys = Object.keys(data[0])

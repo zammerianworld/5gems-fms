@@ -616,7 +616,7 @@ export default function Billing() {
     const win = window.open('', '_blank', 'width=1200,height=850')
     let sigHtml = ''
     if (sigs && sigs.length > 0) {
-      const sigItems = sigs.map(s => '<div style="text-align:center;flex:1;padding:0 8px;"><div style="font-size:6pt;color:#888;margin-bottom:16px">' + s.label + ':</div><div style="border-top:1px solid #333;padding-top:3px;"><div style="font-weight:bold;font-size:7.5pt">' + s.name + '</div><div style="font-size:6.5pt;color:#F17200">' + (s.title||'') + '</div></div></div>').join('')
+      const sigItems = sigs.map(s => '<div style="text-align:center;flex:1;padding:0 8px;"><div style="font-size:6pt;color:#888;margin-bottom:16px">' + s.label + ':</div><div style="border-top:1px solid #333;padding-top:3px;"><div style="font-weight:bold;font-size:7.5pt">' + s.name + '</div><div style="font-size:6.5pt;color:#FF1E00">' + (s.title||'') + '</div></div></div>').join('')
       sigHtml = '<div style="display:flex;justify-content:space-between;margin-top:24px;padding-top:8px;">' + sigItems + '</div>'
     }
     win.document.write(`<!DOCTYPE html><html><head><title>SOA-${previewModal?.invoice?.invoice_no||''}</title><style>${styles}@media print{@page{size:${printOrientation === 'portrait' ? 'portrait' : 'landscape'};margin:6mm}body{margin:0!important}.modal-overlay,.modal{display:block!important;position:static!important;background:none!important}}</style></head><body>${el.innerHTML}${sigHtml}</body></html>`)
@@ -627,7 +627,7 @@ export default function Billing() {
   // ── DUMP TRUCK SOA — ExcelJS worksheet builder (mirrors renderDumpSOA PDF layout) ──
   const buildDumpSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA') => {
     const clientDetails = getClientDetails(client)
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const net = tripsData.reduce((s,t)=>s+((t.weight_tons||0)*(t.rate_per_ton||0)),0)
     const vat = net*0.12; const vatInc = net*1.12
     const tons = tripsData.reduce((s,t)=>s+(parseFloat(t.weight_tons)||0),0)
@@ -817,7 +817,7 @@ export default function Billing() {
           ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
           const tc = ws.getCell(sigRowTitle, startCol)
           tc.value = s.title
-          tc.font = { size:7.5, color:{argb:'FFF17200'} }
+          tc.font = { size:7.5, color:{argb:'FFFF1E00'} }
           tc.alignment = { horizontal:'center' }
         }
       })
@@ -830,7 +830,7 @@ export default function Billing() {
   // ── PM SOA — ExcelJS worksheet builder (mirrors renderPMSOA PDF layout) ──
   const buildPMSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA') => {
     const clientDetails = getClientDetails(client)
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const codes = ['Hustling PSACC', 'Hauling PSACC', 'SMC']
     const tripsByCode = {}
     codes.forEach(c => { tripsByCode[c] = tripsData.filter(t => t.trip_code === c) })
@@ -1142,7 +1142,7 @@ export default function Billing() {
           ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
           const tc = ws.getCell(sigRowTitle, startCol)
           tc.value = s.title
-          tc.font = { size:7.5, color:{argb:'FFF17200'} }
+          tc.font = { size:7.5, color:{argb:'FFFF1E00'} }
           tc.alignment = { horizontal:'center' }
         }
       })
@@ -1245,10 +1245,11 @@ export default function Billing() {
     const totalNet = clientInvoices.reduce((s,i)=>s+(i.total_sales_net||0),0)
     const totalVatInc = totalNet*1.12
     const totalDue = totalNet*1.10
-    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||i.total_sales_net*1.10),0)
+    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||(i.total_sales_net||0)*1.10),0)
     const outstanding = totalVatInc - totalReceived
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const ws = XLSX.utils.aoa_to_sheet([
-      ['DRAGON SPEED TRUCKING CORPORATION'],
+      [companyName],
       ['ACCOUNTS RECEIVABLE — STATEMENT OF ACCOUNT'],
       [`Client: ${client}`],
       [`As of: ${new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})}`],
@@ -1267,8 +1268,9 @@ export default function Billing() {
     const f2 = n => Number(n||0).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     const pw = doc.internal.pageSize.width
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     doc.setFontSize(13); doc.setFont(undefined,'bold')
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', pw/2, 14, { align:'center' })
+    doc.text(companyName, pw/2, 14, { align:'center' })
     doc.setFontSize(11); doc.setFont(undefined,'normal')
     doc.text('ACCOUNTS RECEIVABLE — STATEMENT OF ACCOUNT', pw/2, 21, { align:'center' })
     doc.setFontSize(10)
@@ -1326,7 +1328,7 @@ export default function Billing() {
     const bucketsToRender = isSingleBucket ? [selectedBucket].filter(Boolean) : bDef.filter(b => b.items.length > 0)
     const allItems = bucketsToRender.flatMap(b => b.items)
     doc.setFontSize(12); doc.setFont(undefined, 'bold')
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', W/2, 10, { align: 'center' })
+    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 10, { align: 'center' })
     doc.setFontSize(7.5); doc.setFont(undefined, 'normal')
     const dateStr = now3.toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' })
     const modeLabel = agingShowAll ? 'All Unpaid' : 'Overdue'
@@ -1361,7 +1363,7 @@ export default function Billing() {
       const f2 = (n) => Number(n||0).toLocaleString('en-PH', {minimumFractionDigits:2})
       const doc = new jsPDF({ orientation: printOrientation, unit: 'mm', format: isPortrait ? 'letter' : [pageW, 215.9] })
       const W = pageW
-      const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+      const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
       const clientDetails2 = overduePrintClient ? getClientDetails(overduePrintClient) : null
       const clientName = (clientDetails2?.full_name || overduePrintClient || 'ALL CLIENTS').toUpperCase()
       const dateStr = now4.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -1408,7 +1410,7 @@ export default function Billing() {
     const getDaysO = (inv) => Math.floor((now4 - new Date(inv.invoice_date)) / 86400000)
     const list = agingDisplayed.filter(i => { if (overduePrintType && i.truck_type !== overduePrintType) return false; if (overduePrintClient && i.client !== overduePrintClient) return false; return true }).sort((a,b) => getDaysO(b)-getDaysO(a))
     if (!list.length) { showToast('No invoices to export.', 'info'); return }
-    const companyName = (settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const clientDetails3 = overduePrintClient ? getClientDetails(overduePrintClient) : null
     const clientName = (clientDetails3?.full_name || overduePrintClient || 'ALL CLIENTS').toUpperCase()
     const dateStr = now4.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
@@ -1562,7 +1564,7 @@ export default function Billing() {
           ws.mergeCells(sigRowTitle, startCol, sigRowTitle, endCol)
           const tc2 = ws.getCell(sigRowTitle, startCol)
           tc2.value = s.title
-          tc2.font = { size:7.5, color:{argb:'FFF17200'} }
+          tc2.font = { size:7.5, color:{argb:'FFFF1E00'} }
           tc2.alignment = { horizontal:'center' }
         }
       })
@@ -1587,7 +1589,7 @@ export default function Billing() {
     return (
       <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5px', color: '#000', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1.5px solid #000' }}>
-          <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()}</div>
+          <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()}</div>
           {settings.vat_tin && <div style={{ fontSize: 9 }}>VAT REG.TIN: {settings.vat_tin}</div>}
           {settings.address && <div style={{ fontSize: 9 }}>ADDRESS: {settings.address.toUpperCase()}</div>}
           {settings.contact && <div style={{ fontSize: 9 }}>CONTACT INFO: {settings.contact}{settings.email ? ` / ${settings.email}` : ''}</div>}
@@ -1716,7 +1718,7 @@ export default function Billing() {
     return (
       <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5px', color: '#000', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1.5px solid #000' }}>
-          <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()}</div>
+          <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()}</div>
           {settings.vat_tin && <div style={{ fontSize: 9 }}>VAT REG.TIN: {settings.vat_tin}</div>}
           {settings.address && <div style={{ fontSize: 9 }}>ADDRESS: {settings.address.toUpperCase()}</div>}
           {settings.contact && <div style={{ fontSize: 9 }}>CONTACT INFO: {settings.contact}{settings.email ? ` / ${settings.email}` : ''}</div>}
@@ -2097,7 +2099,7 @@ export default function Billing() {
                             <input value={editingInvoice.remarks||''} onChange={e => setEditingInvoice(i => ({...i,remarks:e.target.value}))} style={{ flex: 1 }} />
                             <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
                               <span style={{ fontSize: 11, color: 'var(--muted)', whiteSpace: 'nowrap' }}>Highlight:</span>
-                              {[['#F17200','orange'],['#FF69B4','pink'],['#FFE600','yellow']].map(([hex, label]) => (
+                              {[['#FF5800','orange'],['#FF69B4','pink'],['#FFE600','yellow']].map(([hex, label]) => (
                                 <button key={hex} onClick={() => setEditingInvoice(i => ({...i, remarks_color: i.remarks_color === hex ? null : hex}))}
                                   title={label}
                                   style={{ width: 22, height: 22, borderRadius: '50%', background: hex, border: editingInvoice.remarks_color === hex ? '2.5px solid #333' : '2px solid transparent', cursor: 'pointer', flexShrink: 0 }} />

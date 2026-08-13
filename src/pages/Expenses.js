@@ -326,7 +326,7 @@ export default function Expenses() {
 
   // ── PRINT FUNCTIONS ────────────────────────────────────────────────────────
   const handleExportExcel = async () => {
-    const companyName = (localStorage.getItem('ds_company_name') || 'DRAGON SPEED TRUCKING CORPORATION').toUpperCase()
+    const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const today2 = new Date().toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })
     const total = filtered.reduce((s,e) => s+(parseFloat(e.amount)||0), 0)
     const byCategory = {}
@@ -452,8 +452,9 @@ export default function Expenses() {
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' })
     const total = filtered.reduce((s, e) => s + (e.amount || 0), 0)
     const dateStr = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })
+    const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     doc.setFontSize(13); doc.setFont(undefined, 'bold')
-    doc.text('DRAGON SPEED TRUCKING CORPORATION', 14, 14)
+    doc.text(companyName, 14, 14)
     doc.setFontSize(9); doc.setFont(undefined, 'normal')
     doc.setTextColor(100); doc.text('Expenses — Detail Report    ' + dateStr, 14, 20); doc.setTextColor(0)
     const rows = filtered.map(e => {
@@ -471,7 +472,8 @@ export default function Expenses() {
     const total = filtered.reduce((s,e)=>s+(e.amount||0),0)
     const dateStr = new Date().toLocaleDateString('en-PH',{year:'numeric',month:'long',day:'numeric'})
     const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'letter'})
-    doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.text('DRAGON SPEED TRUCKING CORPORATION',14,14)
+    const companyName = (localStorage.getItem('ds_company_name') || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
+    doc.setFontSize(13); doc.setFont(undefined,'bold'); doc.text(companyName,14,14)
     doc.setFontSize(9); doc.setFont(undefined,'normal'); doc.setTextColor(100); doc.text('Expenses — Summary by Category    '+dateStr,14,20); doc.setTextColor(0)
     const rows = Object.entries(byCategory).sort((a,b)=>b[1].total-a[1].total).map(([cat,d])=>[cat,d.admin>0?Number(d.admin).toLocaleString('en-PH',{minimumFractionDigits:2}):'—',d.operation>0?Number(d.operation).toLocaleString('en-PH',{minimumFractionDigits:2}):'—',Number(d.total).toLocaleString('en-PH',{minimumFractionDigits:2})])
     autoTable(doc,{startY:24,head:[['Category','Admin (PHP)','Operation (PHP)','Total (PHP)']],body:rows,foot:[['TOTAL','','',Number(total).toLocaleString('en-PH',{minimumFractionDigits:2})]],headStyles:{fillColor:[255,30,0],fontSize:9,fontStyle:'bold'},footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:10},bodyStyles:{fontSize:9},alternateRowStyles:{fillColor:[250,250,250]},columnStyles:{1:{halign:'right'},2:{halign:'right'},3:{halign:'right'}},margin:{left:14,right:14}})

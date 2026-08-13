@@ -428,7 +428,7 @@ export default function CheckVouchers() {
       headerH = imgH + 4
     } catch (e) {
       doc.setFontSize(14); doc.setFont('helvetica', 'bold'); doc.setTextColor(255,30,0)
-      doc.text('DRAGON SPEED TRUCKING CORPORATION', W / 2, 14, { align: 'center' })
+      doc.text(co.toUpperCase(), W / 2, 14, { align: 'center' })
       doc.setFontSize(7); doc.setFont('helvetica', 'normal'); doc.setTextColor(100)
       if (settings.address) doc.text(settings.address, W / 2, 20, { align: 'center' })
       headerH = 26
