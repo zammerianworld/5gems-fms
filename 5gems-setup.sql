@@ -1738,36 +1738,88 @@ AS $function$
   from public.trucks where plate = any(public.viewer_plates());
 $function$;
 
+CREATE OR REPLACE FUNCTION public.get_my_credited_amounts()
+ RETURNS TABLE(trip_type text, trip_id uuid, net_amount numeric, credited_amount numeric)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+AS $function$
+  with all_dump as (
+    select td.id, td.invoice_id, td.truck_plate,
+      (coalesce(td.weight_tons,0) * coalesce(td.rate_per_ton,0)) as net_amount
+    from public.trips_dump td
+    where td.deleted_at is null
+  ),
+  all_pm as (
+    select tp.id, tp.invoice_id, tp.truck_plate,
+      case when tp.trip_code = 'SMC'
+        then (coalesce(tp.supplier_amount,0) + coalesce(tp.stripping_fee,0)) / 1.12
+        else (coalesce(tp.supplier_amount,0) + coalesce(tp.stripping_fee,0))
+      end as net_amount
+    from public.trips_pm tp
+    where tp.deleted_at is null
+  ),
+  inv_totals as (
+    select invoice_id, sum(net_amount) as inv_net from (
+      select invoice_id, net_amount from all_dump where invoice_id is not null
+      union all
+      select invoice_id, net_amount from all_pm where invoice_id is not null
+    ) x group by invoice_id
+  ),
+  mine as (
+    select 'dump'::text as trip_type, id as trip_id, invoice_id, net_amount from all_dump where truck_plate = any(public.viewer_plates())
+    union all
+    select 'pm'::text as trip_type, id as trip_id, invoice_id, net_amount from all_pm where truck_plate = any(public.viewer_plates())
+  )
+  select
+    m.trip_type, m.trip_id, m.net_amount,
+    case
+      when i.actual_amount_credited is not null and it.inv_net > 0
+        then (m.net_amount / it.inv_net) * i.actual_amount_credited
+      else m.net_amount * 1.10
+    end as credited_amount
+  from mine m
+  left join public.invoices i on i.id = m.invoice_id
+  left join inv_totals it on it.invoice_id = m.invoice_id;
+$function$;
+
+grant execute on function public.get_my_credited_amounts() to authenticated;
+
 CREATE OR REPLACE FUNCTION public.get_my_invoices()
  RETURNS TABLE(invoice_id uuid, invoice_no text, invoice_date date, status text, date_credited date, my_trip_count integer, my_amount numeric)
  LANGUAGE sql
  STABLE SECURITY DEFINER
 AS $function$
-  with my_trips as (
-    select
-      td.invoice_id,
-      (coalesce(td.weight_tons,0) * coalesce(td.rate_per_ton,0)) as amount
-    from public.trips_dump td
-    where td.truck_plate = any(public.viewer_plates())
-      and td.invoice_id is not null
-      and td.deleted_at is null
-    union all
-    select
-      tp.invoice_id,
+  with all_dump as (
+    select td.id, td.invoice_id, td.truck_plate,
+      (coalesce(td.weight_tons,0) * coalesce(td.rate_per_ton,0)) as net_amount
+    from public.trips_dump td where td.deleted_at is null and td.invoice_id is not null
+  ),
+  all_pm as (
+    select tp.id, tp.invoice_id, tp.truck_plate,
       case when tp.trip_code = 'SMC'
         then (coalesce(tp.supplier_amount,0) + coalesce(tp.stripping_fee,0)) / 1.12
         else (coalesce(tp.supplier_amount,0) + coalesce(tp.stripping_fee,0))
-      end as amount
-    from public.trips_pm tp
-    where tp.truck_plate = any(public.viewer_plates())
-      and tp.invoice_id is not null
-      and tp.deleted_at is null
+      end as net_amount
+    from public.trips_pm tp where tp.deleted_at is null and tp.invoice_id is not null
+  ),
+  inv_totals as (
+    select invoice_id, sum(net_amount) as inv_net from (
+      select invoice_id, net_amount from all_dump union all select invoice_id, net_amount from all_pm
+    ) x group by invoice_id
+  ),
+  my_trips as (
+    select invoice_id, net_amount from all_dump where truck_plate = any(public.viewer_plates())
+    union all
+    select invoice_id, net_amount from all_pm where truck_plate = any(public.viewer_plates())
   )
-  select
-    i.id, i.invoice_no, i.invoice_date, i.status, i.date_credited,
-    count(mt.*)::integer, sum(mt.amount)
+  select i.id, i.invoice_no, i.invoice_date, i.status, i.date_credited,
+    count(mt.*)::integer,
+    sum(case when i.actual_amount_credited is not null and it.inv_net > 0
+      then (mt.net_amount / it.inv_net) * i.actual_amount_credited
+      else mt.net_amount * 1.10 end)
   from my_trips mt
   join public.invoices i on i.id = mt.invoice_id
+  left join inv_totals it on it.invoice_id = mt.invoice_id
   group by i.id, i.invoice_no, i.invoice_date, i.status, i.date_credited
   order by i.invoice_date desc nulls last;
 $function$;

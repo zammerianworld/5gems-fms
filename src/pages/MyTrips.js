@@ -36,6 +36,7 @@ export default function MyTrips() {
   const [month, setMonth] = useState('')
   const [sharesOverhead, setSharesOverhead] = useState(true) // default true avoids a misleading flash before the check resolves
   const [settings, setSettings] = useState({})
+  const [creditedMap, setCreditedMap] = useState({})
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
@@ -44,13 +45,14 @@ export default function MyTrips() {
     // Invoices never come from the shared invoices table directly (one
     // invoice can cover multiple trucks) — get_my_invoices() returns only
     // this account's own trip totals per invoice.
-    const [dt, pt, ex, inv, shares, st] = await Promise.all([
+    const [dt, pt, ex, inv, shares, st, cred] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('expenses').select('*').order('expense_date', { ascending: false })),
       supabase.rpc('get_my_invoices'),
       supabase.rpc('viewer_shares_overhead'),
       supabase.from('company_settings').select('company_name').eq('id', 1).maybeSingle(),
+      supabase.rpc('get_my_credited_amounts'),
     ])
     if (dt.data) setDumpTrips(dt.data)
     if (pt.data) setPmTrips(pt.data)
@@ -58,6 +60,11 @@ export default function MyTrips() {
     if (inv.data) setMyInvoices(inv.data)
     if (typeof shares.data === 'boolean') setSharesOverhead(shares.data)
     if (st.data) setSettings(st.data)
+    if (cred.data) {
+      const map = {}
+      cred.data.forEach(r => { map[`${r.trip_type}-${r.trip_id}`] = parseFloat(r.credited_amount) || 0 })
+      setCreditedMap(map)
+    }
     setLoading(false)
   }, [])
 
@@ -102,8 +109,15 @@ export default function MyTrips() {
   const sharedExpenses = useMemo(() => expenses.filter(e => e.scope === 'all' && (!month || e.expense_date?.startsWith(month))), [expenses, month])
   const shareOf = (e) => (parseFloat(e.amount) || 0) / (shareCounts[e.expense_date] || 1)
 
-  const dumpTotal = filteredDump.reduce((s, t) => s + dumpNet(t), 0)
-  const pmTotal = filteredPm.reduce((s, t) => s + pmNet(t), 0)
+  const netOf = (t, kind) => kind === 'dump' ? dumpNet(t) : pmNet(t)
+  const credited = (t, kind) => {
+    const v = creditedMap[`${kind}-${t.id}`]
+    return v !== undefined ? v : netOf(t, kind) * 1.10 // fallback while RPC is loading
+  }
+  const whtOf = (t, kind) => (netOf(t, kind) * 1.12) - credited(t, kind)
+
+  const dumpTotal = filteredDump.reduce((s, t) => s + credited(t, 'dump'), 0)
+  const pmTotal = filteredPm.reduce((s, t) => s + credited(t, 'pm'), 0)
   const rows = tab === 'dump' ? filteredDump : filteredPm
   const total = tab === 'dump' ? dumpTotal : pmTotal
   const paidCount = rows.filter(t => t.client_paid).length
@@ -138,10 +152,11 @@ export default function MyTrips() {
       doc.setFontSize(10); doc.text('Dump Truck Trips', 14, y); y += 2
       autoTable(doc, {
         startY: y, margin: { left: 14, right: 14 },
-        head: [['Date', 'Truck', 'Route', 'Commodity', 'Weight (t)', 'Rate/t', 'Amount', 'Client Paid', 'Settled']],
+        head: [['Date', 'Truck', 'Route', 'Commodity', 'Weight (t)', 'Rate/t', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
         body: filteredDump.map(t => [
           fmtDate(t.trip_date), t.truck_plate, t.route, t.commodity,
-          fmt(t.weight_tons), `PHP ${fmt(t.rate_per_ton)}`, `PHP ${fmt(dumpNet(t))}`,
+          fmt(t.weight_tons), `PHP ${fmt(t.rate_per_ton)}`,
+          `PHP ${fmt(netOf(t, 'dump'))}`, `PHP ${fmt(netOf(t, 'dump') * 1.12)}`, `PHP ${fmt(whtOf(t, 'dump'))}`, `PHP ${fmt(credited(t, 'dump'))}`,
           t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
         ]),
         styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
@@ -154,10 +169,11 @@ export default function MyTrips() {
       doc.setFontSize(10); doc.text('Prime Mover Trips', 14, y); y += 2
       autoTable(doc, {
         startY: y, margin: { left: 14, right: 14 },
-        head: [['Date', 'Truck', 'Trip Code', 'Size', 'Amount', 'Client Paid', 'Settled']],
+        head: [['Date', 'Truck', 'Trip Code', 'Size', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
         body: filteredPm.map(t => [
           fmtDate(t.trip_date), t.truck_plate, t.trip_code, t.container_size || '—',
-          `PHP ${fmt(pmNet(t))}`, t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
+          `PHP ${fmt(netOf(t, 'pm'))}`, `PHP ${fmt(netOf(t, 'pm') * 1.12)}`, `PHP ${fmt(whtOf(t, 'pm'))}`, `PHP ${fmt(credited(t, 'pm'))}`,
+          t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
         ]),
         styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
       })
@@ -211,27 +227,27 @@ export default function MyTrips() {
     }
 
     const tws = wb.addWorksheet('Trips')
-    tws.mergeCells('A1:I1'); tws.getCell('A1').value = companyName; tws.getCell('A1').font = { bold: true, size: 13 }; tws.getCell('A1').alignment = { horizontal: 'center' }
-    tws.mergeCells('A2:I2'); tws.getCell('A2').value = `MY TRIPS — ${periodLabel.toUpperCase()}`; tws.getCell('A2').font = { bold: true, size: 11 }; tws.getCell('A2').alignment = { horizontal: 'center' }
-    tws.columns = [{ width: 12 }, { width: 8 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }]
-    addHeaderRow(tws, 4, ['Date', 'Type', 'Truck', 'Route / Trip Code', 'Weight (t)', 'Commodity / Size', 'Amount', 'Client Paid', 'Settled'])
+    tws.mergeCells('A1:L1'); tws.getCell('A1').value = companyName; tws.getCell('A1').font = { bold: true, size: 13 }; tws.getCell('A1').alignment = { horizontal: 'center' }
+    tws.mergeCells('A2:L2'); tws.getCell('A2').value = `MY TRIPS — ${periodLabel.toUpperCase()}`; tws.getCell('A2').font = { bold: true, size: 11 }; tws.getCell('A2').alignment = { horizontal: 'center' }
+    tws.columns = [{ width: 12 }, { width: 8 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }]
+    addHeaderRow(tws, 4, ['Date', 'Type', 'Truck', 'Route / Trip Code', 'Weight (t)', 'Commodity / Size', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled'])
     let r = 5
     const allTrips = [
-      ...filteredDump.map(t => ({ date: t.trip_date, type: 'Dump', truck: t.truck_plate, route: t.route, weight: t.weight_tons, extra: t.commodity, amount: dumpNet(t), paid: t.client_paid, settled: t.subcon_paid })),
-      ...filteredPm.map(t => ({ date: t.trip_date, type: 'PM', truck: t.truck_plate, route: t.trip_code, weight: '', extra: t.container_size, amount: pmNet(t), paid: t.client_paid, settled: t.subcon_paid })),
+      ...filteredDump.map(t => ({ date: t.trip_date, type: 'Dump', truck: t.truck_plate, route: t.route, weight: t.weight_tons, extra: t.commodity, vatEx: netOf(t,'dump'), vatIn: netOf(t,'dump')*1.12, wht: whtOf(t,'dump'), netTotal: credited(t,'dump'), paid: t.client_paid, settled: t.subcon_paid })),
+      ...filteredPm.map(t => ({ date: t.trip_date, type: 'PM', truck: t.truck_plate, route: t.trip_code, weight: '', extra: t.container_size, vatEx: netOf(t,'pm'), vatIn: netOf(t,'pm')*1.12, wht: whtOf(t,'pm'), netTotal: credited(t,'pm'), paid: t.client_paid, settled: t.subcon_paid })),
     ].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     allTrips.forEach(t => {
       const row = tws.getRow(r); const bg = (r % 2 === 0) ? 'FFFFFFFF' : 'FFF9FAFB'
-      ;[fmtDate(t.date), t.type, t.truck, t.route, t.weight, t.extra, t.amount, t.paid ? 'Paid' : 'Unpaid', t.settled ? 'Settled' : 'Pending'].forEach((v, ci) => {
+      ;[fmtDate(t.date), t.type, t.truck, t.route, t.weight, t.extra, t.vatEx, t.vatIn, t.wht, t.netTotal, t.paid ? 'Paid' : 'Unpaid', t.settled ? 'Settled' : 'Pending'].forEach((v, ci) => {
         const c = row.getCell(ci + 1); c.value = v; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
-        if (ci === 6) c.numFmt = '#,##0.00'
+        if (ci >= 6 && ci <= 9) c.numFmt = '#,##0.00'
       })
       r++
     })
     const tTotalRow = tws.getRow(r)
-    ;['', '', '', '', '', 'TOTAL', tripIncome, '', ''].forEach((v, ci) => {
+    ;['', '', '', '', '', 'TOTAL', '', '', '', tripIncome, '', ''].forEach((v, ci) => {
       const c = tTotalRow.getCell(ci + 1); c.value = v; c.font = { bold: true }; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }
-      if (ci === 6) c.numFmt = '#,##0.00'
+      if (ci === 9) c.numFmt = '#,##0.00'
     })
     tws.views = [{ showGridLines: false, state: 'frozen', ySplit: 4 }]
 
@@ -368,7 +384,7 @@ export default function MyTrips() {
                             <div className="table-wrap">
                               <table className="table">
                                 <thead>
-                                  <tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Amount</th><th>Settled to You</th></tr>
+                                  <tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th><th>Settled to You</th></tr>
                                 </thead>
                                 <tbody>
                                   {trips.map(t => (
@@ -376,7 +392,7 @@ export default function MyTrips() {
                                       <td>{fmtDate(t.trip_date)}</td>
                                       <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
                                       <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
-                                      <td className="text-right mono">₱{fmt(t._kind === 'dump' ? dumpNet(t) : pmNet(t))}</td>
+                                      <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
                                       <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
                                     </tr>
                                   ))}
@@ -394,7 +410,7 @@ export default function MyTrips() {
                       <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{uninvoicedDump.length + uninvoicedPm.length} trip(s) not yet on an invoice</div>
                       <div className="table-wrap">
                         <table className="table">
-                          <thead><tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Amount</th></tr></thead>
+                          <thead><tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th></tr></thead>
                           <tbody>
                             {[...uninvoicedDump.map(t => ({ ...t, _kind: 'dump' })), ...uninvoicedPm.map(t => ({ ...t, _kind: 'pm' }))]
                               .sort((a, b) => (b.trip_date || '').localeCompare(a.trip_date || ''))
@@ -403,7 +419,7 @@ export default function MyTrips() {
                                   <td>{fmtDate(t.trip_date)}</td>
                                   <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
                                   <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
-                                  <td className="text-right mono">₱{fmt(t._kind === 'dump' ? dumpNet(t) : pmNet(t))}</td>
+                                  <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
                                 </tr>
                               ))}
                           </tbody>
@@ -445,7 +461,7 @@ export default function MyTrips() {
                       <tr>
                         <th>Date</th><th>Truck</th><th>Route</th><th>Commodity</th>
                         <th className="text-right">Weight (t)</th><th className="text-right">Rate/t</th>
-                        <th className="text-right">Amount</th><th>Client Paid</th><th>Settled</th>
+                        <th className="text-right">Credited Amount</th><th>Client Paid</th><th>Settled</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -459,7 +475,7 @@ export default function MyTrips() {
                           <td>{t.commodity}</td>
                           <td className="text-right mono">{fmt(t.weight_tons)}</td>
                           <td className="text-right mono">₱{fmt(t.rate_per_ton)}</td>
-                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(dumpNet(t))}</td>
+                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(credited(t, 'dump'))}</td>
                           <td><PaidBadge paid={t.client_paid} label={t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Paid') : 'Unpaid'} /></td>
                           <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
                         </tr>
@@ -471,7 +487,7 @@ export default function MyTrips() {
                     <thead>
                       <tr>
                         <th>Date</th><th>Truck</th><th>Trip Code</th><th>Size</th>
-                        <th className="text-right">Amount</th><th>Client Paid</th><th>Settled</th>
+                        <th className="text-right">Credited Amount</th><th>Client Paid</th><th>Settled</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -483,7 +499,7 @@ export default function MyTrips() {
                           <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
                           <td>{t.trip_code}</td>
                           <td>{t.container_size || '—'}</td>
-                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(pmNet(t))}</td>
+                          <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(credited(t, 'pm'))}</td>
                           <td><PaidBadge paid={t.client_paid} label={t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Paid') : 'Unpaid'} /></td>
                           <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
                         </tr>
