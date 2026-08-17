@@ -112,9 +112,9 @@ export default function MyTrips() {
   const netOf = (t, kind) => kind === 'dump' ? dumpNet(t) : pmNet(t)
   const credited = (t, kind) => {
     const v = creditedMap[`${kind}-${t.id}`]
-    return v !== undefined ? v : netOf(t, kind) * 1.10 // fallback while RPC is loading
+    return v !== undefined ? v : netOf(t, kind) * 0.98 // fallback while RPC is loading
   }
-  const whtOf = (t, kind) => (netOf(t, kind) * 1.12) - credited(t, kind)
+  const whtOf = (t, kind) => netOf(t, kind) - credited(t, kind)
 
   const dumpTotal = filteredDump.reduce((s, t) => s + credited(t, 'dump'), 0)
   const pmTotal = filteredPm.reduce((s, t) => s + credited(t, 'pm'), 0)
@@ -152,11 +152,11 @@ export default function MyTrips() {
       doc.setFontSize(10); doc.text('Dump Truck Trips', 14, y); y += 2
       autoTable(doc, {
         startY: y, margin: { left: 14, right: 14 },
-        head: [['Date', 'Truck', 'Route', 'Commodity', 'Weight (t)', 'Rate/t', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
+        head: [['Date', 'Truck', 'Route', 'Commodity', 'Weight (t)', 'Rate/t', 'Gross Sales', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
         body: filteredDump.map(t => [
           fmtDate(t.trip_date), t.truck_plate, t.route, t.commodity,
           fmt(t.weight_tons), `PHP ${fmt(t.rate_per_ton)}`,
-          `PHP ${fmt(netOf(t, 'dump'))}`, `PHP ${fmt(netOf(t, 'dump') * 1.12)}`, `PHP ${fmt(whtOf(t, 'dump'))}`, `PHP ${fmt(credited(t, 'dump'))}`,
+          `PHP ${fmt(netOf(t, 'dump'))}`, `PHP ${fmt(whtOf(t, 'dump'))}`, `PHP ${fmt(credited(t, 'dump'))}`,
           t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
         ]),
         styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
@@ -169,10 +169,10 @@ export default function MyTrips() {
       doc.setFontSize(10); doc.text('Prime Mover Trips', 14, y); y += 2
       autoTable(doc, {
         startY: y, margin: { left: 14, right: 14 },
-        head: [['Date', 'Truck', 'Trip Code', 'Size', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
+        head: [['Date', 'Truck', 'Trip Code', 'Size', 'Gross Sales', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled']],
         body: filteredPm.map(t => [
           fmtDate(t.trip_date), t.truck_plate, t.trip_code, t.container_size || '—',
-          `PHP ${fmt(netOf(t, 'pm'))}`, `PHP ${fmt(netOf(t, 'pm') * 1.12)}`, `PHP ${fmt(whtOf(t, 'pm'))}`, `PHP ${fmt(credited(t, 'pm'))}`,
+          `PHP ${fmt(netOf(t, 'pm'))}`, `PHP ${fmt(whtOf(t, 'pm'))}`, `PHP ${fmt(credited(t, 'pm'))}`,
           t.client_paid ? 'Paid' : 'Unpaid', t.subcon_paid ? 'Settled' : 'Pending',
         ]),
         styles: { fontSize: 7.5 }, headStyles: { fillColor: [31, 41, 55] },
@@ -227,27 +227,27 @@ export default function MyTrips() {
     }
 
     const tws = wb.addWorksheet('Trips')
-    tws.mergeCells('A1:L1'); tws.getCell('A1').value = companyName; tws.getCell('A1').font = { bold: true, size: 13 }; tws.getCell('A1').alignment = { horizontal: 'center' }
-    tws.mergeCells('A2:L2'); tws.getCell('A2').value = `MY TRIPS — ${periodLabel.toUpperCase()}`; tws.getCell('A2').font = { bold: true, size: 11 }; tws.getCell('A2').alignment = { horizontal: 'center' }
-    tws.columns = [{ width: 12 }, { width: 8 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }]
-    addHeaderRow(tws, 4, ['Date', 'Type', 'Truck', 'Route / Trip Code', 'Weight (t)', 'Commodity / Size', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled'])
+    tws.mergeCells('A1:K1'); tws.getCell('A1').value = companyName; tws.getCell('A1').font = { bold: true, size: 13 }; tws.getCell('A1').alignment = { horizontal: 'center' }
+    tws.mergeCells('A2:K2'); tws.getCell('A2').value = `MY TRIPS — ${periodLabel.toUpperCase()}`; tws.getCell('A2').font = { bold: true, size: 11 }; tws.getCell('A2').alignment = { horizontal: 'center' }
+    tws.columns = [{ width: 12 }, { width: 8 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 20 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }, { width: 12 }]
+    addHeaderRow(tws, 4, ['Date', 'Type', 'Truck', 'Route / Trip Code', 'Weight (t)', 'Commodity / Size', 'Gross Sales', 'WHT (2%)', 'Net Total', 'Client Paid', 'Settled'])
     let r = 5
     const allTrips = [
-      ...filteredDump.map(t => ({ date: t.trip_date, type: 'Dump', truck: t.truck_plate, route: t.route, weight: t.weight_tons, extra: t.commodity, vatEx: netOf(t,'dump'), vatIn: netOf(t,'dump')*1.12, wht: whtOf(t,'dump'), netTotal: credited(t,'dump'), paid: t.client_paid, settled: t.subcon_paid })),
-      ...filteredPm.map(t => ({ date: t.trip_date, type: 'PM', truck: t.truck_plate, route: t.trip_code, weight: '', extra: t.container_size, vatEx: netOf(t,'pm'), vatIn: netOf(t,'pm')*1.12, wht: whtOf(t,'pm'), netTotal: credited(t,'pm'), paid: t.client_paid, settled: t.subcon_paid })),
+      ...filteredDump.map(t => ({ date: t.trip_date, type: 'Dump', truck: t.truck_plate, route: t.route, weight: t.weight_tons, extra: t.commodity, vatEx: netOf(t,'dump'), wht: whtOf(t,'dump'), netTotal: credited(t,'dump'), paid: t.client_paid, settled: t.subcon_paid })),
+      ...filteredPm.map(t => ({ date: t.trip_date, type: 'PM', truck: t.truck_plate, route: t.trip_code, weight: '', extra: t.container_size, vatEx: netOf(t,'pm'), wht: whtOf(t,'pm'), netTotal: credited(t,'pm'), paid: t.client_paid, settled: t.subcon_paid })),
     ].sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     allTrips.forEach(t => {
       const row = tws.getRow(r); const bg = (r % 2 === 0) ? 'FFFFFFFF' : 'FFF9FAFB'
-      ;[fmtDate(t.date), t.type, t.truck, t.route, t.weight, t.extra, t.vatEx, t.vatIn, t.wht, t.netTotal, t.paid ? 'Paid' : 'Unpaid', t.settled ? 'Settled' : 'Pending'].forEach((v, ci) => {
+      ;[fmtDate(t.date), t.type, t.truck, t.route, t.weight, t.extra, t.vatEx, t.wht, t.netTotal, t.paid ? 'Paid' : 'Unpaid', t.settled ? 'Settled' : 'Pending'].forEach((v, ci) => {
         const c = row.getCell(ci + 1); c.value = v; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bg } }
-        if (ci >= 6 && ci <= 9) c.numFmt = '#,##0.00'
+        if (ci >= 6 && ci <= 8) c.numFmt = '#,##0.00'
       })
       r++
     })
     const tTotalRow = tws.getRow(r)
-    ;['', '', '', '', '', 'TOTAL', '', '', '', tripIncome, '', ''].forEach((v, ci) => {
+    ;['', '', '', '', '', 'TOTAL', '', '', tripIncome, '', ''].forEach((v, ci) => {
       const c = tTotalRow.getCell(ci + 1); c.value = v; c.font = { bold: true }; c.border = allB; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } }
-      if (ci === 9) c.numFmt = '#,##0.00'
+      if (ci === 8) c.numFmt = '#,##0.00'
     })
     tws.views = [{ showGridLines: false, state: 'frozen', ySplit: 4 }]
 

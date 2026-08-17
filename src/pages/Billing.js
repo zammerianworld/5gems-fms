@@ -244,8 +244,8 @@ export default function Billing() {
     ? billedTrips.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
     : billedTrips.reduce((s, t) => s + ((t.supplier_amount || 0) + (t.stripping_fee || 0)), 0)
   const totalNet = isSMCInvoice ? rawTotal / 1.12 : rawTotal
-  const vat12 = totalNet * 0.12
-  const totalVatInc = isSMCInvoice ? rawTotal : rawTotal * 1.12
+  const vat12 = 0
+  const totalVatInc = totalNet
   const wht2 = totalNet * 0.02
   const totalDue = totalVatInc - wht2
   const totalTons = billedTrips.reduce((s, t) => s + (parseFloat(t.weight_tons) || 0), 0)
@@ -629,7 +629,7 @@ export default function Billing() {
     const clientDetails = getClientDetails(client)
     const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const net = tripsData.reduce((s,t)=>s+((t.weight_tons||0)*(t.rate_per_ton||0)),0)
-    const vat = net*0.12; const vatInc = net*1.12
+    const vat = 0; const vatInc = net
     const tons = tripsData.reduce((s,t)=>s+(parseFloat(t.weight_tons)||0),0)
 
     const ws = wb.addWorksheet(sheetName.slice(0,31))
@@ -773,7 +773,7 @@ export default function Billing() {
     ws.getCell(r,1).font = { bold:true, italic:true, size:9 }
     ws.getCell(r,1).alignment = { horizontal:'left', vertical:'bottom', wrapText:true }
 
-    const totalsLabels = [['GRAND TOTAL', net, true],['VAT 12%', vat, false],['VAT N', vatInc, false]]
+    const totalsLabels = [['GRAND TOTAL', net, true],['VAT (Non-VAT Reg.)', vat, false],['TOTAL SALES', vatInc, false]]
     totalsLabels.forEach(([label, val, bold], idx) => {
       const rr = totalsStartRow + idx
       ws.mergeCells(rr,10,rr,14)
@@ -837,8 +837,8 @@ export default function Billing() {
     const grandTotal = tripsData.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
     const allSMC = tripsData.length > 0 && tripsData.every(t => t.trip_code === 'SMC')
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
-    const vat12 = vatable * 0.12
-    const totalAmt = allSMC ? grandTotal : grandTotal * 1.12
+    const vat12 = 0
+    const totalAmt = vatable
     const twas = vatable * 0.02
     const netAmount = totalAmt - twas
 
@@ -1092,7 +1092,7 @@ export default function Billing() {
     const totalsRows = [
       ['GRAND TOTAL', grandTotal, true, false],
       ['VATABLE', vatable, false, false],
-      ['12% VAT', vat12, false, false],
+      ['VAT (Non-VAT Reg.)', vat12, false, false],
       ['TOTAL AMOUNT', totalAmt, true, false],
       ['TWAS', twas, false, false],
       ['NET AMOUNT', netAmount, true, true],
@@ -1232,20 +1232,20 @@ export default function Billing() {
 
   const handleARExcel = (client, clientInvoices) => {
     const f2 = n => Number(n||0).toFixed(2)
-    const headers = ['Invoice No.', 'Date', 'Type', 'Net of VAT', 'VAT (12%)', 'Total (VAT Inc.)', 'W/Tax (2%)', 'Total Due', 'Amt Received', 'Date Credited', 'Status', 'Remarks']
+    const headers = ['Invoice No.', 'Date', 'Type', 'Net Sales', 'VAT (Non-VAT Reg.)', 'Total Sales', 'W/Tax (2%)', 'Total Due', 'Amt Received', 'Date Credited', 'Status', 'Remarks']
     const data = clientInvoices.sort((a,b) => new Date(a.invoice_date)-new Date(b.invoice_date)).map(inv => {
       const net = inv.total_sales_net||0
-      const vatAmt = net * 0.12
-      const vatInc = net * 1.12
+      const vatAmt = 0
+      const vatInc = net
       const wtax = net * 0.02
       const due = vatInc - wtax
       const received = inv.actual_amount_credited || (inv.status==='Paid' ? due : 0)
       return [inv.invoice_no, inv.invoice_date, inv.truck_type, f2(net), f2(vatAmt), f2(vatInc), f2(wtax), f2(due), received>0?f2(received):'', inv.date_credited||'', inv.status, inv.remarks||'']
     })
     const totalNet = clientInvoices.reduce((s,i)=>s+(i.total_sales_net||0),0)
-    const totalVatInc = totalNet*1.12
-    const totalDue = totalNet*1.10
-    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||(i.total_sales_net||0)*1.10),0)
+    const totalVatInc = totalNet
+    const totalDue = totalNet*0.98
+    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||(i.total_sales_net||0)*0.98),0)
     const outstanding = totalVatInc - totalReceived
     const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const ws = XLSX.utils.aoa_to_sheet([
@@ -1279,24 +1279,24 @@ export default function Billing() {
     const sorted = [...clientInvoices].sort((a,b) => new Date(a.invoice_date)-new Date(b.invoice_date))
     const tableData = sorted.map(inv => {
       const n = net(inv.total_sales_net)
-      const due = n * 1.10
+      const due = n * 0.98
       const received = inv.actual_amount_credited || (inv.status==='Paid' ? due : 0)
-      return [inv.invoice_no, inv.invoice_date, inv.truck_type?.replace(' Truck','')?.replace(' Mover','PM')||'', f2(n*1.12), f2(due), received>0?f2(received):'—', inv.date_credited||'—', inv.status]
+      return [inv.invoice_no, inv.invoice_date, inv.truck_type?.replace(' Truck','')?.replace(' Mover','PM')||'', f2(n), f2(due), received>0?f2(received):'—', inv.date_credited||'—', inv.status]
     })
     const totNet = sorted.reduce((s,i)=>s+net(i.total_sales_net),0)
-    const totReceived = sorted.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||net(i.total_sales_net)*1.10),0)
+    const totReceived = sorted.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||net(i.total_sales_net)*0.98),0)
     autoTable(doc, {
       startY: 35,
-      head: [['Invoice No.','Date','Type','VAT Inc.','Total Due','Amt Received','Date Credited','Status']],
+      head: [['Invoice No.','Date','Type','Total Sales','Total Due','Amt Received','Date Credited','Status']],
       body: tableData,
-      foot: [['','','TOTAL', f2(totNet*1.12), f2(totNet*1.10), f2(totReceived), '', '']],
+      foot: [['','','TOTAL', f2(totNet), f2(totNet*0.98), f2(totReceived), '', '']],
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [30,41,59], textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [254,243,199], textColor: [0,0,0], fontStyle: 'bold' },
       columnStyles: { 3:{halign:'right'}, 4:{halign:'right'}, 5:{halign:'right'} },
     })
     const y = doc.lastAutoTable.finalY + 8
-    const outstanding = totNet*1.12 - totReceived
+    const outstanding = totNet - totReceived
     const outColor = outstanding > 0 ? [220,38,38] : [22,163,74]
     doc.setFontSize(9); doc.setFont(undefined,'bold')
     doc.setTextColor(...outColor)
@@ -1314,7 +1314,7 @@ export default function Billing() {
     const f2 = (n) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
     const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [279.4, 215.9] })
     const W = 279.4
-    const cols = ['Date', 'Invoice No.', 'Client', 'Type', 'Status', 'Net of VAT', 'Total (VAT Inc.)', 'Days', 'Remarks']
+    const cols = ['Date', 'Invoice No.', 'Client', 'Type', 'Status', 'Net Sales', 'Total Sales', 'Days', 'Remarks']
     const colStyles = { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'center' } }
     const isSingleBucket = agingBucket !== 'all'
     const bDef = [
@@ -1341,12 +1341,12 @@ export default function Billing() {
       if (!bucket.items.length) return
       doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...bucket.color)
       doc.text(`${bucket.label}  (${bucket.items.length} invoice${bucket.items.length>1?'s':''})`, 14, startY); doc.setTextColor(0)
-      const rows = bucket.items.map(inv => { const net=inv.total_sales_net||0; const days=getDaysAging(inv); return [fmtDate(inv.invoice_date)||'', inv.invoice_no, inv.client, inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, f2(net), f2(net*1.12), `${days}d`, inv.remarks||''] })
+      const rows = bucket.items.map(inv => { const net=inv.total_sales_net||0; const days=getDaysAging(inv); return [fmtDate(inv.invoice_date)||'', inv.invoice_no, inv.client, inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, f2(net), f2(net), `${days}d`, inv.remarks||''] })
       const subNet = bucket.items.reduce((s,i) => s+(i.total_sales_net||0), 0)
-      autoTable(doc, { startY: startY+3, head: [cols], body: rows, foot: [['','','','',`Subtotal (${bucket.items.length})`,f2(subNet),f2(subNet*1.12),'','']], showFoot:'lastPage', headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7,fillColor:bucket.fill}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:7.5}, columnStyles:colStyles, didParseCell:(data)=>{ if(data.section==='body'&&data.column.index===7){data.cell.styles.textColor=bucket.color;data.cell.styles.fontStyle='bold'} }, margin:{left:14,right:14,bottom:32} })
+      autoTable(doc, { startY: startY+3, head: [cols], body: rows, foot: [['','','','',`Subtotal (${bucket.items.length})`,f2(subNet),f2(subNet),'','']], showFoot:'lastPage', headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7,fillColor:bucket.fill}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:7.5}, columnStyles:colStyles, didParseCell:(data)=>{ if(data.section==='body'&&data.column.index===7){data.cell.styles.textColor=bucket.color;data.cell.styles.fontStyle='bold'} }, margin:{left:14,right:14,bottom:32} })
       startY = doc.lastAutoTable.finalY + 6
     })
-    if (bucketsToRender.length > 0) { doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${allItems.length} invoices)`,14,startY); doc.text(`Net of VAT: ${f2(grandNet)}`,160,startY,{align:'right'}); doc.text(`VAT Inc.: ${f2(grandNet*1.12)}`,W-14,startY,{align:'right'}) }
+    if (bucketsToRender.length > 0) { doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${allItems.length} invoices)`,14,startY); doc.text(`Total Sales: ${f2(grandNet)}`,W-14,startY,{align:'right'}) }
     const label = isSingleBucket ? (selectedBucket?.label||'bucket') : 'AllBuckets'
     doc.save(`Aging-${label.replace(/[^a-z0-9]/gi,'-')}-${now3.toISOString().slice(0,10)}.pdf`)
     showToast('Aging report exported.')
@@ -1387,13 +1387,13 @@ export default function Billing() {
         const items = grouped[bucketLabel]; if (!items?.length) return
         const bucket = getBucket(getDaysO(items[0]))
         doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setTextColor(...bucket.color); doc.text(`${bucketLabel}  (${items.length} invoice${items.length>1?'s':''})`,14,startY); doc.setTextColor(0); doc.setFont(undefined,'normal')
-        autoTable(doc, { startY:startY+3, head:[['Invoice No.','Client','Date','Type','Days','Net of VAT','Total (VAT Inc.)','Remarks']], body:items.map(i=>{const net=i.total_sales_net||0;return[i.invoice_no,i.client,fmtDate(i.invoice_date),i.truck_type==='Dump Truck'?'Dump':'PM',`${getDaysO(i)}d`,f2(net),f2(net*1.12),i.remarks||'']}), headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{5:{halign:'right'},6:{halign:'right'}}, margin:{left:14,right:14}, didParseCell:(data)=>{if(data.section==='body'&&data.column.index===4)data.cell.styles.textColor=bucket.color} })
+        autoTable(doc, { startY:startY+3, head:[['Invoice No.','Client','Date','Type','Days','Net Sales','Total Sales','Remarks']], body:items.map(i=>{const net=i.total_sales_net||0;return[i.invoice_no,i.client,fmtDate(i.invoice_date),i.truck_type==='Dump Truck'?'Dump':'PM',`${getDaysO(i)}d`,f2(net),f2(net),i.remarks||'']}), headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{5:{halign:'right'},6:{halign:'right'}}, margin:{left:14,right:14}, didParseCell:(data)=>{if(data.section==='body'&&data.column.index===4)data.cell.styles.textColor=bucket.color} })
         startY = doc.lastAutoTable.finalY+2
         const sub = items.reduce((s,i)=>s+(i.total_sales_net||0),0)
-        doc.setFontSize(7.5); doc.setFont(undefined,'bold'); doc.setTextColor(...bucket.color); doc.text(`Subtotal (${items.length}):`,14,startY+1); doc.text(`Net of VAT: ${f2(sub)}`,160,startY+1,{align:'right'}); doc.text(`VAT Inc.: ${f2(sub*1.12)}`,W-14,startY+1,{align:'right'}); doc.setTextColor(0); doc.setFont(undefined,'normal'); startY+=8
+        doc.setFontSize(7.5); doc.setFont(undefined,'bold'); doc.setTextColor(...bucket.color); doc.text(`Subtotal (${items.length}): ${f2(sub)}`,14,startY+1); doc.setTextColor(0); doc.setFont(undefined,'normal'); startY+=8
       })
       const grandNet = list.reduce((s,i)=>s+(i.total_sales_net||0),0)
-      doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${list.length} invoices)`,14,startY); doc.text(`Net of VAT: ${f2(grandNet)}`,160,startY,{align:'right'}); doc.text(`VAT Inc.: ${f2(grandNet*1.12)}`,W-14,startY,{align:'right'})
+      doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${list.length} invoices)`,14,startY); doc.text(`Total Sales: ${f2(grandNet)}`,W-14,startY,{align:'right'})
       if (sigs && sigs.length > 0) {
         const pH2 = doc.internal.pageSize.getHeight()
         if (startY+28 > pH2-6) { doc.addPage(); startY=10 }
@@ -1471,7 +1471,7 @@ export default function Billing() {
       ws.getRow(r).height = 18
       r++
       // Header row
-      const hdr = ['Invoice No.','Client','Invoice Date','Type','Status','Net of VAT','Total (VAT Inc.)','Days','Remarks']
+      const hdr = ['Invoice No.','Client','Invoice Date','Type','Status','Net Sales','Total Sales','Days','Remarks']
       hdr.forEach((h,i) => headerCell(ws.getCell(r,i+1), h))
       r++
       // Data rows
@@ -1479,7 +1479,7 @@ export default function Billing() {
         const net = inv.total_sales_net || 0
         const bg = i % 2 === 0 ? bucket.bg : 'FFFFFFFF'
         const row = ws.getRow(r)
-        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, net*1.12, `${getDaysO(inv)}d`, inv.remarks||'']
+        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, net, `${getDaysO(inv)}d`, inv.remarks||'']
         vals.forEach((v,ci) => {
           const cell = row.getCell(ci+1)
           cell.value = v
@@ -1501,7 +1501,7 @@ export default function Billing() {
       slc.alignment = { horizontal:'right' }
       slc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF9FAFB'} }
       slc.border = allBorders
-      ;[[6,sub],[7,sub*1.12]].forEach(([c,v]) => {
+      ;[[6,sub],[7,sub]].forEach(([c,v]) => {
         const cell = ws.getCell(r,c)
         cell.value = v; cell.numFmt = '#,##0.00'
         cell.font = { bold:true, size:9, color:{argb:bucket.color} }
@@ -1525,7 +1525,7 @@ export default function Billing() {
     glc.alignment = { horizontal:'right' }
     glc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFEF9C3'} }
     glc.border = allBorders
-    ;[[6,grandNet],[7,grandNet*1.12]].forEach(([c,v]) => {
+    ;[[6,grandNet],[7,grandNet]].forEach(([c,v]) => {
       const cell = ws.getCell(r,c)
       cell.value = v; cell.numFmt = '#,##0.00'
       cell.font = { bold:true, size:10, color:{argb:'FF92400E'} }
@@ -1581,7 +1581,7 @@ export default function Billing() {
   // ── DUMP TRUCK SOA RENDERER ─────────────────────────────────────────────────
   const renderDumpSOA = (trips, invNo, invDate, client) => {
     const net = trips.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
-    const vat = net * 0.12; const vatInc = net * 1.12
+    const vat = 0; const vatInc = net
     const tons = trips.reduce((s, t) => s + (parseFloat(t.weight_tons) || 0), 0)
     const clientDetails = getClientDetails(client)
     const cols = ['5%','4%','5.5%','4.5%','4%','5%','3%','8%','3%','8%','3.5%','5%','3.5%','6%','4.5%','5.5%','5.5%']
@@ -1670,8 +1670,8 @@ export default function Billing() {
           <table style={{ borderCollapse: 'collapse', fontSize: '10px', minWidth: 200 }}>
             <tbody>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', borderBottom: '0.5px solid #000' }}>GRAND TOTAL</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', minWidth: 80, fontWeight: 'bold', borderBottom: '0.5px solid #000' }}>{fmt(net)}</td></tr>
-              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VAT 12%</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat)}</td></tr>
-              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VAT N</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vatInc)}</td></tr>
+              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VAT (Non-VAT Reg.)</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat)}</td></tr>
+              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>TOTAL SALES</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vatInc)}</td></tr>
             </tbody>
           </table>
         </div>
@@ -1690,8 +1690,8 @@ export default function Billing() {
     const grandTotal = trips.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
     const allSMC = trips.length > 0 && trips.every(t => t.trip_code === 'SMC')
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
-    const vat12 = vatable * 0.12
-    const totalAmt = allSMC ? grandTotal : grandTotal * 1.12
+    const vat12 = 0
+    const totalAmt = vatable
     const twas = vatable * 0.02
     const netAmount = totalAmt - twas
     const buildRows = (tripList, code) => tripList.flatMap((t, i) => {
@@ -1774,7 +1774,7 @@ export default function Billing() {
             <tbody>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold' }}>GRAND TOTAL</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', minWidth: 90, fontWeight: 'bold' }}>{fmt(grandTotal)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VATABLE</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vatable)}</td></tr>
-              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>12% VAT</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat12)}</td></tr>
+              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>12% VAT (Non-VAT Reg.)</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat12)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', borderTop: '0.5px solid #000' }}>TOTAL AMOUNT</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', borderTop: '0.5px solid #000' }}>{fmt(totalAmt)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>TWAS</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(twas)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', color: '#c00', borderTop: '0.5px solid #000' }}>NET AMOUNT</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: '#c00', borderTop: '0.5px solid #000' }}>{fmt(netAmount)}</td></tr>
@@ -1904,8 +1904,8 @@ export default function Billing() {
               {billedTrips.length > 0 && (
                 <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
                   {(isSMCInvoice
-                    ? [['VATABLE',totalNet],['VAT 12%',vat12],['Total Amount',totalVatInc],['TWAS 2%',wht2],['Net Amount',totalDue]]
-                    : [['Net of VAT',totalNet],['VAT 12%',vat12],['VAT Inc.',totalVatInc],['W/Tax 2%',wht2],['Total Due',totalDue]]
+                    ? [['VATABLE',totalNet],['VAT (Non-VAT Reg.)',vat12],['Total Amount',totalVatInc],['TWAS 2%',wht2],['Net Amount',totalDue]]
+                    : [['Total Sales',totalNet],['VAT (Non-VAT Reg.)',vat12],['Total Amount',totalVatInc],['W/Tax 2%',wht2],['Total Due',totalDue]]
                   ).map(([l,v]) => (<div key={l}><span style={{ color: 'var(--muted)' }}>{l}: </span><strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(v)}</strong></div>))}
                   {truckType === 'Dump Truck' && <div><span style={{ color: 'var(--muted)' }}>Total Tons: </span><strong>{totalTons.toFixed(3)}t</strong></div>}
                 </div>
@@ -2024,10 +2024,9 @@ export default function Billing() {
                     <span style={{ marginLeft: 'auto' }}><span style={{ padding: '2px 10px', borderRadius: 6, fontSize: 12, fontWeight: 500, background: sc.bg, color: sc.color }}>{inv.status}</span></span>
                   </div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
-                    <span>Net of VAT: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net)}</strong></span>
-                    <span>VAT Inc.: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net*1.12)}</strong></span>
+                    <span>Total Sales: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net)}</strong></span>
                     <span>W/Tax: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net*0.02)}</strong></span>
-                    <span>Total Due: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(net*1.12-net*0.02)}</strong></span>
+                    <span>Total Due: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(net-net*0.02)}</strong></span>
                     {inv.smcsl_wb_list && <span style={{ color: 'var(--muted)' }}>SMCSL WB: {inv.smcsl_wb_list}</span>}
                     {inv.remarks && (
                       <span style={{ color: '#cc0000', fontStyle: 'italic', fontWeight: 600, background: inv.remarks_color || 'rgba(220,38,38,0.08)', padding: '1px 8px', borderRadius: 6, border: `1px solid ${inv.remarks_color || 'rgba(220,38,38,0.2)'}` }}>
@@ -2083,7 +2082,7 @@ export default function Billing() {
                         <div className="form-group">
                           <label className="label">Status</label>
                           <select value={editingInvoice.status} onChange={e => {
-                            const ns=e.target.value; const autoAmt=(((editingInvoice.total_sales_net||0)*1.12)-((editingInvoice.total_sales_net||0)*0.02)).toFixed(2); const autoDate=new Date().toISOString().slice(0,10)
+                            const ns=e.target.value; const autoAmt=((editingInvoice.total_sales_net||0)-((editingInvoice.total_sales_net||0)*0.02)).toFixed(2); const autoDate=new Date().toISOString().slice(0,10)
                             setEditingInvoice(i => ({...i,status:ns,actual_amount_credited:ns==='Paid'?(i.actual_amount_credited||autoAmt):i.actual_amount_credited,date_credited:ns==='Paid'?(i.date_credited||autoDate):i.date_credited}))
                           }}>
                             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -2303,7 +2302,7 @@ export default function Billing() {
           let av=a[agingSortKey]||'',bv=b[agingSortKey]||''; if(typeof av==='string')av=av.toLowerCase(); if(typeof bv==='string')bv=bv.toLowerCase()
           return av<bv?(agingSortDir==='asc'?-1:1):av>bv?(agingSortDir==='asc'?1:-1):0
         })
-        const grandTotal = displayed.reduce((s,i) => s+(i.total_sales_net||0)*1.12, 0)
+        const grandTotal = displayed.reduce((s,i) => s+(i.total_sales_net||0), 0)
         return (
           <div>
             <div className="filter-bar" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
@@ -2315,19 +2314,19 @@ export default function Billing() {
             <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
               {bucketList.map(b => (<button key={b.key} onClick={() => setAgingBucket(b.key)} style={{ padding:'5px 14px', borderRadius:20, border:`1.5px solid ${agingBucket===b.key?b.color:'var(--border)'}`, background:agingBucket===b.key?(b.bg||'var(--accent-light)'):'var(--surface)', color:agingBucket===b.key?b.color:'var(--muted)', fontWeight:agingBucket===b.key?600:400, cursor:'pointer', fontSize:12 }}>{b.label} <span style={{ fontFamily:'var(--mono)' }}>({buckets[b.key]?.length||0})</span></button>))}
             </div>
-            <div style={{ fontSize: 13, marginBottom: 10, color: 'var(--muted)' }}>{displayed.length} invoice{displayed.length!==1?'s':''} · Total VAT Inc.: <strong style={{ color:'var(--danger)', fontFamily:'var(--mono)' }}>₱{fmt(grandTotal)}</strong></div>
+            <div style={{ fontSize: 13, marginBottom: 10, color: 'var(--muted)' }}>{displayed.length} invoice{displayed.length!==1?'s':''} · Total Sales: <strong style={{ color:'var(--danger)', fontFamily:'var(--mono)' }}>₱{fmt(grandTotal)}</strong></div>
             <div className="table-wrap">
               <table className="table">
                 <thead><tr>
-                  {[['invoice_no','Invoice No.'],['client','Client'],['invoice_date','Date'],null,['status','Status'],['total_sales_net','Net of VAT'],null,['days','Days'],null].map((col,i) => col
+                  {[['invoice_no','Invoice No.'],['client','Client'],['invoice_date','Date'],null,['status','Status'],['total_sales_net','Total Sales'],null,['days','Days'],null].map((col,i) => col
                     ? <th key={i} onClick={() => toggleAgingSort(col[0])} style={{ cursor:'pointer', userSelect:'none', whiteSpace:'nowrap' }}>{col[1]} {agingSortKey===col[0]?(agingSortDir==='asc'?'▲':'▼'):''}</th>
-                    : <th key={i}>{['Type','Total (VAT Inc.)','Remarks'][i===3?0:i===6?1:2]}</th>
+                    : <th key={i}>{['Type','Total Sales (Confirmed)','Remarks'][i===3?0:i===6?1:2]}</th>
                   )}
                 </tr></thead>
                 <tbody>
                   {displayed.map(inv => {
                     const days=getDays(inv); const rowBg=days>=60?'rgba(220,38,38,0.18)':days>=45?'rgba(204,85,0,0.15)':days>=30?'rgba(184,134,11,0.12)':'transparent'; const dayColor=days>=60?'var(--danger)':days>=45?'#CC5500':days>=30?'#B8860B':'var(--muted)'; const net=inv.total_sales_net||0
-                    return (<tr key={inv.id} style={{ background:rowBg }}><td style={{ fontFamily:'var(--mono)', fontSize:12 }}>{inv.invoice_no}</td><td style={{ fontSize:12 }}>{inv.client}</td><td style={{ fontSize:12 }}>{fmtDate(inv.invoice_date)}</td><td><span className={`badge ${inv.truck_type==='Dump Truck'?'badge-dump':'badge-prime'}`} style={{ fontSize:10 }}>{inv.truck_type==='Dump Truck'?'Dump':'PM'}</span></td><td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'rgba(59,130,246,0.1)', color:'#1d4ed8' }}>{inv.status}</span></td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net*1.12)}</td><td style={{ fontFamily:'var(--mono)', fontWeight:700, color:dayColor, fontSize:12, textAlign:'center' }}>{days}d</td><td style={{ fontSize:11, color:'var(--muted)' }}>{inv.remarks||''}</td></tr>)
+                    return (<tr key={inv.id} style={{ background:rowBg }}><td style={{ fontFamily:'var(--mono)', fontSize:12 }}>{inv.invoice_no}</td><td style={{ fontSize:12 }}>{inv.client}</td><td style={{ fontSize:12 }}>{fmtDate(inv.invoice_date)}</td><td><span className={`badge ${inv.truck_type==='Dump Truck'?'badge-dump':'badge-prime'}`} style={{ fontSize:10 }}>{inv.truck_type==='Dump Truck'?'Dump':'PM'}</span></td><td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'rgba(59,130,246,0.1)', color:'#1d4ed8' }}>{inv.status}</span></td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td style={{ fontFamily:'var(--mono)', fontWeight:700, color:dayColor, fontSize:12, textAlign:'center' }}>{days}d</td><td style={{ fontSize:11, color:'var(--muted)' }}>{inv.remarks||''}</td></tr>)
                   })}
                 </tbody>
               </table>
@@ -2344,8 +2343,8 @@ export default function Billing() {
           balanceStatusFilter === 'paid' ? i.status === 'Paid' :
           i.status !== 'Paid'
         )
-        const totalInvoiced = allClientInvoices.reduce((s,i) => s+(i.total_sales_net||0)*1.12, 0)
-        const totalPaid = allClientInvoices.filter(i=>i.status==='Paid').reduce((s,i) => s+(i.actual_amount_credited||(i.total_sales_net||0)*1.10), 0)
+        const totalInvoiced = allClientInvoices.reduce((s,i) => s+(i.total_sales_net||0), 0)
+        const totalPaid = allClientInvoices.filter(i=>i.status==='Paid').reduce((s,i) => s+(i.actual_amount_credited||(i.total_sales_net||0)*0.98), 0)
         const outstanding = totalInvoiced - totalPaid
         const clients = [...new Set(invoices.map(i => i.client).filter(Boolean))].sort()
         const nowAR = new Date()
@@ -2388,16 +2387,16 @@ export default function Billing() {
                   </button>
                 </div>
                 <div className="stats-grid" style={{ marginBottom: 16 }}>
-                  <div className="stat-card"><div className="stat-label">Total Invoiced (VAT Inc.)</div><div className="stat-value sm">₱{fmt(totalInvoiced)}</div><div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{clientInvoices.length} invoices</div></div>
+                  <div className="stat-card"><div className="stat-label">Total Invoiced</div><div className="stat-value sm">₱{fmt(totalInvoiced)}</div><div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{clientInvoices.length} invoices</div></div>
                   <div className="stat-card"><div className="stat-label">Total Paid</div><div className="stat-value sm" style={{ color:'var(--success)' }}>₱{fmt(totalPaid)}</div><div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{clientInvoices.filter(i=>i.status==='Paid').length} invoices</div></div>
                   <div className="stat-card"><div className="stat-label">Outstanding Balance</div><div className="stat-value sm" style={{ color:outstanding>0?'var(--danger)':'var(--success)' }}>₱{fmt(outstanding)}</div><div style={{ fontSize:11, color:'var(--muted)', marginTop:2 }}>{clientInvoices.filter(i=>i.status!=='Paid').length} unpaid</div></div>
                 </div>
                 <div className="table-wrap">
                   <table className="table">
-                    <thead><tr><th>Invoice No.</th><th>Date</th><th>Type</th><th className="text-right">VAT Inc.</th><th className="text-right">Amt Received</th><th>Date Credited</th><th>Status</th>{balanceStatusFilter==='unpaid' && <th className="text-right">Aging</th>}</tr></thead>
+                    <thead><tr><th>Invoice No.</th><th>Date</th><th>Type</th><th className="text-right">Total Sales</th><th className="text-right">Amt Received</th><th>Date Credited</th><th>Status</th>{balanceStatusFilter==='unpaid' && <th className="text-right">Aging</th>}</tr></thead>
                     <tbody>
                       {clientInvoices.sort((a,b) => new Date(b.invoice_date)-new Date(a.invoice_date)).map(inv => {
-                        const vatInc=(inv.total_sales_net||0)*1.12; const received=inv.actual_amount_credited||(inv.status==='Paid'?(inv.total_sales_net||0)*1.10:0)
+                        const vatInc=(inv.total_sales_net||0); const received=inv.actual_amount_credited||(inv.status==='Paid'?(inv.total_sales_net||0)*0.98:0)
                         const days = getARDays(inv)
                         return (<tr key={inv.id}><td className="mono" style={{ fontWeight:600 }}>{inv.invoice_no}</td><td>{fmtDate(inv.invoice_date)}</td><td style={{ fontSize:11 }}>{inv.truck_type}</td><td className="text-right mono">₱{fmt(vatInc)}</td><td className="text-right mono">{received>0?`₱${fmt(received)}`:'—'}</td><td style={{ fontSize:11 }}>{inv.date_credited?fmtDate(inv.date_credited):'—'}</td><td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background:inv.status==='Paid'?'rgba(22,163,74,0.1)':'rgba(234,179,8,0.1)', color:inv.status==='Paid'?'var(--success)':'var(--warning)' }}>{inv.status}</span></td>{balanceStatusFilter==='unpaid' && <td className="text-right" style={{ fontSize:12, fontWeight:600, color: days>=60?'var(--danger)':days>=30?'#CC5500':'var(--muted)' }}>{days}d</td>}</tr>)
                       })}
@@ -2648,10 +2647,10 @@ export default function Billing() {
         <div className="modal-overlay" onClick={() => setMarkPaidModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <h3 style={{ marginBottom: 4 }}>✅ Mark as Paid</h3>
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Net of VAT: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · VAT Inc.: <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*1.12)}</strong></p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Total Sales: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · Expected (after 2% W/Tax): <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*0.98)}</strong></p>
             <div className="form-grid">
               <div className="form-group"><label className="label required">Date Credited</label><DateInput value={markPaidDate} onChange={e => setMarkPaidDate(e.target.value)} max={new Date().toISOString().slice(0,10)} /></div>
-              <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*1.12)} /></div>
+              <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*0.98)} /></div>
             </div>
             <div className="modal-actions" style={{ marginTop: 14 }}>
               <button className="btn-ghost" onClick={() => setMarkPaidModal(null)}>Cancel</button>

@@ -130,7 +130,7 @@ export default function HistoricalData() {
   const handleDownloadTemplate = (templateType = 'detailed') => {
     let headers, example, filename
     if (templateType === 'simple_management') {
-      headers = ['Year','Month (1-12)','Truck Plate (blank=fleet-wide)','Sales Net of VAT','Total Expenses','Notes']
+      headers = ['Year','Month (1-12)','Truck Plate (blank=fleet-wide)','Total Sales','Total Expenses','Notes']
       example = [2024, 1, 'ABC 1234', 230000, 85000, 'Example row']
       filename = 'HistoricalData-Simple-Management.xlsx'
     } else if (templateType === 'simple_bookkeeper') {
@@ -177,7 +177,7 @@ export default function HistoricalData() {
         const ALL_CATS = [...ADMIN_EXPENSE_CATS, ...OPS_EXPENSE_CATS, ...OTHER_CATS]
         // Detect template type from headers
         const isBookkeeper = headers.includes('Total Credited to Bank')
-        const isSimpleManagement = headers.includes('Sales Net of VAT') && !isBookkeeper
+        const isSimpleManagement = headers.includes('Total Sales') && !isBookkeeper
         const errors = []
         const parsed = dataRows.map((row, i) => {
           const get = (col) => { const idx = headers.indexOf(col); return idx >= 0 ? String(row[idx]||'').trim() : '' }
@@ -195,7 +195,7 @@ export default function HistoricalData() {
               expenses: { 'Total Expenses (Summary)': totalExp }, notes, is_historical: true }
           } else if (isSimpleManagement) {
             const plate = get('Truck Plate (blank=fleet-wide)') || get('Truck Plate') || ''
-            const salesNet = parseFloat(get('Sales Net of VAT'))||0
+            const salesNet = parseFloat(get('Total Sales'))||0
             const totalExp = parseFloat(get('Total Expenses'))||0
             return { period_year: year, period_month: month, plate, entry_type: 'simple_management',
               sales_dump: salesNet, sales_pm: 0,
@@ -554,7 +554,7 @@ export default function HistoricalData() {
                           ))}
                         </div>
                         <div style={{ marginTop:8, fontSize:12, fontWeight:600 }}>
-                          Net of VAT: ₱{fmt(tSales)} · WHT 2%: ₱{fmt(tSales*0.02)} · Net Receivable: ₱{fmt(tSales*0.98)}
+                          Total Sales: ₱{fmt(tSales)} · WHT 2%: ₱{fmt(tSales*0.02)} · Net Receivable: ₱{fmt(tSales*0.98)}
                         </div>
                       </div>
                     )}

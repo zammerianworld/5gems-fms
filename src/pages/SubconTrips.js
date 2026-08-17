@@ -149,10 +149,10 @@ export default function SubconTrips() {
   // above). Regular subcon's cost/profit margin intentionally stays on the
   // net basis, since VAT/WHT aren't real profit, they're a pass-through.
   const billingAmount = (t) => subconTab === 'special' ? t._vatIncAmount : t._amount
-  // Backed into from VAT-inclusive minus the actual credited amount (real or
+  // Backed into from net minus the actual credited amount (real or
   // estimated), rather than a flat 2% of net — stays accurate even when a
   // real actual_amount_credited doesn't land exactly on the standard formula.
-  const whtAmount = (t) => (t._amount * 1.12) - t._vatIncAmount
+  const whtAmount = (t) => t._amount - t._vatIncAmount
   // Each invoice's total net across ALL its linked trips (any truck), needed to
   // proportion a real actual_amount_credited down to a single trip's share.
   const invoiceNetTotals = {}
@@ -161,14 +161,14 @@ export default function SubconTrips() {
   // Always base "credited" on what Paid Invoices actually shows for that
   // invoice: the real actual_amount_credited (prorated by this trip's share
   // of the invoice's total net) when present, otherwise the SAME estimate
-  // Paid Invoices itself falls back to — net × 1.12 (VAT) − net × 0.02 (2%
-  // withholding tax) = net × 1.10. Never just net × 1.12 alone.
+  // Paid Invoices itself falls back to — net minus 2% withholding tax =
+  // net × 0.98 (non-VAT registered, no VAT markup applies).
   const creditedAmount = (t, amt) => {
     const inv = invoiceMap[t.invoice_id]
     const invNet = invoiceNetTotals[t.invoice_id] || 0
     const realCredited = inv && parseFloat(inv.actual_amount_credited)
     if (realCredited && invNet > 0) return (amt / invNet) * parseFloat(inv.actual_amount_credited)
-    return amt * 1.10
+    return amt * 0.98
   }
   // FIX 1: renamed to enrichedTrips to avoid conflict with Running Balance's allTrips
   const enrichedTrips = [
@@ -282,7 +282,7 @@ export default function SubconTrips() {
     })
   }
   const regCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'DS Billing', 'Sub-con Cost', 'Profit', 'Client Paid', 'Sub-con Paid', 'CV/Check No.']
-  const spcCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'VAT Ex.', 'VAT In.', 'WHT (2%)', 'Net Total', 'Exp. Share', 'Net Credited', 'Client Paid', 'CV/Check No.']
+  const spcCols = ['Date', 'Plate', 'Partner', 'Client', 'Invoice', 'Type', 'Gross Sales', 'WHT (2%)', 'Net Total', 'Exp. Share', 'Net Credited', 'Client Paid', 'CV/Check No.']
   const toRegRow = (t) => {
     const inv = invoiceMap[t.invoice_id]
     return [fmtDate(t.trip_date), t.truck_plate, getPartnerName(t.truck_plate), t.client || '—',
@@ -296,7 +296,7 @@ export default function SubconTrips() {
     const inv = invoiceMap[t.invoice_id]
     return [fmtDate(t.trip_date), t.truck_plate, getPartnerName(t.truck_plate), t.client || '—',
       inv?.invoice_no || '—', t._type === 'dump' ? 'Dump' : 'PM',
-      pf(t._amount), pf(t._amount * 1.12), pf(whtAmount(t)), pf(t._vatIncAmount),
+      pf(t._amount), pf(whtAmount(t)), pf(t._vatIncAmount),
       pf(t.subcon_expense_share || 0), pf(t._vatIncAmount - (t.subcon_expense_share || 0)),
       t.client_paid ? (t.client_paid_date ? fmtDate(t.client_paid_date) : 'Yes') : '—',
       t.subcon_voucher_no || '—']
@@ -435,24 +435,23 @@ export default function SubconTrips() {
   }
 
   const buildSummarySpc = (trips) => {
-    const headers = ['Invoice No.','Client','Plate','Trips','VAT Ex.','VAT In.','WHT (2%)','Net Total','Exp. Share','Net Credited','Client Paid Date','Voucher No.']
+    const headers = ['Invoice No.','Client','Plate','Trips','Gross Sales','WHT (2%)','Net Total','Exp. Share','Net Credited','Client Paid Date','Voucher No.']
     const groups = {}
     trips.forEach(t => {
       const inv = invoiceMap[t.invoice_id]
       const key = inv?.invoice_no || 'No Invoice'
-      if (!groups[key]) groups[key] = { invoice_no: key, client: t.client, plate: t.truck_plate, trips: 0, vatEx: 0, vatIn: 0, wht: 0, billed: 0, share: 0, client_paid_date: t.client_paid_date, voucher: t.subcon_voucher_no }
+      if (!groups[key]) groups[key] = { invoice_no: key, client: t.client, plate: t.truck_plate, trips: 0, vatEx: 0, wht: 0, billed: 0, share: 0, client_paid_date: t.client_paid_date, voucher: t.subcon_voucher_no }
       groups[key].trips++
       groups[key].vatEx += t._amount || 0
-      groups[key].vatIn += (t._amount || 0) * 1.12
       groups[key].wht += whtAmount(t)
       groups[key].billed += t._vatIncAmount || 0
       groups[key].share += t.subcon_expense_share || 0
       if (t.client_paid_date && (!groups[key].client_paid_date || t.client_paid_date > groups[key].client_paid_date)) groups[key].client_paid_date = t.client_paid_date
       if (t.subcon_voucher_no) groups[key].voucher = t.subcon_voucher_no
     })
-    const rows = Object.values(groups).map(g => [g.invoice_no, g.client||'—', g.plate, g.trips, r2(g.vatEx), r2(g.vatIn), r2(g.wht), r2(g.billed), r2(g.share), r2(g.billed-g.share), g.client_paid_date?fmtDate(g.client_paid_date):'—', g.voucher||'—'])
-    const total = Object.values(groups).reduce((s,g)=>({ trips: s.trips+g.trips, vatEx: s.vatEx+g.vatEx, vatIn: s.vatIn+g.vatIn, wht: s.wht+g.wht, billed: s.billed+g.billed, share: s.share+g.share }),{trips:0,vatEx:0,vatIn:0,wht:0,billed:0,share:0})
-    rows.push(['TOTAL', '', '', total.trips, r2(total.vatEx), r2(total.vatIn), r2(total.wht), r2(total.billed), r2(total.share), r2(total.billed-total.share), '', ''])
+    const rows = Object.values(groups).map(g => [g.invoice_no, g.client||'—', g.plate, g.trips, r2(g.vatEx), r2(g.wht), r2(g.billed), r2(g.share), r2(g.billed-g.share), g.client_paid_date?fmtDate(g.client_paid_date):'—', g.voucher||'—'])
+    const total = Object.values(groups).reduce((s,g)=>({ trips: s.trips+g.trips, vatEx: s.vatEx+g.vatEx, wht: s.wht+g.wht, billed: s.billed+g.billed, share: s.share+g.share }),{trips:0,vatEx:0,wht:0,billed:0,share:0})
+    rows.push(['TOTAL', '', '', total.trips, r2(total.vatEx), r2(total.wht), r2(total.billed), r2(total.share), r2(total.billed-total.share), '', ''])
     return { headers, rows }
   }
 

@@ -275,7 +275,7 @@ export default function Reports() {
         startY: 35,
         head: [['Route / Trip Code', 'No. of Trips', 'Sales (PHP)', '% of Sales']],
         body: salesRows.length ? salesRows : [['No trips in this period','','','']],
-        foot: [['Total Sales Net of VAT', String(r.tripCount), f2(r.totalSales), '100.00%'], ['  Withholding Tax (2%)', '', `(${f2(r.wht2)})`, '2.00%'], ['Net Receivable', '', f2(r.totalSales - r.wht2), pct(r.totalSales - r.wht2, r.totalSales)]],
+        foot: [['Total Total Sales', String(r.tripCount), f2(r.totalSales), '100.00%'], ['  Withholding Tax (2%)', '', `(${f2(r.wht2)})`, '2.00%'], ['Net Receivable', '', f2(r.totalSales - r.wht2), pct(r.totalSales - r.wht2, r.totalSales)]],
         headStyles: { fillColor: [255,30,0], fontSize: 8, fontStyle: 'bold' },
         footStyles: { fillColor: [245,245,245], fontSize: 8, fontStyle: 'bold', textColor: [0,0,0] },
         tableLineColor: [100,100,100], tableLineWidth: 0.15,
@@ -380,7 +380,7 @@ export default function Reports() {
         [companyName], [`${mode} — ${periodLabel}`], [`${truck.truck_code||truck.plate} | ${truck.plate}${driver?' | '+driver.driver_name:''}`], [],
         ['SALES'], ['Route / Trip Code', 'No. of Trips', 'Sales (PHP)', '% of Sales'],
         ...Object.entries(r.byRoute).map(([route,d]) => [route, d.trips, d.sales, pct(d.sales,r.totalSales)]), [],
-        ['Total Sales Net of VAT', r.tripCount, r.totalSales, '100.00%'],
+        ['Total Total Sales', r.tripCount, r.totalSales, '100.00%'],
         ['  Withholding Tax (2%)', '', -r.wht2, '2.00%'],
         ['Net Receivable', '', r.totalSales - r.wht2, pct(r.totalSales - r.wht2, r.totalSales)], [],
         ['EXPENSES'], ['Category', 'Basis / Note', 'Amount (PHP)', '% of Sales'],
@@ -436,7 +436,7 @@ export default function Reports() {
       const r2 = getTruckReport(truck)
       htmlR += `<table><tr><td colspan="4" style="background:#FF1E00;color:#fff;font-weight:bold;font-size:12pt;text-align:center;padding:6px">${companyNameR}</td></tr><tr><td colspan="4" style="background:#FFF3E0;color:#374151;text-align:center;font-size:9pt;padding:3px">${mode} — ${periodLabel}</td></tr><tr><td colspan="4" style="font-weight:bold;font-size:10pt;padding:4px">${truck.truck_code||truck.plate} | ${truck.plate}${r2.driver?' | '+r2.driver.driver_name:''}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">SALES</td></tr><tr><th>Route / Trip Code</th><th>No. of Trips</th><th>Sales (₱)</th><th>% of Sales</th></tr>`
       Object.entries(r2.byRoute).forEach(([route,d],i) => { const bg=i%2===0?'#FFFFFF':'#F5F5F5'; htmlR += `<tr style="background:${bg}"><td>${route}</td><td style="text-align:center">${d.trips}</td><td style="text-align:right">${f2r(d.sales)}</td><td style="text-align:center">${pct(d.sales,r2.totalSales)}</td></tr>` })
-      htmlR += `<tr style="background:#FEF9C3;font-weight:bold"><td>Total Sales Net of VAT</td><td style="text-align:center">${r2.tripCount}</td><td style="text-align:right">${f2r(r2.totalSales)}</td><td style="text-align:center">100.00%</td></tr><tr><td>  Withholding Tax (2%)</td><td></td><td style="text-align:right;color:#DC2626">${f2r(-r2.wht2)}</td><td style="text-align:center">2.00%</td></tr><tr><td>Net Receivable</td><td></td><td style="text-align:right">${f2r(r2.totalSales-r2.wht2)}</td><td style="text-align:center">${pct(r2.totalSales-r2.wht2,r2.totalSales)}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">EXPENSES</td></tr><tr><th>Category</th><th>Basis / Note</th><th>Amount (₱)</th><th>% of Sales</th></tr>`
+      htmlR += `<tr style="background:#FEF9C3;font-weight:bold"><td>Total Total Sales</td><td style="text-align:center">${r2.tripCount}</td><td style="text-align:right">${f2r(r2.totalSales)}</td><td style="text-align:center">100.00%</td></tr><tr><td>  Withholding Tax (2%)</td><td></td><td style="text-align:right;color:#DC2626">${f2r(-r2.wht2)}</td><td style="text-align:center">2.00%</td></tr><tr><td>Net Receivable</td><td></td><td style="text-align:right">${f2r(r2.totalSales-r2.wht2)}</td><td style="text-align:center">${pct(r2.totalSales-r2.wht2,r2.totalSales)}</td></tr><tr><td colspan="4"></td></tr><tr><td colspan="4" style="background:#1F2937;color:#fff;font-weight:bold;padding:4px">EXPENSES</td></tr><tr><th>Category</th><th>Basis / Note</th><th>Amount (₱)</th><th>% of Sales</th></tr>`
       r2.expenseLines.forEach((e,i) => { const bg=i%2===0?'#FFFFFF':'#F5F5F5'; htmlR += `<tr style="background:${bg}"><td>${e.cat}</td><td>${e.basis||''}</td><td style="text-align:right;color:#DC2626">${f2r(e.amount)}</td><td style="text-align:center">${pct(e.amount,r2.totalSales)}</td></tr>` })
       const netBg = r2.netIncome>=0?'#DCFCE7':'#FEE2E2'; const netColor = r2.netIncome>=0?'#166534':'#991B1B'
       htmlR += `<tr style="background:#F3F4F6;font-weight:bold"><td>Total Expenses</td><td></td><td style="text-align:right;color:#DC2626">${f2r(r2.totalExpenses)}</td><td style="text-align:center">${pct(r2.totalExpenses,r2.totalSales)}</td></tr><tr style="background:${netBg};font-weight:bold"><td>${truck.plate} NET INCOME</td><td></td><td style="text-align:right;color:${netColor}">${f2r(r2.netIncome)}</td><td style="text-align:center;color:${netColor}">${pct(r2.netIncome,r2.totalSales)}</td></tr></table>`
@@ -541,7 +541,7 @@ export default function Reports() {
                 <p className="section-label" style={{ marginTop: 0 }}>Sales</p>
                 <div className="table-wrap" style={{ marginBottom: 14 }}>
                   <table className="table">
-                    <thead><tr><th>Route / Trip Code</th><th className="text-right">No. of Trips</th><th className="text-right">Sales Net of VAT (₱)</th><th className="text-right">% of Sales</th></tr></thead>
+                    <thead><tr><th>Route / Trip Code</th><th className="text-right">No. of Trips</th><th className="text-right">Total Sales (₱)</th><th className="text-right">% of Sales</th></tr></thead>
                     <tbody>
                       {Object.keys(r.byRoute).length === 0
                         ? <tr><td colSpan={4} style={{ textAlign:'center', color:'var(--muted)', padding:16 }}>No trips in this period.</td></tr>
@@ -550,7 +550,7 @@ export default function Reports() {
                         ))}
                     </tbody>
                     <tfoot>
-                      <tr style={{ background:'var(--bg)' }}><td style={{ fontWeight:500 }}>Total Sales Net of VAT</td><td className="text-right mono" style={{ fontWeight:500 }}>{r.tripCount}</td><td className="text-right mono" style={{ fontWeight:500 }}>₱{fmt(r.totalSales)}</td><td className="text-right mono" style={{ fontWeight:500 }}>100.00%</td></tr>
+                      <tr style={{ background:'var(--bg)' }}><td style={{ fontWeight:500 }}>Total Total Sales</td><td className="text-right mono" style={{ fontWeight:500 }}>{r.tripCount}</td><td className="text-right mono" style={{ fontWeight:500 }}>₱{fmt(r.totalSales)}</td><td className="text-right mono" style={{ fontWeight:500 }}>100.00%</td></tr>
                       <tr><td style={{ paddingLeft:24, color:'var(--muted)' }}>Withholding Tax (2%)</td><td></td><td className="text-right mono" style={{ color:'var(--danger)' }}>({fmt(r.wht2)})</td><td className="text-right mono muted">2.00%</td></tr>
                       <tr style={{ background:'var(--accent-light)' }}><td style={{ fontWeight:500, color:'var(--accent)' }}>Net Receivable</td><td></td><td className="text-right mono" style={{ fontWeight:500, color:'var(--accent)' }}>₱{fmt(r.totalSales - r.wht2)}</td><td className="text-right mono" style={{ color:'var(--accent)' }}>{pct(r.totalSales - r.wht2, r.totalSales)}</td></tr>
                     </tfoot>

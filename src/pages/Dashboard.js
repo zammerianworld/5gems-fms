@@ -301,7 +301,7 @@ export default function Dashboard() {
               {overdueCount > 0 ? `⚠️ ${overdueCount} overdue` : '📋 Unpaid invoices'}
             </div>
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              {unpaidInvoices.length} invoice{unpaidInvoices.length > 1 ? 's' : ''} · ₱{fmt(unpaidInvoices.reduce((s, i) => s + (i.total_sales_net || 0) * 1.12, 0))}
+              {unpaidInvoices.length} invoice{unpaidInvoices.length > 1 ? 's' : ''} · ₱{fmt(unpaidInvoices.reduce((s, i) => s + (i.total_sales_net || 0), 0))}
             </div>
           </div>
           <button className="btn-ghost btn-sm" onClick={() => navigate('/billing', { state: { tab: 'Aging Report' } })}>View Aging →</button>
@@ -331,7 +331,7 @@ export default function Dashboard() {
             <div style={{ fontSize:13, fontWeight:700, color:'#DC2626' }}>🚨 {overdueInvoices.filter(i=>i.daysOverdue>=60).length} invoice(s) 60+ days overdue — urgent collection needed</div>
             {overdueInvoices.filter(i=>i.daysOverdue>=60).slice(0,3).map(inv => (
               <div key={inv.id} style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>
-                <strong>INV #{inv.invoice_no}</strong> · {inv.client} · ₱{fmt((inv.total_sales_net||0)*1.12)} · <span style={{ color:'#DC2626', fontWeight:600 }}>{inv.daysOverdue}d overdue</span>
+                <strong>INV #{inv.invoice_no}</strong> · {inv.client} · ₱{fmt((inv.total_sales_net||0))} · <span style={{ color:'#DC2626', fontWeight:600 }}>{inv.daysOverdue}d overdue</span>
               </div>
             ))}
           </div>
@@ -499,7 +499,7 @@ export default function Dashboard() {
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{inv.client}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 500 }}>₱{fmt((inv.total_sales_net || 0) * 1.12)}</div>
+                    <div style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 500 }}>₱{fmt((inv.total_sales_net || 0))}</div>
                     <div style={{ fontSize: 11, color: days >= 60 ? 'var(--danger)' : days >= 30 ? '#CC5500' : 'var(--muted)' }}>{days}d</div>
                   </div>
                 </div>

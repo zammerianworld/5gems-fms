@@ -135,7 +135,7 @@ export default function Cashflow() {
     i.status === 'Paid' && 
     i.date_credited?.slice(0, 7) === month
   )
-  const invoiceCashIn = monthPaid.reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10), 0)
+  const invoiceCashIn = monthPaid.reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98), 0)
   // Sub-con profit margin for the month (must be before totalCashIn)
   const subconProfit = [
     ...subconDump.filter(t => t.trip_date?.startsWith(month) && (t.subcon_cost || 0) > 0)
@@ -152,7 +152,7 @@ export default function Cashflow() {
 
   // Expected cash in — invoiced but unpaid
   const unpaidInvoices = invoices.filter(i => i.status === 'Invoiced' || i.status === 'On Hold')
-  const expectedCashIn = unpaidInvoices.reduce((s, i) => s + (i.total_sales_net || 0) * 1.10, 0)
+  const expectedCashIn = unpaidInvoices.reduce((s, i) => s + (i.total_sales_net || 0) * 0.98, 0)
 
   const totalCashOut = totalChecks + totalAmort + totalIns + totalLoanPayments + totalCashExpenses
   const netCashflow = totalCashIn - totalCashOut
@@ -166,7 +166,7 @@ export default function Cashflow() {
   })
   const cashPosition = cashMonths.map(mo => {
     const cashIn = invoices.filter(i => i.status === 'Paid' && i.date_credited?.slice(0, 7) === mo)
-      .reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10), 0)
+      .reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98), 0)
     const cashOut = getVoucherChecksForMonth(mo)
     const loanOut = loans.filter(l => {
       if (!l.start_date || l.start_date.slice(0,7) > mo) return false
@@ -207,7 +207,7 @@ export default function Cashflow() {
     autoTable(doc, {
       startY: y,
       head: [['Description', 'Invoice No.', 'Client', 'Amount (PHP)']],
-      body: monthPaid.map(i => [fmtDate(i.invoice_date), i.invoice_no, i.client, fmt(parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10)]),
+      body: monthPaid.map(i => [fmtDate(i.invoice_date), i.invoice_no, i.client, fmt(parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98)]),
       headStyles: { fillColor: [0, 120, 0], fontSize: 8, fontStyle: 'bold' },
       bodyStyles: { fontSize: 8 },
       tableLineColor: [150, 150, 150], tableLineWidth: 0.1,
@@ -289,7 +289,7 @@ export default function Cashflow() {
         <tr><td colspan="2"></td></tr>
         <tr><th>Item</th><th>Amount (₱)</th></tr>
         <tr><td style="color:#166534;font-weight:bold">↑ Cash In — Collected Invoices</td><td style="text-align:right;color:#166534;font-weight:bold">₱${f2(invoiceCashIn)}</td></tr>`
-      if (isDetail) monthPaid.forEach(i => { html += `<tr style="background:#F0FFF4"><td style="padding-left:20px">${i.invoice_no} · ${i.client}</td><td style="text-align:right">₱${f2(parseFloat(i.actual_amount_credited)||(i.total_sales_net||0)*1.10)}</td></tr>` })
+      if (isDetail) monthPaid.forEach(i => { html += `<tr style="background:#F0FFF4"><td style="padding-left:20px">${i.invoice_no} · ${i.client}</td><td style="text-align:right">₱${f2(parseFloat(i.actual_amount_credited)||(i.total_sales_net||0)*0.98)}</td></tr>` })
       if (subconProfit>0) html += `<tr><td style="padding-left:12px">Sub-con Profit</td><td style="text-align:right">₱${f2(subconProfit)}</td></tr>`
       if (totalExtraIncome>0) html += `<tr><td style="padding-left:12px">Extra Income</td><td style="text-align:right">₱${f2(totalExtraIncome)}</td></tr>`
       html += `<tr style="background:#DCFCE7;font-weight:bold"><td>TOTAL CASH IN</td><td style="text-align:right">₱${f2(totalCashIn)}</td></tr>
@@ -329,7 +329,7 @@ export default function Cashflow() {
         y += 6
       }
       row('↑ CASH IN — COLLECTED INVOICES', invoiceCashIn, true, [21,128,61])
-      if (isDetail) monthPaid.forEach(i => { doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80); doc.text(`  ${i.invoice_no} · ${i.client}`, 20, y); doc.text(`PHP ${f2(parseFloat(i.actual_amount_credited)||(i.total_sales_net||0)*1.10)}`, W-14, y, { align:'right'}); y+=5 })
+      if (isDetail) monthPaid.forEach(i => { doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(80); doc.text(`  ${i.invoice_no} · ${i.client}`, 20, y); doc.text(`PHP ${f2(parseFloat(i.actual_amount_credited)||(i.total_sales_net||0)*0.98)}`, W-14, y, { align:'right'}); y+=5 })
       if (subconProfit>0) row('  Sub-con Profit', subconProfit, false, [80,80,80])
       if (totalExtraIncome>0) row('  Extra Income', totalExtraIncome, false, [80,80,80])
       doc.setFillColor(220,252,231); doc.rect(14, y-1, W-28, 7, 'F')
@@ -446,7 +446,7 @@ export default function Cashflow() {
                       <td className="mono">{i.invoice_no}</td>
                       <td>{i.client}</td>
                       <td style={{ fontSize: 12 }}>{fmtDate(i.date_credited)}</td>
-                      <td className="text-right mono" style={{ fontWeight: 500, color: 'var(--success)' }}>₱{fmt(parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10)}</td>
+                      <td className="text-right mono" style={{ fontWeight: 500, color: 'var(--success)' }}>₱{fmt(parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98)}</td>
                     </tr>
                   ))}
                 </tbody>

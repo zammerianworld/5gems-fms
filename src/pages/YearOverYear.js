@@ -110,7 +110,7 @@ export default function YearOverYear() {
     const dumpTripsCount = mode === 'historical' ? null : mode === 'live' ? yearDumpTrips.length : (hasHistorical ? liveOnlyDumpTrips.length : (hasLive ? yearDumpTrips.length : null))
     const pmTripsCount = mode === 'historical' ? null : mode === 'live' ? yearPmTrips.length : (hasHistorical ? liveOnlyPmTrips.length : (hasLive ? yearPmTrips.length : null))
     const paidInv = invoices.filter(i => i.status === 'Paid' && (i.date_credited || '').startsWith(String(year)))
-    const totalCollected = paidInv.reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10), 0)
+    const totalCollected = paidInv.reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98), 0)
 
     const monthly = MONTHS.map((_, mi) => {
       const mo = String(year) + '-' + String(mi + 1).padStart(2, '0')
@@ -170,14 +170,14 @@ export default function YearOverYear() {
     const monthlyRevenue = MONTHS.map((_, mi) => {
       const mo = `${y}-${String(mi+1).padStart(2,'0')}`
       const invoiced_net = invoices.filter(i => i.invoice_date?.startsWith(mo)).reduce((s,i) => s+p2(i.total_sales_net), 0)
-      const collected_net = invoices.filter(i => i.status==='Paid' && (i.date_credited||'').startsWith(mo)).reduce((s,i) => s+(p2(i.actual_amount_credited)||p2(i.total_sales_net)*1.10), 0)
+      const collected_net = invoices.filter(i => i.status==='Paid' && (i.date_credited||'').startsWith(mo)).reduce((s,i) => s+(p2(i.actual_amount_credited)||p2(i.total_sales_net)*0.98), 0)
       const extras = extraIncomeData.filter(e => e.income_date?.startsWith(mo)).reduce((s,e) => s+p2(e.amount), 0)
       return {
         month: MONTHS[mi],
         invoiced_net: invoiced_net + extras,
-        invoiced_vat: (invoiced_net + extras) * 1.12,
+        invoiced_vat: invoiced_net + extras,
         collected_net: collected_net + extras,
-        collected_vat: (collected_net + extras) * 1.12,
+        collected_vat: collected_net + extras,
       }
     })
     const totInvoicedNet = monthlyRevenue.reduce((s,r) => s+r.invoiced_net, 0)
@@ -242,10 +242,10 @@ export default function YearOverYear() {
     // Revenue table
     autoTable(doc, {
       startY: 26, margin:{ left:14, right:14 },
-      head: [['Month','Invoiced (Net)','Invoiced (VAT Inc.)','Collected (Net)','Collected (VAT Inc.)']],
+      head: [['Month','Invoiced (Net)','Invoiced (Confirmed)','Collected (Net)','Collected (Confirmed)']],
       body: [
         ...d.monthlyRevenue.map(r => [r.month, `PHP ${d.f2(r.invoiced_net)}`, `PHP ${d.f2(r.invoiced_vat)}`, `PHP ${d.f2(r.collected_net)}`, `PHP ${d.f2(r.collected_vat)}`]),
-        [{ content:'TOTAL', styles:{fontStyle:'bold'} }, `PHP ${d.f2(d.totInvoicedNet)}`, `PHP ${d.f2(d.totInvoicedNet*1.12)}`, `PHP ${d.f2(d.totCollectedNet)}`, `PHP ${d.f2(d.totCollectedNet*1.12)}`],
+        [{ content:'TOTAL', styles:{fontStyle:'bold'} }, `PHP ${d.f2(d.totInvoicedNet)}`, `PHP ${d.f2(d.totInvoicedNet)}`, `PHP ${d.f2(d.totCollectedNet)}`, `PHP ${d.f2(d.totCollectedNet)}`],
       ],
       styles:{ fontSize:8, cellPadding:2 },
       headStyles:{ fillColor:[31,41,55], textColor:255, fontStyle:'bold', fontSize:8 },
@@ -321,7 +321,7 @@ export default function YearOverYear() {
     ws1.mergeCells('A2:E2'); ws1.getCell('A2').value = `YEAR-END SUMMARY — ${d.y} — Revenue`
     ws1.getCell('A2').font = {bold:true, size:11}; ws1.getCell('A2').alignment = {horizontal:'center'}
     const rh = ws1.getRow(4)
-    ;['Month','Invoiced (Net)','Invoiced (VAT Inc.)','Collected (Net)','Collected (VAT Inc.)'].forEach((h,i) => {
+    ;['Month','Invoiced (Net)','Invoiced (Confirmed)','Collected (Net)','Collected (Confirmed)'].forEach((h,i) => {
       const cell = rh.getCell(i+1); cell.value=h; cell.font=hdrFont; cell.fill=hdrFill; cell.border=allB; cell.alignment={horizontal:'center'}
     })
     d.monthlyRevenue.forEach((r,i) => {
@@ -334,7 +334,7 @@ export default function YearOverYear() {
       })
     })
     const tr = ws1.getRow(17)
-    ;['TOTAL', d.totInvoicedNet, d.totInvoicedNet*1.12, d.totCollectedNet, d.totCollectedNet*1.12].forEach((v,ci) => {
+    ;['TOTAL', d.totInvoicedNet, d.totInvoicedNet, d.totCollectedNet, d.totCollectedNet].forEach((v,ci) => {
       const cell = tr.getCell(ci+1); cell.value=v; cell.font={bold:true,size:10}; cell.border=allB
       cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFEF9C3'}}
       if (ci>0) cell.numFmt='#,##0.00'
@@ -577,9 +577,9 @@ export default function YearOverYear() {
                         <tr>
                           <th>Month</th>
                           <th className="text-right">Invoiced (Net)</th>
-                          <th className="text-right">Invoiced (VAT Inc.)</th>
+                          <th className="text-right">Invoiced (Confirmed)</th>
                           <th className="text-right">Collected (Net)</th>
-                          <th className="text-right">Collected (VAT Inc.)</th>
+                          <th className="text-right">Collected (Confirmed)</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -597,9 +597,9 @@ export default function YearOverYear() {
                         <tr style={{ background:'var(--accent-light)' }}>
                           <td style={{ fontWeight:700 }}>TOTAL</td>
                           <td className="text-right mono" style={{ fontWeight:700 }}>₱{d.f2(d.totInvoicedNet)}</td>
-                          <td className="text-right mono" style={{ fontWeight:700 }}>₱{d.f2(d.totInvoicedNet*1.12)}</td>
+                          <td className="text-right mono" style={{ fontWeight:700 }}>₱{d.f2(d.totInvoicedNet)}</td>
                           <td className="text-right mono" style={{ fontWeight:700, color:'var(--success)' }}>₱{d.f2(d.totCollectedNet)}</td>
-                          <td className="text-right mono" style={{ fontWeight:700, color:'var(--success)' }}>₱{d.f2(d.totCollectedNet*1.12)}</td>
+                          <td className="text-right mono" style={{ fontWeight:700, color:'var(--success)' }}>₱{d.f2(d.totCollectedNet)}</td>
                         </tr>
                       </tfoot>
                     </table>

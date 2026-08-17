@@ -418,7 +418,7 @@ export default function MidyearReport() {
         { width: 14 }, { width: 10 }, { width: 14 }, { width: 10 },
       ]
       addHeader(ws, 'Sales vs Expenses Per Truck', cols)
-      const headerRow = ['Truck', 'Driver', 'Sales (Net of VAT)', 'WHT (2%)']
+      const headerRow = ['Truck', 'Driver', 'Total Sales', 'WHT (2%)']
       EXPENSE_GROUPS.forEach(g => headerRow.push(g.label, '% of Sales'))
       headerRow.push('Total Expenses', '% of Sales', 'Net Income', 'Net Margin %')
       writeRow(ws, 5, headerRow, { header: true })
@@ -456,7 +456,7 @@ export default function MidyearReport() {
         const tcols = 3 + EXPENSE_GROUPS.length + 2
         tws.columns = [{ width: 12 }, { width: 15 }, { width: 12 }, ...EXPENSE_GROUPS.map(() => ({ width: 12 })), { width: 14 }, { width: 14 }]
         addHeader(tws, `${d.truck.plate} — Monthly Sales vs Expenses (Driver: ${driverFor(d.truck)})`, tcols)
-        writeRow(tws, 5, ['Month', 'Sales (Net of VAT)', 'WHT (2%)', ...EXPENSE_GROUPS.map(g => g.label), 'Total Expenses', 'Net Income'], { header: true })
+        writeRow(tws, 5, ['Month', 'Total Sales', 'WHT (2%)', ...EXPENSE_GROUPS.map(g => g.label), 'Total Expenses', 'Net Income'], { header: true })
         let tr = 6
         MONTHS.forEach((mLabel, mi) => {
           const m = d.months[mi]
@@ -481,7 +481,7 @@ export default function MidyearReport() {
       const cols = 4 + EXPENSE_GROUPS.length + 2
       ws.columns = [{ width: 14 }, { width: 16 }, { width: 13 }, { width: 14 }, ...EXPENSE_GROUPS.map(() => ({ width: 13 })), { width: 14 }, { width: 14 }]
       addHeader(ws, 'Overall Sales vs Expenses', cols)
-      writeRow(ws, 5, ['Month', 'Sales (Net of VAT)', 'WHT (2%)', 'Net After WHT', ...EXPENSE_GROUPS.map(g => g.label), 'Total Expenses', 'Net Income'], { header: true })
+      writeRow(ws, 5, ['Month', 'Total Sales', 'WHT (2%)', 'Net After WHT', ...EXPENSE_GROUPS.map(g => g.label), 'Total Expenses', 'Net Income'], { header: true })
       let r = 6
       overallByMonth.forEach(m => {
         writeRow(ws, r++, [m.month, m.sales, m.wht, m.netAfterWht, ...EXPENSE_GROUPS.map(g => m.groups[g.key]), m.totalExp, m.net])
@@ -630,7 +630,7 @@ export default function MidyearReport() {
                     <thead>
                       <tr>
                         <th>Truck</th><th>Driver</th>
-                        <th className="text-right">Sales<br/>(Net of VAT)</th>
+                        <th className="text-right">Sales<br/>(Total Sales)</th>
                         <th className="text-right">WHT<br/>(2%)</th>
                         {EXPENSE_GROUPS.map(g => <th key={g.key} className="text-right">{g.label}</th>)}
                         <th className="text-right">Total<br/>Exp.</th>
@@ -709,7 +709,7 @@ export default function MidyearReport() {
                   <thead>
                     <tr>
                       <th>Month</th>
-                      <th className="text-right">Sales (Net of VAT)</th>
+                      <th className="text-right">Total Sales</th>
                       <th className="text-right">WHT (2%)</th>
                       <th className="text-right">Net After WHT</th>
                       {EXPENSE_GROUPS.map(g => <th key={g.key} className="text-right">{g.label}</th>)}

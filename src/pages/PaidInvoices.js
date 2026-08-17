@@ -82,7 +82,7 @@ export default function PaidInvoices() {
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   }
 
-  const totalCollected = filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 1.10), 0)
+  const totalCollected = filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98), 0)
   const totalNet = filtered.reduce((s, i) => s + (i.total_sales_net || 0), 0)
 
   // ── SALES INVOICE SUMMARY (Monthly / Quarterly / Mid-Year / Annual) ────────
@@ -139,8 +139,8 @@ export default function PaidInvoices() {
     const pmNetSum = pmTrips.filter(t => invoiceIds.has(t.invoice_id) && inScope(t.truck_plate))
       .reduce((s, t) => s + pmNet(t), 0)
     const net = dumpNet + pmNetSum
-    const vat = net * 0.12
-    const vatInc = net * 1.12
+    const vat = 0
+    const vatInc = net
     const wht = net * 0.02
     const total = vatInc - wht
     return { label: p.label, count: rows.length, net, vat, vatInc, wht, total }
@@ -200,7 +200,7 @@ export default function PaidInvoices() {
 
     autoTable(doc, {
       startY: 27, margin: { left: 14, right: 14 },
-      head: [['', 'Total Sales Net of VAT', 'VAT (12%)', 'Total Sales VAT Inclusive', 'Withholding Tax (2%)', 'Total Amount']],
+      head: [['', 'Total Sales', 'VAT (Non-VAT Reg.)', 'Total Sales (Confirmed)', 'Withholding Tax (2%)', 'Total Amount']],
       body: [
         ...summaryRows.map(r => [r.label, `PHP ${fmt(r.net)}`, `PHP ${fmt(r.vat)}`, `PHP ${fmt(r.vatInc)}`, `PHP ${fmt(r.wht)}`, `PHP ${fmt(r.total)}`]),
         [{ content: 'TOTAL', styles: { fontStyle: 'bold' } }, `PHP ${fmt(summaryTotal.net)}`, `PHP ${fmt(summaryTotal.vat)}`, `PHP ${fmt(summaryTotal.vatInc)}`, `PHP ${fmt(summaryTotal.wht)}`, `PHP ${fmt(summaryTotal.total)}`],
@@ -232,7 +232,7 @@ export default function PaidInvoices() {
     const hdrFont = { bold: true, italic: true, color: { argb: 'FFFFFFFF' }, size: 9 }
 
     const hRow = ws.getRow(4)
-    ;['', 'Total Sales Net of VAT', 'VAT (12%)', 'Total Sales VAT Inclusive', 'Withholding Tax (2%)', 'Total Amount'].forEach((h, i) => {
+    ;['', 'Total Sales', 'VAT (Non-VAT Reg.)', 'Total Sales (Confirmed)', 'Withholding Tax (2%)', 'Total Amount'].forEach((h, i) => {
       const cell = hRow.getCell(i + 1); cell.value = h; cell.font = hdrFont; cell.fill = hdrFill; cell.border = allB; cell.alignment = { horizontal: 'center', wrapText: true }
     })
 
@@ -298,7 +298,7 @@ export default function PaidInvoices() {
     const hdrFill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } }
     const hdrFont = { bold: true, italic: true, color: { argb: 'FFFFFFFF' }, size: 9 }
 
-    const headers = ['Invoice No.', 'Client', 'Truck Type', 'Invoice Date', 'Date Paid', 'Net Sales', 'VAT (12%)', 'WHT (2%)', 'Amount Received']
+    const headers = ['Invoice No.', 'Client', 'Truck Type', 'Invoice Date', 'Date Paid', 'Net Sales', 'VAT (Non-VAT Reg.)', 'WHT (2%)', 'Amount Received']
     const hRow = ws.getRow(4)
     headers.forEach((h, i) => {
       const cell = hRow.getCell(i + 1); cell.value = h; cell.font = hdrFont; cell.fill = hdrFill; cell.border = allB; cell.alignment = { horizontal: 'center', wrapText: true }
@@ -315,7 +315,7 @@ export default function PaidInvoices() {
       // fall back to the 1.10 estimate on the adjusted net instead.
       const received = (parseFloat(inv.actual_amount_credited) && (truckScope === 'all' || inv._fullyInScope))
         ? parseFloat(inv.actual_amount_credited)
-        : (net * 1.10)
+        : (net * 0.98)
       totals.net += net; totals.vat += vat; totals.wht += wht; totals.received += received
       const row = ws.getRow(5 + i)
       const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB'
@@ -364,7 +364,7 @@ export default function PaidInvoices() {
       <h1>${companyName}</h1>
       <h2>SALES INVOICE</h2>
       <table>
-        <thead><tr><th></th><th>Total Sales Net of VAT</th><th>VAT (12%)</th><th>Total Sales VAT Inclusive</th><th>Withholding Tax (2%)</th><th>Total Amount</th></tr></thead>
+        <thead><tr><th></th><th>Total Sales</th><th>VAT (Non-VAT Reg.)</th><th>Total Sales (Confirmed)</th><th>Withholding Tax (2%)</th><th>Total Amount</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
         <tfoot><tr><td>TOTAL</td><td style="text-align:right">PHP ${fmt(summaryTotal.net)}</td><td style="text-align:right">PHP ${fmt(summaryTotal.vat)}</td><td style="text-align:right">PHP ${fmt(summaryTotal.vatInc)}</td><td style="text-align:right">PHP ${fmt(summaryTotal.wht)}</td><td style="text-align:right">PHP ${fmt(summaryTotal.total)}</td></tr></tfoot>
       </table>
@@ -431,9 +431,9 @@ export default function PaidInvoices() {
                   <thead>
                     <tr>
                       <th></th>
-                      <th className="text-right">Total Sales Net of VAT</th>
-                      <th className="text-right">VAT (12%)</th>
-                      <th className="text-right">Total Sales VAT Inclusive</th>
+                      <th className="text-right">Total Sales</th>
+                      <th className="text-right">VAT (Non-VAT Reg.)</th>
+                      <th className="text-right">Total Sales (Confirmed)</th>
                       <th className="text-right">Withholding Tax (2%)</th>
                       <th className="text-right">Total Amount</th>
                     </tr>
@@ -583,7 +583,7 @@ export default function PaidInvoices() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filtered.map(inv => {
               const net = inv.total_sales_net || 0
-              const due = (net * 1.12) - (net * 0.02)
+              const due = net - (net * 0.02)
               const collected = parseFloat(inv.actual_amount_credited) || due
               return (
                 <div key={inv.id} className="card" style={{ padding: '12px 16px' }}>
