@@ -41,6 +41,10 @@ const EMPTY_PM = {
   // Per-container array — 1 for 40ft, 2 for 20ft
   containers: [],
   remarks: '',
+  // Generic Van style (client.trip_style === 'van') — supplier_amount/stripping_fee
+  // still get populated from `rate` at save time, so all existing billing math
+  // elsewhere in the app keeps working unchanged.
+  driver_name: '', van_number: '', destination: '', toll_ticket: '', toll_scale: '', rate: '',
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -123,6 +127,7 @@ export default function Trips() {
   const [summaryTruck, setSummaryTruck] = useState('')
   const [filterRoute, setFilterRoute] = useState('')
   const [savedRoutes, setSavedRoutes] = useState([])
+  const [tripCodes, setTripCodes] = useState([])
   const [filterCommodity, setFilterCommodity] = useState('')
   const [filterTruck, setFilterTruck] = useState('')
   const [filterPayStatus, setFilterPayStatus] = useState('') // '' | 'unbilled' | 'invoiced' | 'paid'
@@ -149,7 +154,7 @@ export default function Trips() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [dt, pt, tr, cl, co, inv, rts] = await Promise.all([
+    const [dt, pt, tr, cl, co, inv, rts, tcs] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       supabase.from('trucks').select('*').order('truck_type').order('plate'),
@@ -157,6 +162,7 @@ export default function Trips() {
       supabase.from('commodities').select('name,for_type').order('name'),
       fetchAllRows(() => supabase.from('invoices').select('id,invoice_no,status,date_credited').is('deleted_at', null)),
       supabase.from('saved_routes').select('label').order('label'),
+      supabase.from('saved_pm_trip_codes').select('label').order('label'),
     ])
     if (dt.data) {
       setDumpTrips(dt.data)
@@ -170,6 +176,7 @@ export default function Trips() {
     if (co.data) setCommodities(co.data)
     // savedRates removed — rates now derived from trip history
     if (rts.data) setSavedRoutes(rts.data.map(r => r.label))
+    if (tcs.data) setTripCodes(tcs.data.map(c => c.label))
     if (inv.data) {
       setInvoiceMap(Object.fromEntries(inv.data.map(i => [i.id, i.invoice_no])))
       setInvoiceInfo(Object.fromEntries(inv.data.map(i => [i.id, i])))
@@ -320,19 +327,33 @@ export default function Trips() {
     if (!f.trip_date || !f.truck_plate || !f.trip_code || !f.client) {
       showToast('Please fill all required fields including client.', 'error'); return
     }
-    const hasAmounts = (f.containers || []).every(c => parseFloat(c.supplier_amount) > 0)
-    if (!hasAmounts) { showToast('All containers must have a supplier amount greater than ₱0.', 'error'); return }
+    const isVanStyle = clients.find(c => c.nickname === f.client)?.trip_style === 'van'
+    if (isVanStyle) {
+      if (!(parseFloat(f.rate) > 0)) { showToast('Rate / Total Amount must be greater than ₱0.', 'error'); return }
+    } else {
+      const hasAmounts = (f.containers || []).every(c => parseFloat(c.supplier_amount) > 0)
+      if (!hasAmounts) { showToast('All containers must have a supplier amount greater than ₱0.', 'error'); return }
+    }
 
     const proceedSavePM = async () => {
       setSaving(true)
-      const payload = {
-        ...f,
-        supplier_amount: (f.containers || []).reduce((s, c) => s + (parseFloat(c.supplier_amount) || 0), 0),
-        stripping_fee: (f.containers || []).reduce((s, c) => s + (parseFloat(c.stripping_fee) || 0), 0),
-        emr_date: f.emr_date || null,
-        date_completion: f.date_completion || null,
-        created_by: profile?.id,
-      }
+      const payload = isVanStyle
+        ? {
+            ...f,
+            supplier_amount: parseFloat(f.rate) || 0,
+            stripping_fee: 0,
+            emr_date: null,
+            date_completion: null,
+            created_by: profile?.id,
+          }
+        : {
+            ...f,
+            supplier_amount: (f.containers || []).reduce((s, c) => s + (parseFloat(c.supplier_amount) || 0), 0),
+            stripping_fee: (f.containers || []).reduce((s, c) => s + (parseFloat(c.stripping_fee) || 0), 0),
+            emr_date: f.emr_date || null,
+            date_completion: f.date_completion || null,
+            created_by: profile?.id,
+          }
       let error
       if (editId) ({ error } = await supabase.from('trips_pm').update(payload).eq('id', editId))
       else ({ error } = await supabase.from('trips_pm').insert(payload))
@@ -811,7 +832,9 @@ export default function Trips() {
       )}
 
       {/* PRIME MOVER FORM */}
-      {showForm && step === 'form' && truckType === 'Prime Mover' && (
+      {showForm && step === 'form' && truckType === 'Prime Mover' && (() => {
+        const isVanStyle = clients.find(c => c.nickname === pmForm.client)?.trip_style === 'van'
+        return (
         <div className="card" style={{ marginBottom: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
             {!editId && <button onClick={() => setStep('type')} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 13, padding: 0 }}>← Back</button>}
@@ -825,7 +848,7 @@ export default function Trips() {
             <SS label="Truck Plate" value={pmForm.truck_plate} onChange={v => setPmForm(f => ({ ...f, truck_plate: v }))} req
               options={pmTrucks.map(t => ({ value: t.plate, label: t.plate + (t.truck_code ? ' (' + t.truck_code + ')' : '') }))}
               placeholder={pmTrucks.length === 0 ? 'Add trucks in Settings first' : 'Select truck plate'} />
-            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={PM_TRIP_CODES} placeholder="Select trip code" />
+            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...PM_TRIP_CODES, ...tripCodes]} placeholder="Select trip code" />
             <div className="form-group">
               <label className="label required">Client
                 {pmForm.trip_code && ['Hustling PSACC','Hauling PSACC','SMC'].includes(pmForm.trip_code) && (
@@ -839,8 +862,8 @@ export default function Trips() {
                 {clients.map(c => <option key={c.nickname} value={c.nickname}>{c.nickname} — {c.full_name}</option>)}
               </select>
             </div>
-            <SS label="Container Size" value={pmForm.container_size} onChange={handlePMContainerSizeChange} req options={CONTAINER_SIZES} />
-            {pmForm.container_size === '20ft' && (
+            {!isVanStyle && <SS label="Container Size" value={pmForm.container_size} onChange={handlePMContainerSizeChange} req options={CONTAINER_SIZES} />}
+            {!isVanStyle && pmForm.container_size === '20ft' && (
               <div className="form-group">
                 <label className="label required">Number of 20ft Vans</label>
                 <div style={{ display: 'flex', gap: 8, marginTop: 2 }}>
@@ -856,6 +879,19 @@ export default function Trips() {
               </div>
             )}
           </div>
+
+          {/* Generic Van entry — client.trip_style === 'van' */}
+          {isVanStyle && (<>
+            <p className="section-label">Van Trip Details</p>
+            <div className="form-grid" style={{ marginBottom: 16 }}>
+              <SF label="Driver" value={pmForm.driver_name} onChange={v => setPmForm(f => ({ ...f, driver_name: v }))} />
+              <SF label="Van Number / Vessel" value={pmForm.van_number} onChange={v => setPmForm(f => ({ ...f, van_number: v }))} />
+              <SF label="Destination" value={pmForm.destination} onChange={v => setPmForm(f => ({ ...f, destination: v }))} />
+              <SF label="TOLL Ticket" value={pmForm.toll_ticket} onChange={v => setPmForm(f => ({ ...f, toll_ticket: v }))} />
+              <SF label="TOLL Scale" value={pmForm.toll_scale} onChange={v => setPmForm(f => ({ ...f, toll_scale: v }))} />
+              <SF label="Rate / Total Amount (₱)" value={pmForm.rate} onChange={v => setPmForm(f => ({ ...f, rate: v }))} req type="number" />
+            </div>
+          </>)}
 
           {/* Shared trip-level fields — Hustling PSACC */}
           {pmForm.trip_code === 'Hustling PSACC' && (<>
@@ -907,7 +943,7 @@ export default function Trips() {
           </>)}
 
           {/* Per-container fields */}
-          {pmForm.trip_code && pmForm.containers.length > 0 && (<>
+          {!isVanStyle && pmForm.trip_code && pmForm.containers.length > 0 && (<>
             <p className="section-label">
               Container Details
               <span style={{ fontWeight: 400, color: 'var(--muted)', marginLeft: 8, fontSize: 12 }}>
@@ -918,12 +954,18 @@ export default function Trips() {
           </>)}
 
           {/* Grand total across all containers */}
-          {pmForm.trip_code && pmForm.containers?.length > 0 && (
+          {!isVanStyle && pmForm.trip_code && pmForm.containers?.length > 0 && (
             <div style={{ background: 'var(--accent)', borderRadius: 8, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>GRAND TOTAL</span>
               <span style={{ fontSize: 17, fontWeight: 500, fontFamily: 'var(--mono)', color: '#fff' }}>
                 ₱{fmt(pmForm.containers.reduce((s, c) => s + (parseFloat(c.supplier_amount) || 0) + (parseFloat(c.stripping_fee) || 0), 0))}
               </span>
+            </div>
+          )}
+          {isVanStyle && parseFloat(pmForm.rate) > 0 && (
+            <div style={{ background: 'var(--accent)', borderRadius: 8, padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: 500, color: '#fff' }}>TOTAL</span>
+              <span style={{ fontSize: 17, fontWeight: 500, fontFamily: 'var(--mono)', color: '#fff' }}>₱{fmt(parseFloat(pmForm.rate) || 0)}</span>
             </div>
           )}
 
@@ -937,7 +979,8 @@ export default function Trips() {
             <button className="btn-primary" onClick={submitPM} disabled={saving}>{saving ? 'Saving…' : editId ? 'Update' : 'Save Trip'}</button>
           </div>
         </div>
-      )}
+        )
+      })()}
 
       {/* Trip Log Tabs */}
       <div style={{ display: 'flex', gap: 2, marginBottom: 16, borderBottom: '0.5px solid var(--border)' }}>
@@ -1081,15 +1124,19 @@ export default function Trips() {
                       No PM trips{filterMonth ? ' for ' + new Date(filterMonth+'-01').toLocaleDateString('en-PH',{month:'long',year:'numeric'}) : ''}.
                       {filterMonth ? <> Try a different month or <button className="btn-ghost btn-sm" style={{padding:'2px 8px'}} onClick={() => setFilterMonth('')}>show all</button>.</> : null}
                     </td></tr>
-                  : filteredPM.map(t => (
+                  : filteredPM.map(t => {
+                  const isVan = clients.find(c => c.nickname === t.client)?.trip_style === 'van'
+                  return (
                   <tr key={t.id} style={{ opacity: t.invoice_id ? 0.65 : 1 }}>
                     <td className="mono" style={{ fontSize: 12 }}>{fmtDate(t.trip_date)}</td>
                     <td style={{ fontWeight: 500, fontFamily: 'var(--mono)' }}>{t.truck_plate}</td>
                     <td><span className="badge badge-prime" style={{ fontSize: 11 }}>{t.trip_code}</span></td>
                     <td style={{ fontWeight: 500 }}>{t.client || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{t.container_size}</td>
+                    <td style={{ fontSize: 12 }}>{isVan ? '🚐 Van' : t.container_size}</td>
                     <td style={{ fontSize: 12, color: 'var(--muted)' }}>
-                      {(t.containers || []).map(c => c.con_van_no || c.van_no).filter(Boolean).join(', ') || t.vessel || t.waybill_no || '—'}
+                      {isVan
+                        ? (t.van_number || '—')
+                        : ((t.containers || []).map(c => c.con_van_no || c.van_no).filter(Boolean).join(', ') || t.vessel || t.waybill_no || '—')}
                     </td>
                     <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt((t.supplier_amount || 0) + (t.stripping_fee || 0))}</td>
                     <td>
@@ -1104,7 +1151,7 @@ export default function Trips() {
                         </div>}
                     </td>
                   </tr>
-                ))}
+                )})}
               </tbody>
               <tfoot><tr>
                 <td colSpan={6} style={{ padding: '10px 14px', fontWeight: 500, borderTop: '1px solid var(--border-md)' }}>Total</td>

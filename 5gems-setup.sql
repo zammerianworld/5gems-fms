@@ -119,6 +119,12 @@ create table if not exists public.saved_routes (
   label text unique not null
 );
 
+-- SAVED PM TRIP CODES (extensible list — built-ins + custom, same pattern as saved_routes)
+create table if not exists public.saved_pm_trip_codes (
+  id uuid default gen_random_uuid() primary key,
+  label text unique not null
+);
+
 -- SAVED RATES
 create table if not exists public.saved_rates (
   id uuid default gen_random_uuid() primary key,
@@ -252,6 +258,7 @@ alter table public.commodities enable row level security;
 alter table public.trucks enable row level security;
 alter table public.clients enable row level security;
 alter table public.saved_routes enable row level security;
+alter table public.saved_pm_trip_codes enable row level security;
 alter table public.saved_rates enable row level security;
 alter table public.trips_dump enable row level security;
 alter table public.trips_pm enable row level security;
@@ -298,6 +305,10 @@ drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles for select using (auth.role() = 'authenticated');
 drop policy if exists "profiles_update" on public.profiles;
 create policy "profiles_update" on public.profiles for update using (auth.uid() = id);
+-- Required for name-based login: this lookup runs BEFORE authentication
+-- (has to find the account's email first), so it queries as the anon role.
+drop policy if exists "allow_public_name_lookup" on public.profiles;
+create policy "allow_public_name_lookup" on public.profiles for select to anon using (true);
 drop policy if exists "settings_select" on public.company_settings;
 create policy "settings_select" on public.company_settings for select using (auth.role() = 'authenticated');
 drop policy if exists "settings_update" on public.company_settings;
@@ -318,6 +329,8 @@ drop policy if exists "clients_write" on public.clients;
 create policy "clients_write" on public.clients for all using (public.is_admin());
 drop policy if exists "routes_all" on public.saved_routes;
 create policy "routes_all" on public.saved_routes for all using (auth.role() = 'authenticated');
+drop policy if exists "trip_codes_all" on public.saved_pm_trip_codes;
+create policy "trip_codes_all" on public.saved_pm_trip_codes for all using (auth.role() = 'authenticated');
 drop policy if exists "rates_all" on public.saved_rates;
 create policy "rates_all" on public.saved_rates for all using (auth.role() = 'authenticated');
 drop policy if exists "dump_all" on public.trips_dump;
@@ -1021,7 +1034,7 @@ do $$
 declare
   t text;
   tables text[] := array[
-    'commodities','trucks','clients','saved_routes','saved_rates',
+    'commodities','trucks','clients','saved_routes','saved_rates','saved_pm_trip_codes',
     'invoices','expenses','amortizations','insurances','drivers',
     'login_logs','bank_templates','check_vouchers','audit_logs','loans',
     'orcr_records','extra_income','cash_vouchers','historical_data',
@@ -1645,6 +1658,7 @@ begin
   elsif p_table = 'profiles' then delete from public.profiles where id = p_id;
   elsif p_table = 'check_vouchers' then delete from public.check_vouchers where id = p_id;
   elsif p_table = 'bank_templates' then delete from public.bank_templates where id = p_id;
+  elsif p_table = 'saved_pm_trip_codes' then delete from public.saved_pm_trip_codes where id = p_id;
   else raise exception 'Invalid table: %', p_table;
   end if;
 
@@ -1864,3 +1878,34 @@ on conflict do nothing;
 insert into public.drivers (driver_name, notes)
   values ('Placeholder Driver', 'PLACEHOLDER — delete once real driver list is provided')
 on conflict do nothing;
+
+-- ============================================================
+-- VAT TOGGLE + GENERIC VAN PM ENTRY (August 2026)
+-- Per-invoice VAT/Non-VAT toggle (5 Gems plans to go VAT-registered,
+-- and some clients already need VAT-in invoices), plus a client-level
+-- "trip_style" so Prime Mover Trip Entry can show a simpler generic
+-- van form instead of the container/port-logistics fields, without
+-- hardcoding any specific client name in application code.
+-- ============================================================
+
+-- VAT toggle, chosen manually per invoice at creation time
+alter table public.invoices add column if not exists is_vat boolean default false;
+
+-- Client-level flag driving which PM Trip Entry field set to show
+alter table public.clients add column if not exists trip_style text default 'container';
+alter table public.clients drop constraint if exists clients_trip_style_check;
+alter table public.clients add constraint clients_trip_style_check check (trip_style in ('container', 'van'));
+
+-- New generic van fields on trips_pm (stay blank for container-style trips)
+alter table public.trips_pm add column if not exists driver_name text default '';
+alter table public.trips_pm add column if not exists van_number text default '';
+alter table public.trips_pm add column if not exists destination text default '';
+alter table public.trips_pm add column if not exists toll_ticket text default '';
+alter table public.trips_pm add column if not exists toll_scale text default '';
+alter table public.trips_pm add column if not exists rate numeric(12,2) default 0;
+
+-- trip_code becomes open/extensible instead of a fixed 3-value list —
+-- built-ins (Hustling PSACC, Hauling PSACC, SMC) still work, and new
+-- client codes can be added via Settings > PM Trip Codes with no
+-- schema change needed (mirrors how Routes already works).
+alter table public.trips_pm drop constraint if exists trips_pm_trip_code_check;

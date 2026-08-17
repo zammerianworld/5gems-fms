@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { supabase, DUMP_TRUCK_ROUTES } from '../lib/supabase'
+import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES } from '../lib/supabase'
 import { EULA_SECTIONS, DMCA_SECTIONS, PRIVACY_SECTIONS, LEGAL_LAST_UPDATED } from '../lib/legalDocs'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
@@ -29,7 +29,7 @@ export default function Settings() {
   const [appBeta, setAppBeta] = useState(true)
   const [appBetaLabel, setAppBetaLabel] = useState('BETA — Testing Phase')
   const [versionSaving, setVersionSaving] = useState(false)
-  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Drivers', 'Clientele', 'Commodities', 'Routes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Drivers', 'Clientele', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
   const [legalDoc, setLegalDoc] = useState('eula')
   const [tab, setTab] = useState('Company Info')
   const [confirmState, setConfirmState] = useState(null)
@@ -56,6 +56,8 @@ export default function Settings() {
   const [commodities, setCommodities] = useState([])
   const [routes, setRoutes] = useState([])
   const [newRoute, setNewRoute] = useState('')
+  const [tripCodes, setTripCodes] = useState([])
+  const [newTripCode, setNewTripCode] = useState('')
   const [saving, setSaving] = useState(false)
   const [signatories, setSignatories] = useState([])
   const [newSig, setNewSig] = useState({ full_name: '', title: '', is_default_prepared: false, is_default_approved: false })
@@ -65,7 +67,7 @@ export default function Settings() {
   const [newDriver, setNewDriver] = useState({ driver_name: '', truck_id: '', notes: '' })
   const [editingDriver, setEditingDriver] = useState(null)
   const [newTruck, setNewTruck] = useState(EMPTY_NEW_TRUCK)
-  const [newClient, setNewClient] = useState({ nickname: '', full_name: '', address: '', tin: '', contact: '' })
+  const [newClient, setNewClient] = useState({ nickname: '', full_name: '', address: '', tin: '', contact: '', trip_style: 'container' })
   const [newCommodity, setNewCommodity] = useState('')
   const [newCommodityType, setNewCommodityType] = useState('dump')
   const [editingTruck, setEditingTruck] = useState(null)
@@ -92,6 +94,8 @@ export default function Settings() {
     if (co.data) setCommodities(co.data)
     const { data: rts } = await supabase.from('saved_routes').select('*').order('label')
     if (rts) setRoutes(rts)
+    const { data: tcs } = await supabase.from('saved_pm_trip_codes').select('*').order('label')
+    if (tcs) setTripCodes(tcs)
     if (drv.data) setDrivers(drv.data)
     if (sig.data) setSignatories(sig.data)
     setLoading(false)
@@ -153,7 +157,7 @@ export default function Settings() {
     if (!newClient.nickname || !newClient.full_name) { showToast('Nickname and full name required.', 'error'); return }
     const { error } = await supabase.from('clients').insert(newClient)
     if (error) showToast('Error: ' + error.message, 'error')
-    else { showToast('Client added.'); setNewClient({ nickname: '', full_name: '', address: '', tin: '', contact: '' }); fetchAll() }
+    else { showToast('Client added.'); setNewClient({ nickname: '', full_name: '', address: '', tin: '', contact: '', trip_style: 'container' }); fetchAll() }
   }
   const saveClient = async () => {
     const { error } = await supabase.from('clients').update(editingClient).eq('id', editingClient.id)
@@ -179,6 +183,22 @@ export default function Settings() {
     const { error } = await supabase.from('saved_routes').delete().eq('id', id)
     if (error) { showToast('Error: ' + error.message, 'error'); return }
     setRoutes(prev => prev.filter(r => r.id !== id))
+    showToast(`"${name}" removed.`, 'info')
+  }
+  const addTripCode = async () => {
+    const name = newTripCode.trim()
+    if (!name) return
+    if (tripCodes.some(c => c.label?.toLowerCase() === name.toLowerCase()) || PM_TRIP_CODES.some(c => c.toLowerCase() === name.toLowerCase())) { showToast('Trip code already exists.', 'error'); return }
+    const { data, error } = await supabase.from('saved_pm_trip_codes').insert({ label: name }).select().single()
+    if (error) { showToast('Error: ' + error.message, 'error'); return }
+    setTripCodes(prev => [...prev, data].sort((a,b) => a.label.localeCompare(b.label)))
+    setNewTripCode('')
+    showToast('Trip code added.')
+  }
+  const deleteTripCode = async (id, name) => {
+    const { error } = await supabase.from('saved_pm_trip_codes').delete().eq('id', id)
+    if (error) { showToast('Error: ' + error.message, 'error'); return }
+    setTripCodes(prev => prev.filter(c => c.id !== id))
     showToast(`"${name}" removed.`, 'info')
   }
 
@@ -548,6 +568,20 @@ export default function Settings() {
                 <F label="Contact" value={newClient.contact} onChange={v => setNewClient(c=>({...c,contact:v}))} />
                 <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="label">Address</label>
                   <input value={newClient.address||''} onChange={e=>setNewClient(c=>({...c,address:e.target.value}))} /></div>
+                <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                  <label className="label">Prime Mover Trip Entry Style</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[['container','Container / Port (default)'],['van','Generic Van']].map(([val,label]) => (
+                      <button key={val} type="button" onClick={() => setNewClient(c => ({...c, trip_style: val}))} style={{
+                        padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: (newClient.trip_style||'container') === val ? 'var(--accent)' : 'var(--bg)',
+                        color: (newClient.trip_style||'container') === val ? '#fff' : 'var(--muted)',
+                        border: `1.5px solid ${(newClient.trip_style||'container') === val ? 'var(--accent)' : 'var(--border)'}`,
+                      }}>{label}</button>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 11, color: 'var(--hint)', marginTop: 4 }}>Only affects Prime Mover trips for this client — determines which fields show in Trip Entry.</p>
+                </div>
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button className="btn-primary" onClick={addClient}>Add Client</button>
@@ -563,6 +597,19 @@ export default function Settings() {
                   ))}
                   <div className="form-group" style={{ gridColumn: 'span 2' }}><label className="label">Address</label>
                     <input value={editingClient.address||''} onChange={e=>setEditingClient(c=>({...c,address:e.target.value}))} /></div>
+                  <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                    <label className="label">Prime Mover Trip Entry Style</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {[['container','Container / Port (default)'],['van','Generic Van']].map(([val,label]) => (
+                        <button key={val} type="button" onClick={() => setEditingClient(c => ({...c, trip_style: val}))} style={{
+                          padding: '7px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                          background: (editingClient.trip_style||'container') === val ? 'var(--accent)' : 'var(--bg)',
+                          color: (editingClient.trip_style||'container') === val ? '#fff' : 'var(--muted)',
+                          border: `1.5px solid ${(editingClient.trip_style||'container') === val ? 'var(--accent)' : 'var(--border)'}`,
+                        }}>{label}</button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                   <button className="btn-ghost" onClick={() => setEditingClient(null)}>Cancel</button>
@@ -572,10 +619,10 @@ export default function Settings() {
             )}
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Nickname</th><th>Full Name</th><th>TIN</th><th>Contact</th><th>Address</th><th></th></tr></thead>
+                <thead><tr><th>Nickname</th><th>Full Name</th><th>TIN</th><th>Contact</th><th>Address</th><th>PM Style</th><th></th></tr></thead>
                 <tbody>
                   {clients.length === 0
-                    ? <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>No clients yet.</td></tr>
+                    ? <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>No clients yet.</td></tr>
                     : clients.map(c => (
                       <tr key={c.id}>
                         <td style={{ fontWeight: 500 }}>{c.nickname}</td>
@@ -583,6 +630,7 @@ export default function Settings() {
                         <td className="mono muted" style={{ fontSize: 12 }}>{c.tin || '—'}</td>
                         <td className="muted">{c.contact || '—'}</td>
                         <td className="muted" style={{ fontSize: 12 }}>{c.address || '—'}</td>
+                        <td className="muted" style={{ fontSize: 12 }}>{c.trip_style === 'van' ? '🚐 Van' : '📦 Container'}</td>
                         <td><div style={{ display: 'flex', gap: 4 }}>
                           <button className="btn-ghost btn-sm" onClick={() => setEditingClient(c)}>Edit</button>
                           <button className="btn-danger btn-sm" onClick={() => deleteClient(c.id, c.nickname)}>Remove</button>
@@ -668,6 +716,45 @@ export default function Settings() {
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 20, padding: '5px 10px 5px 14px' }}>
                         {r.label}
                         <button onClick={() => deleteRoute(r.id, r.label)} style={{ background: 'none', border: 'none', color: 'var(--hint)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+              }
+            </div>
+          </>
+        )}
+        {tab === 'PM Trip Codes' && (
+          <>
+            <div className="card" style={{ marginBottom: 20, maxWidth: 480 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>Add Trip Code</h2>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Trip codes identify which client/billing arrangement a Prime Mover trip belongs to — used for both Container/Port and Generic Van style clients.</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={newTripCode} onChange={e => setNewTripCode(e.target.value)}
+                  placeholder="e.g. NewClientName" onKeyDown={e => e.key === 'Enter' && addTripCode()}
+                  style={{ flex: 1 }} />
+                <button className="btn-primary" onClick={addTripCode}>Add</button>
+              </div>
+            </div>
+            <div className="card" style={{ marginBottom: 20 }}>
+              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Built-in Trip Codes</h2>
+              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Always available in Trip Entry — cannot be removed here.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {PM_TRIP_CODES.map(c => (
+                  <div key={c} style={{ fontSize: 13, background: 'var(--bg)', border: '0.5px solid var(--border)', borderRadius: 20, padding: '5px 14px', color: 'var(--muted)' }}>
+                    {c}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="card">
+              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 12 }}>Custom Trip Codes</h2>
+              {tripCodes.length === 0
+                ? <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No custom trip codes yet.</p>
+                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {tripCodes.map(c => (
+                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 20, padding: '5px 10px 5px 14px' }}>
+                        {c.label}
+                        <button onClick={() => deleteTripCode(c.id, c.label)} style={{ background: 'none', border: 'none', color: 'var(--hint)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
                       </div>
                     ))}
                   </div>
