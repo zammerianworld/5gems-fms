@@ -52,6 +52,7 @@ export default function Billing() {
   const [filterDestCode, setFilterDestCode] = useState('')
   const [filterMonth, setFilterMonth] = useState('')
   const [selectedIds, setSelectedIds] = useState([])
+  const [isVatInvoice, setIsVatInvoice] = useState(false)
   const [invoiceNo, setInvoiceNo] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
   const [generating, setGenerating] = useState(false)
@@ -102,7 +103,7 @@ export default function Billing() {
   const [previewModal, setPreviewModal] = useState(null)
   const [printAfterPreview, setPrintAfterPreview] = useState(false)
   const [sigDialog, setSigDialog] = useState(false)
-  const [excelSigPending, setExcelSigPending] = useState(null) // { tripsData, invNo, invDate, client, type } or null = PDF print mode
+  const [excelSigPending, setExcelSigPending] = useState(null) // { tripsData, invNo, invDate, client, type, isVat } or null = PDF print mode
   const [bulkExportIds, setBulkExportIds] = useState([])
   const [bulkExporting, setBulkExporting] = useState(false)
   const [bulkExportSigPending, setBulkExportSigPending] = useState(false)
@@ -244,8 +245,8 @@ export default function Billing() {
     ? billedTrips.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
     : billedTrips.reduce((s, t) => s + ((t.supplier_amount || 0) + (t.stripping_fee || 0)), 0)
   const totalNet = isSMCInvoice ? rawTotal / 1.12 : rawTotal
-  const vat12 = 0
-  const totalVatInc = totalNet
+  const vat12 = isVatInvoice ? totalNet * 0.12 : 0
+  const totalVatInc = isVatInvoice ? totalNet * 1.12 : totalNet
   const wht2 = totalNet * 0.02
   const totalDue = totalVatInc - wht2
   const totalTons = billedTrips.reduce((s, t) => s + (parseFloat(t.weight_tons) || 0), 0)
@@ -340,14 +341,14 @@ export default function Billing() {
       client: selectedClient,
       billing_period_start: billedTrips[0]?.trip_date,
       billing_period_end: billedTrips[billedTrips.length - 1]?.trip_date,
-      total_sales_net: totalNet, status: 'Invoiced',
+      total_sales_net: totalNet, status: 'Invoiced', is_vat: isVatInvoice,
     }).select().maybeSingle()
     if (error) { showToast('Error: ' + error.message, 'error'); setGenerating(false); return }
     const tbl = truckType === 'Dump Truck' ? 'trips_dump' : 'trips_pm'
     await supabase.from(tbl).update({ invoice_id: inv.id }).in('id', billedTrips.map(t => t.id))
-    logAudit('generate', 'Generated', 'Invoice', `Generated invoice ${invoiceNo} — ${selectedClient} (${truckType}) — ${billedTrips.length} trips — ₱${fmt(totalNet)} net`, inv?.id, profile?.id, profile?.full_name)
+    logAudit('generate', 'Generated', 'Invoice', `Generated invoice ${invoiceNo} — ${selectedClient} (${truckType}) — ${billedTrips.length} trips — ₱${fmt(totalNet)} net${isVatInvoice ? ' (VAT)' : ''}`, inv?.id, profile?.id, profile?.full_name)
     showToast(`Invoice ${invoiceNo} generated.`)
-    setSelectedIds([]); setInvoiceNo('')
+    setSelectedIds([]); setInvoiceNo(''); setIsVatInvoice(false)
     fetchAll(); setTab('Invoice List')
     setGenerating(false)
   }
@@ -605,9 +606,9 @@ export default function Billing() {
       return
     }
     if (excelSigPending) {
-      const { tripsData, invNo, invDate, client, type } = excelSigPending
+      const { tripsData, invNo, invDate, client, type, isVat } = excelSigPending
       setExcelSigPending(null)
-      handleSaveSOAExcel(tripsData, invNo, invDate, client, type, sigs)
+      handleSaveSOAExcel(tripsData, invNo, invDate, client, type, sigs, isVat)
       return
     }
     const el = document.getElementById('soa-preview-content')
@@ -625,11 +626,11 @@ export default function Billing() {
   }
 
   // ── DUMP TRUCK SOA — ExcelJS worksheet builder (mirrors renderDumpSOA PDF layout) ──
-  const buildDumpSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA') => {
+  const buildDumpSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA', isVat = false) => {
     const clientDetails = getClientDetails(client)
     const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const net = tripsData.reduce((s,t)=>s+((t.weight_tons||0)*(t.rate_per_ton||0)),0)
-    const vat = 0; const vatInc = net
+    const vat = isVat ? net * 0.12 : 0; const vatInc = isVat ? net * 1.12 : net
     const tons = tripsData.reduce((s,t)=>s+(parseFloat(t.weight_tons)||0),0)
 
     const ws = wb.addWorksheet(sheetName.slice(0,31))
@@ -773,7 +774,7 @@ export default function Billing() {
     ws.getCell(r,1).font = { bold:true, italic:true, size:9 }
     ws.getCell(r,1).alignment = { horizontal:'left', vertical:'bottom', wrapText:true }
 
-    const totalsLabels = [['GRAND TOTAL', net, true],['VAT (Non-VAT Reg.)', vat, false],['TOTAL SALES', vatInc, false]]
+    const totalsLabels = [['GRAND TOTAL', net, true],[isVat ? 'VAT (12%)' : 'VAT (Non-VAT)', vat, false],['TOTAL SALES', vatInc, false]]
     totalsLabels.forEach(([label, val, bold], idx) => {
       const rr = totalsStartRow + idx
       ws.mergeCells(rr,10,rr,14)
@@ -828,7 +829,7 @@ export default function Billing() {
   }
 
   // ── PM SOA — ExcelJS worksheet builder (mirrors renderPMSOA PDF layout) ──
-  const buildPMSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA') => {
+  const buildPMSOAWorksheet = (wb, tripsData, invNo, invDate, client, sigs = null, sheetName = 'SOA', isVat = false) => {
     const clientDetails = getClientDetails(client)
     const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const codes = ['Hustling PSACC', 'Hauling PSACC', 'SMC']
@@ -837,8 +838,8 @@ export default function Billing() {
     const grandTotal = tripsData.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
     const allSMC = tripsData.length > 0 && tripsData.every(t => t.trip_code === 'SMC')
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
-    const vat12 = 0
-    const totalAmt = vatable
+    const vat12 = isVat ? vatable * 0.12 : 0
+    const totalAmt = isVat ? vatable * 1.12 : vatable
     const twas = vatable * 0.02
     const netAmount = totalAmt - twas
 
@@ -1092,7 +1093,7 @@ export default function Billing() {
     const totalsRows = [
       ['GRAND TOTAL', grandTotal, true, false],
       ['VATABLE', vatable, false, false],
-      ['VAT (Non-VAT Reg.)', vat12, false, false],
+      [isVat ? 'VAT (12%)' : 'VAT (Non-VAT)', vat12, false, false],
       ['TOTAL AMOUNT', totalAmt, true, false],
       ['TWAS', twas, false, false],
       ['NET AMOUNT', netAmount, true, true],
@@ -1152,12 +1153,12 @@ export default function Billing() {
     return ws
   }
 
-  const handleSaveSOAExcel = async (tripsData, invNo, invDate, client, type, sigs = null) => {
+  const handleSaveSOAExcel = async (tripsData, invNo, invDate, client, type, sigs = null, isVat = false) => {
     const wb = new ExcelJS.Workbook()
     if (type === 'Dump Truck') {
-      buildDumpSOAWorksheet(wb, tripsData, invNo, invDate, client, sigs, `SOA-${invNo}`)
+      buildDumpSOAWorksheet(wb, tripsData, invNo, invDate, client, sigs, `SOA-${invNo}`, isVat)
     } else {
-      buildPMSOAWorksheet(wb, tripsData, invNo, invDate, client, sigs, `SOA-${invNo}`)
+      buildPMSOAWorksheet(wb, tripsData, invNo, invDate, client, sigs, `SOA-${invNo}`, isVat)
     }
     const buf = await wb.xlsx.writeBuffer()
     const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
@@ -1186,9 +1187,9 @@ export default function Billing() {
       try {
         const sheetName = sanitizeName(inv.invoice_no || inv.id)
         if (inv.truck_type === 'Dump Truck') {
-          buildDumpSOAWorksheet(wb, trips, inv.invoice_no, inv.invoice_date, inv.client, sigs, sheetName)
+          buildDumpSOAWorksheet(wb, trips, inv.invoice_no, inv.invoice_date, inv.client, sigs, sheetName, inv.is_vat)
         } else {
-          buildPMSOAWorksheet(wb, trips, inv.invoice_no, inv.invoice_date, inv.client, sigs, sheetName)
+          buildPMSOAWorksheet(wb, trips, inv.invoice_no, inv.invoice_date, inv.client, sigs, sheetName, inv.is_vat)
         }
       } catch (e) { console.error('Sheet build error for', inv.invoice_no, e); errors++ }
     }
@@ -1232,20 +1233,23 @@ export default function Billing() {
 
   const handleARExcel = (client, clientInvoices) => {
     const f2 = n => Number(n||0).toFixed(2)
-    const headers = ['Invoice No.', 'Date', 'Type', 'Net Sales', 'VAT (Non-VAT Reg.)', 'Total Sales', 'W/Tax (2%)', 'Total Due', 'Amt Received', 'Date Credited', 'Status', 'Remarks']
-    const data = clientInvoices.sort((a,b) => new Date(a.invoice_date)-new Date(b.invoice_date)).map(inv => {
+    const headers = ['Invoice No.', 'Date', 'Type', 'Net Sales', 'VAT', 'Total Sales', 'W/Tax (2%)', 'Total Due', 'Amt Received', 'Date Credited', 'Status', 'Remarks']
+    const rowCalcs = clientInvoices.sort((a,b) => new Date(a.invoice_date)-new Date(b.invoice_date)).map(inv => {
       const net = inv.total_sales_net||0
-      const vatAmt = 0
-      const vatInc = net
+      const vatAmt = inv.is_vat ? net * 0.12 : 0
+      const vatInc = inv.is_vat ? net * 1.12 : net
       const wtax = net * 0.02
       const due = vatInc - wtax
       const received = inv.actual_amount_credited || (inv.status==='Paid' ? due : 0)
-      return [inv.invoice_no, inv.invoice_date, inv.truck_type, f2(net), f2(vatAmt), f2(vatInc), f2(wtax), f2(due), received>0?f2(received):'', inv.date_credited||'', inv.status, inv.remarks||'']
+      return { inv, net, vatAmt, vatInc, wtax, due, received }
     })
+    const data = rowCalcs.map(({ inv, net, vatAmt, vatInc, wtax, due, received }) =>
+      [inv.invoice_no, inv.invoice_date, inv.truck_type, f2(net), f2(vatAmt), f2(vatInc), f2(wtax), f2(due), received>0?f2(received):'', inv.date_credited||'', inv.status, inv.remarks||'']
+    )
     const totalNet = clientInvoices.reduce((s,i)=>s+(i.total_sales_net||0),0)
-    const totalVatInc = totalNet
-    const totalDue = totalNet*0.98
-    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||(i.total_sales_net||0)*0.98),0)
+    const totalVatInc = rowCalcs.reduce((s,r)=>s+r.vatInc,0)
+    const totalDue = rowCalcs.reduce((s,r)=>s+r.due,0)
+    const totalReceived = clientInvoices.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||(i.total_sales_net||0)*(i.is_vat?1.10:0.98)),0)
     const outstanding = totalVatInc - totalReceived
     const companyName = (settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()
     const ws = XLSX.utils.aoa_to_sheet([
@@ -1279,17 +1283,18 @@ export default function Billing() {
     const sorted = [...clientInvoices].sort((a,b) => new Date(a.invoice_date)-new Date(b.invoice_date))
     const tableData = sorted.map(inv => {
       const n = net(inv.total_sales_net)
-      const due = n * 0.98
+      const due = n * (inv.is_vat ? 1.10 : 0.98)
       const received = inv.actual_amount_credited || (inv.status==='Paid' ? due : 0)
       return [inv.invoice_no, inv.invoice_date, inv.truck_type?.replace(' Truck','')?.replace(' Mover','PM')||'', f2(n), f2(due), received>0?f2(received):'—', inv.date_credited||'—', inv.status]
     })
     const totNet = sorted.reduce((s,i)=>s+net(i.total_sales_net),0)
-    const totReceived = sorted.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||net(i.total_sales_net)*0.98),0)
+    const totDue = sorted.reduce((s,i)=>s+net(i.total_sales_net)*(i.is_vat?1.10:0.98),0)
+    const totReceived = sorted.filter(i=>i.status==='Paid').reduce((s,i)=>s+(i.actual_amount_credited||net(i.total_sales_net)*(i.is_vat?1.10:0.98)),0)
     autoTable(doc, {
       startY: 35,
       head: [['Invoice No.','Date','Type','Total Sales','Total Due','Amt Received','Date Credited','Status']],
       body: tableData,
-      foot: [['','','TOTAL', f2(totNet), f2(totNet*0.98), f2(totReceived), '', '']],
+      foot: [['','','TOTAL', f2(totNet), f2(totDue), f2(totReceived), '', '']],
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [30,41,59], textColor: 255, fontStyle: 'bold' },
       footStyles: { fillColor: [254,243,199], textColor: [0,0,0], fontStyle: 'bold' },
@@ -1341,9 +1346,10 @@ export default function Billing() {
       if (!bucket.items.length) return
       doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...bucket.color)
       doc.text(`${bucket.label}  (${bucket.items.length} invoice${bucket.items.length>1?'s':''})`, 14, startY); doc.setTextColor(0)
-      const rows = bucket.items.map(inv => { const net=inv.total_sales_net||0; const days=getDaysAging(inv); return [fmtDate(inv.invoice_date)||'', inv.invoice_no, inv.client, inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, f2(net), f2(net), `${days}d`, inv.remarks||''] })
+      const rows = bucket.items.map(inv => { const net=inv.total_sales_net||0; const days=getDaysAging(inv); return [fmtDate(inv.invoice_date)||'', inv.invoice_no, inv.client, inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, f2(net), f2(inv.is_vat ? net*1.12 : net), `${days}d`, inv.remarks||''] })
       const subNet = bucket.items.reduce((s,i) => s+(i.total_sales_net||0), 0)
-      autoTable(doc, { startY: startY+3, head: [cols], body: rows, foot: [['','','','',`Subtotal (${bucket.items.length})`,f2(subNet),f2(subNet),'','']], showFoot:'lastPage', headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7,fillColor:bucket.fill}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:7.5}, columnStyles:colStyles, didParseCell:(data)=>{ if(data.section==='body'&&data.column.index===7){data.cell.styles.textColor=bucket.color;data.cell.styles.fontStyle='bold'} }, margin:{left:14,right:14,bottom:32} })
+      const subVatInc = bucket.items.reduce((s,i) => s+(i.total_sales_net||0)*(i.is_vat?1.12:1), 0)
+      autoTable(doc, { startY: startY+3, head: [cols], body: rows, foot: [['','','','',`Subtotal (${bucket.items.length})`,f2(subNet),f2(subVatInc),'','']], showFoot:'lastPage', headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7,fillColor:bucket.fill}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:7.5}, columnStyles:colStyles, didParseCell:(data)=>{ if(data.section==='body'&&data.column.index===7){data.cell.styles.textColor=bucket.color;data.cell.styles.fontStyle='bold'} }, margin:{left:14,right:14,bottom:32} })
       startY = doc.lastAutoTable.finalY + 6
     })
     if (bucketsToRender.length > 0) { doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${allItems.length} invoices)`,14,startY); doc.text(`Total Sales: ${f2(grandNet)}`,W-14,startY,{align:'right'}) }
@@ -1479,7 +1485,7 @@ export default function Billing() {
         const net = inv.total_sales_net || 0
         const bg = i % 2 === 0 ? bucket.bg : 'FFFFFFFF'
         const row = ws.getRow(r)
-        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, net, `${getDaysO(inv)}d`, inv.remarks||'']
+        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, inv.is_vat ? net*1.12 : net, `${getDaysO(inv)}d`, inv.remarks||'']
         vals.forEach((v,ci) => {
           const cell = row.getCell(ci+1)
           cell.value = v
@@ -1579,9 +1585,9 @@ export default function Billing() {
   }
 
   // ── DUMP TRUCK SOA RENDERER ─────────────────────────────────────────────────
-  const renderDumpSOA = (trips, invNo, invDate, client) => {
+  const renderDumpSOA = (trips, invNo, invDate, client, isVat = false) => {
     const net = trips.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
-    const vat = 0; const vatInc = net
+    const vat = isVat ? net * 0.12 : 0; const vatInc = isVat ? net * 1.12 : net
     const tons = trips.reduce((s, t) => s + (parseFloat(t.weight_tons) || 0), 0)
     const clientDetails = getClientDetails(client)
     const cols = ['5%','4%','5.5%','4.5%','4%','5%','3%','8%','3%','8%','3.5%','5%','3.5%','6%','4.5%','5.5%','5.5%']
@@ -1670,7 +1676,7 @@ export default function Billing() {
           <table style={{ borderCollapse: 'collapse', fontSize: '10px', minWidth: 200 }}>
             <tbody>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', borderBottom: '0.5px solid #000' }}>GRAND TOTAL</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', minWidth: 80, fontWeight: 'bold', borderBottom: '0.5px solid #000' }}>{fmt(net)}</td></tr>
-              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VAT (Non-VAT Reg.)</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat)}</td></tr>
+              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>{isVat ? 'VAT (12%)' : 'VAT (Non-VAT)'}</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>TOTAL SALES</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vatInc)}</td></tr>
             </tbody>
           </table>
@@ -1680,7 +1686,7 @@ export default function Billing() {
   }
 
   // ── PM SOA RENDERER ──────────────────────────────────────────────────────────
-  const renderPMSOA = (trips, invNo, invDate, client) => {
+  const renderPMSOA = (trips, invNo, invDate, client, isVat = false) => {
     const clientDetails = getClientDetails(client)
     const tdS = { padding: '2px 4px', border: '0.5px solid #ccc', fontSize: '8.8px', textAlign: 'center', verticalAlign: 'middle', lineHeight: 1.3 }
     const thS = { background:'#000', color:'#fff', padding:'2px 3px', border:'0.5px solid #000', fontSize:'8px', textTransform:'uppercase', textAlign:'center', wordWrap:'break-word', verticalAlign:'middle', lineHeight:1.25 }
@@ -1690,8 +1696,8 @@ export default function Billing() {
     const grandTotal = trips.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
     const allSMC = trips.length > 0 && trips.every(t => t.trip_code === 'SMC')
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
-    const vat12 = 0
-    const totalAmt = vatable
+    const vat12 = isVat ? vatable * 0.12 : 0
+    const totalAmt = isVat ? vatable * 1.12 : vatable
     const twas = vatable * 0.02
     const netAmount = totalAmt - twas
     const buildRows = (tripList, code) => tripList.flatMap((t, i) => {
@@ -1774,7 +1780,7 @@ export default function Billing() {
             <tbody>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold' }}>GRAND TOTAL</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', minWidth: 90, fontWeight: 'bold' }}>{fmt(grandTotal)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>VATABLE</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vatable)}</td></tr>
-              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>12% VAT (Non-VAT Reg.)</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat12)}</td></tr>
+              <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>{isVat ? 'VAT (12%)' : 'VAT (Non-VAT)'}</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(vat12)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', borderTop: '0.5px solid #000' }}>TOTAL AMOUNT</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', borderTop: '0.5px solid #000' }}>{fmt(totalAmt)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right' }}>TWAS</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace' }}>{fmt(twas)}</td></tr>
               <tr><td style={{ padding: '1px 6px', textAlign: 'right', fontWeight: 'bold', color: '#c00', borderTop: '0.5px solid #000' }}>NET AMOUNT</td><td style={{ padding: '1px 6px', textAlign: 'right', fontFamily: 'monospace', fontWeight: 'bold', color: '#c00', borderTop: '0.5px solid #000' }}>{fmt(netAmount)}</td></tr>
@@ -1901,18 +1907,31 @@ export default function Billing() {
                     )
                   })}
               </div>
-              {billedTrips.length > 0 && (
-                <div style={{ marginTop: 12, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
+              {billedTrips.length > 0 && (<>
+                <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>Invoice Type:</span>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {[['non-vat', false, 'Non-VAT'], ['vat', true, 'VAT']].map(([key, val, label]) => (
+                      <button key={key} type="button" onClick={() => setIsVatInvoice(val)} style={{
+                        padding: '6px 14px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                        background: isVatInvoice === val ? 'var(--accent)' : 'var(--surface)',
+                        color: isVatInvoice === val ? '#fff' : 'var(--muted)',
+                        border: `1.5px solid ${isVatInvoice === val ? 'var(--accent)' : 'var(--border)'}`,
+                      }}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginTop: 8, padding: '10px 14px', background: 'var(--bg)', borderRadius: 8, display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 13 }}>
                   {(isSMCInvoice
-                    ? [['VATABLE',totalNet],['VAT (Non-VAT Reg.)',vat12],['Total Amount',totalVatInc],['TWAS 2%',wht2],['Net Amount',totalDue]]
-                    : [['Total Sales',totalNet],['VAT (Non-VAT Reg.)',vat12],['Total Amount',totalVatInc],['W/Tax 2%',wht2],['Total Due',totalDue]]
+                    ? [['VATABLE',totalNet],[isVatInvoice ? 'VAT (12%)' : 'VAT (Non-VAT)',vat12],['Total Amount',totalVatInc],['TWAS 2%',wht2],['Net Amount',totalDue]]
+                    : [['Total Sales',totalNet],[isVatInvoice ? 'VAT (12%)' : 'VAT (Non-VAT)',vat12],['Total Amount',totalVatInc],['W/Tax 2%',wht2],['Total Due',totalDue]]
                   ).map(([l,v]) => (<div key={l}><span style={{ color: 'var(--muted)' }}>{l}: </span><strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(v)}</strong></div>))}
                   {truckType === 'Dump Truck' && <div><span style={{ color: 'var(--muted)' }}>Total Tons: </span><strong>{totalTons.toFixed(3)}t</strong></div>}
                 </div>
-              )}
+              </>)}
               <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                <button className="btn-ghost" onClick={() => setPreviewModal({ trips: billedTrips, invoice: { id: 'preview', invoice_no: invoiceNo, invoice_date: invoiceDate, client: selectedClient, truck_type: truckType } })} disabled={!selectedIds.length || !invoiceNo}>👁 Preview</button>
-                <button className="btn-ghost" onClick={() => { setPrintAfterPreview(true); setPreviewModal({ trips: billedTrips, invoice: { id: 'preview', invoice_no: invoiceNo, invoice_date: invoiceDate, client: selectedClient, truck_type: truckType } }) }} disabled={!selectedIds.length || !invoiceNo}>📄 Print / Save PDF</button>
+                <button className="btn-ghost" onClick={() => setPreviewModal({ trips: billedTrips, invoice: { id: 'preview', invoice_no: invoiceNo, invoice_date: invoiceDate, client: selectedClient, truck_type: truckType, is_vat: isVatInvoice } })} disabled={!selectedIds.length || !invoiceNo}>👁 Preview</button>
+                <button className="btn-ghost" onClick={() => { setPrintAfterPreview(true); setPreviewModal({ trips: billedTrips, invoice: { id: 'preview', invoice_no: invoiceNo, invoice_date: invoiceDate, client: selectedClient, truck_type: truckType, is_vat: isVatInvoice } }) }} disabled={!selectedIds.length || !invoiceNo}>📄 Print / Save PDF</button>
                 <button className="btn-primary" onClick={handleGenerate} disabled={!selectedIds.length || !invoiceNo || !selectedClient || invoiceDupWarning || generating}>{generating ? 'Generating…' : '✓ Generate Invoice'}</button>
               </div>
             </>
@@ -2025,8 +2044,9 @@ export default function Billing() {
                   </div>
                   <div style={{ display: 'flex', gap: 16, fontSize: 12, flexWrap: 'wrap', marginBottom: 6 }}>
                     <span>Total Sales: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net)}</strong></span>
+                    {inv.is_vat && <span>VAT (12%): <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net*0.12)}</strong></span>}
                     <span>W/Tax: <strong style={{ fontFamily: 'var(--mono)' }}>₱{fmt(net*0.02)}</strong></span>
-                    <span>Total Due: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(net-net*0.02)}</strong></span>
+                    <span>Total Due: <strong style={{ fontFamily: 'var(--mono)', color: 'var(--accent)' }}>₱{fmt(inv.is_vat ? (net*1.12-net*0.02) : (net-net*0.02))}</strong></span>
                     {inv.smcsl_wb_list && <span style={{ color: 'var(--muted)' }}>SMCSL WB: {inv.smcsl_wb_list}</span>}
                     {inv.remarks && (
                       <span style={{ color: '#cc0000', fontStyle: 'italic', fontWeight: 600, background: inv.remarks_color || 'rgba(220,38,38,0.08)', padding: '1px 8px', borderRadius: 6, border: `1px solid ${inv.remarks_color || 'rgba(220,38,38,0.2)'}` }}>
@@ -2042,7 +2062,7 @@ export default function Billing() {
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     <button className="btn-ghost btn-sm" onClick={async e => { e.stopPropagation(); const tbl=inv.truck_type==='Dump Truck'?'trips_dump':'trips_pm'; const {data}=await supabase.from(tbl).select('*').is('deleted_at',null).eq('invoice_id',inv.id).order('trip_date'); if(!data?.length){showToast('No trips found.','error');return}; setPreviewModal({trips:data,invoice:inv}) }}>👁</button>
                     <button className="btn-ghost btn-sm" onClick={async e => { e.stopPropagation(); const tbl=inv.truck_type==='Dump Truck'?'trips_dump':'trips_pm'; const {data}=await supabase.from(tbl).select('*').eq('invoice_id',inv.id).order('trip_date'); if(!data?.length){showToast('No trips found.','error');return}; setPrintAfterPreview(true); setPreviewModal({trips:data,invoice:inv}) }}>📄</button>
-                    <button className="btn-ghost btn-sm" onClick={async e => { e.stopPropagation(); const tbl=inv.truck_type==='Dump Truck'?'trips_dump':'trips_pm'; const {data}=await supabase.from(tbl).select('*').eq('invoice_id',inv.id).order('trip_date'); if(!data?.length){showToast('No trips found.','error');return}; setExcelSigPending({ tripsData:data, invNo:inv.invoice_no, invDate:inv.invoice_date, client:inv.client, type:inv.truck_type }); setSigDialog(true) }}>📊</button>
+                    <button className="btn-ghost btn-sm" onClick={async e => { e.stopPropagation(); const tbl=inv.truck_type==='Dump Truck'?'trips_dump':'trips_pm'; const {data}=await supabase.from(tbl).select('*').eq('invoice_id',inv.id).order('trip_date'); if(!data?.length){showToast('No trips found.','error');return}; setExcelSigPending({ tripsData:data, invNo:inv.invoice_no, invDate:inv.invoice_date, client:inv.client, type:inv.truck_type, isVat:inv.is_vat }); setSigDialog(true) }}>📊</button>
                     {isAdmin
                       ? <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); if (inv.locked_at) { showToast('Invoice is locked. Click 🔓 to unlock first.', 'error'); return } setEditingInvoice(isEditing?null:{...inv}); setEditingRates({}); setRateOverrideGranted(false) }}>✏️ Edit</button>
                       : <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); setOverridePinModal({action:'editInvoice',inv}); setOverridePinInput(''); setOverridePinError('') }}>✏️ Edit</button>
@@ -2082,7 +2102,7 @@ export default function Billing() {
                         <div className="form-group">
                           <label className="label">Status</label>
                           <select value={editingInvoice.status} onChange={e => {
-                            const ns=e.target.value; const autoAmt=((editingInvoice.total_sales_net||0)-((editingInvoice.total_sales_net||0)*0.02)).toFixed(2); const autoDate=new Date().toISOString().slice(0,10)
+                            const ns=e.target.value; const autoAmt=((editingInvoice.total_sales_net||0)*(editingInvoice.is_vat?1.10:0.98)).toFixed(2); const autoDate=new Date().toISOString().slice(0,10)
                             setEditingInvoice(i => ({...i,status:ns,actual_amount_credited:ns==='Paid'?(i.actual_amount_credited||autoAmt):i.actual_amount_credited,date_credited:ns==='Paid'?(i.date_credited||autoDate):i.date_credited}))
                           }}>
                             {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -2326,7 +2346,7 @@ export default function Billing() {
                 <tbody>
                   {displayed.map(inv => {
                     const days=getDays(inv); const rowBg=days>=60?'rgba(220,38,38,0.18)':days>=45?'rgba(204,85,0,0.15)':days>=30?'rgba(184,134,11,0.12)':'transparent'; const dayColor=days>=60?'var(--danger)':days>=45?'#CC5500':days>=30?'#B8860B':'var(--muted)'; const net=inv.total_sales_net||0
-                    return (<tr key={inv.id} style={{ background:rowBg }}><td style={{ fontFamily:'var(--mono)', fontSize:12 }}>{inv.invoice_no}</td><td style={{ fontSize:12 }}>{inv.client}</td><td style={{ fontSize:12 }}>{fmtDate(inv.invoice_date)}</td><td><span className={`badge ${inv.truck_type==='Dump Truck'?'badge-dump':'badge-prime'}`} style={{ fontSize:10 }}>{inv.truck_type==='Dump Truck'?'Dump':'PM'}</span></td><td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'rgba(59,130,246,0.1)', color:'#1d4ed8' }}>{inv.status}</span></td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td style={{ fontFamily:'var(--mono)', fontWeight:700, color:dayColor, fontSize:12, textAlign:'center' }}>{days}d</td><td style={{ fontSize:11, color:'var(--muted)' }}>{inv.remarks||''}</td></tr>)
+                    return (<tr key={inv.id} style={{ background:rowBg }}><td style={{ fontFamily:'var(--mono)', fontSize:12 }}>{inv.invoice_no}</td><td style={{ fontSize:12 }}>{inv.client}</td><td style={{ fontSize:12 }}>{fmtDate(inv.invoice_date)}</td><td><span className={`badge ${inv.truck_type==='Dump Truck'?'badge-dump':'badge-prime'}`} style={{ fontSize:10 }}>{inv.truck_type==='Dump Truck'?'Dump':'PM'}</span></td><td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'rgba(59,130,246,0.1)', color:'#1d4ed8' }}>{inv.status}</span></td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(net)}</td><td className="text-right mono" style={{ fontSize:12 }}>₱{fmt(inv.is_vat ? net*1.12 : net)}</td><td style={{ fontFamily:'var(--mono)', fontWeight:700, color:dayColor, fontSize:12, textAlign:'center' }}>{days}d</td><td style={{ fontSize:11, color:'var(--muted)' }}>{inv.remarks||''}</td></tr>)
                   })}
                 </tbody>
               </table>
@@ -2344,7 +2364,7 @@ export default function Billing() {
           i.status !== 'Paid'
         )
         const totalInvoiced = allClientInvoices.reduce((s,i) => s+(i.total_sales_net||0), 0)
-        const totalPaid = allClientInvoices.filter(i=>i.status==='Paid').reduce((s,i) => s+(i.actual_amount_credited||(i.total_sales_net||0)*0.98), 0)
+        const totalPaid = allClientInvoices.filter(i=>i.status==='Paid').reduce((s,i) => s+(i.actual_amount_credited||(i.total_sales_net||0)*(i.is_vat?1.10:0.98)), 0)
         const outstanding = totalInvoiced - totalPaid
         const clients = [...new Set(invoices.map(i => i.client).filter(Boolean))].sort()
         const nowAR = new Date()
@@ -2396,7 +2416,7 @@ export default function Billing() {
                     <thead><tr><th>Invoice No.</th><th>Date</th><th>Type</th><th className="text-right">Total Sales</th><th className="text-right">Amt Received</th><th>Date Credited</th><th>Status</th>{balanceStatusFilter==='unpaid' && <th className="text-right">Aging</th>}</tr></thead>
                     <tbody>
                       {clientInvoices.sort((a,b) => new Date(b.invoice_date)-new Date(a.invoice_date)).map(inv => {
-                        const vatInc=(inv.total_sales_net||0); const received=inv.actual_amount_credited||(inv.status==='Paid'?(inv.total_sales_net||0)*0.98:0)
+                        const vatInc=(inv.total_sales_net||0)*(inv.is_vat?1.12:1); const received=inv.actual_amount_credited||(inv.status==='Paid'?(inv.total_sales_net||0)*(inv.is_vat?1.10:0.98):0)
                         const days = getARDays(inv)
                         return (<tr key={inv.id}><td className="mono" style={{ fontWeight:600 }}>{inv.invoice_no}</td><td>{fmtDate(inv.invoice_date)}</td><td style={{ fontSize:11 }}>{inv.truck_type}</td><td className="text-right mono">₱{fmt(vatInc)}</td><td className="text-right mono">{received>0?`₱${fmt(received)}`:'—'}</td><td style={{ fontSize:11 }}>{inv.date_credited?fmtDate(inv.date_credited):'—'}</td><td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background:inv.status==='Paid'?'rgba(22,163,74,0.1)':'rgba(234,179,8,0.1)', color:inv.status==='Paid'?'var(--success)':'var(--warning)' }}>{inv.status}</span></td>{balanceStatusFilter==='unpaid' && <td className="text-right" style={{ fontSize:12, fontWeight:600, color: days>=60?'var(--danger)':days>=30?'#CC5500':'var(--muted)' }}>{days}d</td>}</tr>)
                       })}
@@ -2535,14 +2555,14 @@ export default function Billing() {
                   ))}
                 </div>
                 <button className="btn-primary btn-sm" onClick={triggerPrintFromPreview}>🖨️ Print / Save PDF</button>
-                <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); setExcelSigPending({ tripsData:previewModal.trips, invNo:previewModal.invoice.invoice_no, invDate:previewModal.invoice.invoice_date, client:previewModal.invoice.client, type:previewModal.invoice.truck_type }); setSigDialog(true) }}>📊 Excel</button>
+                <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); setExcelSigPending({ tripsData:previewModal.trips, invNo:previewModal.invoice.invoice_no, invDate:previewModal.invoice.invoice_date, client:previewModal.invoice.client, type:previewModal.invoice.truck_type, isVat:previewModal.invoice.is_vat }); setSigDialog(true) }}>📊 Excel</button>
                 <button className="btn-ghost btn-sm" onClick={() => { setPreviewModal(null); setPrintAfterPreview(false) }}>✕ Close</button>
               </div>
             </div>
             <div id="soa-preview-content" style={{ padding: 16, overflow: 'auto', minHeight: 400 }}>
               {previewModal.invoice.truck_type === 'Dump Truck'
-                ? renderDumpSOA(previewModal.trips, previewModal.invoice.invoice_no, previewModal.invoice.invoice_date, previewModal.invoice.client)
-                : renderPMSOA(previewModal.trips, previewModal.invoice.invoice_no, previewModal.invoice.invoice_date, previewModal.invoice.client)}
+                ? renderDumpSOA(previewModal.trips, previewModal.invoice.invoice_no, previewModal.invoice.invoice_date, previewModal.invoice.client, previewModal.invoice.is_vat)
+                : renderPMSOA(previewModal.trips, previewModal.invoice.invoice_no, previewModal.invoice.invoice_date, previewModal.invoice.client, previewModal.invoice.is_vat)}
             </div>
           </div>
         </div>
@@ -2647,10 +2667,10 @@ export default function Billing() {
         <div className="modal-overlay" onClick={() => setMarkPaidModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <h3 style={{ marginBottom: 4 }}>✅ Mark as Paid</h3>
-            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Total Sales: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · Expected (after 2% W/Tax): <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*0.98)}</strong></p>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Total Sales: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · Expected (after {markPaidModal.inv.is_vat ? '12% VAT, ' : ''}2% W/Tax): <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))}</strong></p>
             <div className="form-grid">
               <div className="form-group"><label className="label required">Date Credited</label><DateInput value={markPaidDate} onChange={e => setMarkPaidDate(e.target.value)} max={new Date().toISOString().slice(0,10)} /></div>
-              <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*0.98)} /></div>
+              <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))} /></div>
             </div>
             <div className="modal-actions" style={{ marginTop: 14 }}>
               <button className="btn-ghost" onClick={() => setMarkPaidModal(null)}>Cancel</button>

@@ -82,7 +82,7 @@ export default function PaidInvoices() {
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   }
 
-  const totalCollected = filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * 0.98), 0)
+  const totalCollected = filtered.filter(i => i.status === 'Paid').reduce((s, i) => s + (parseFloat(i.actual_amount_credited) || (i.total_sales_net || 0) * (i.is_vat ? 1.10 : 0.98)), 0)
   const totalNet = filtered.reduce((s, i) => s + (i.total_sales_net || 0), 0)
 
   // ── SALES INVOICE SUMMARY (Monthly / Quarterly / Mid-Year / Annual) ────────
@@ -132,17 +132,21 @@ export default function PaidInvoices() {
 
   const summaryRows = getPeriods(periodType, summaryYear).map(p => {
     const rows = paidInvoices.filter(i => i.date_credited >= p.start && i.date_credited <= p.end)
-    const invoiceIds = new Set(rows.map(i => i.id))
-    // Trip-based net — respects truck scope (company-only vs all incl. subcon) and SMC VAT adjustment
-    const dumpNet = dumpTrips.filter(t => invoiceIds.has(t.invoice_id) && inScope(t.truck_plate))
-      .reduce((s, t) => s + (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0), 0)
-    const pmNetSum = pmTrips.filter(t => invoiceIds.has(t.invoice_id) && inScope(t.truck_plate))
-      .reduce((s, t) => s + pmNet(t), 0)
-    const net = dumpNet + pmNetSum
-    const vat = 0
-    const vatInc = net
-    const wht = net * 0.02
-    const total = vatInc - wht
+    // Compute each invoice's in-scope net individually first (respects truck
+    // scope + SMC adjustment), then apply that invoice's own VAT status,
+    // then sum — a period can mix VAT and Non-VAT invoices together.
+    let net = 0, vat = 0, vatInc = 0, wht = 0, total = 0
+    rows.forEach(inv => {
+      const invDumpNet = dumpTrips.filter(t => t.invoice_id === inv.id && inScope(t.truck_plate))
+        .reduce((s, t) => s + (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0), 0)
+      const invPmNet = pmTrips.filter(t => t.invoice_id === inv.id && inScope(t.truck_plate))
+        .reduce((s, t) => s + pmNet(t), 0)
+      const invNet = invDumpNet + invPmNet
+      const invVat = inv.is_vat ? invNet * 0.12 : 0
+      const invVatInc = inv.is_vat ? invNet * 1.12 : invNet
+      const invWht = invNet * 0.02
+      net += invNet; vat += invVat; vatInc += invVatInc; wht += invWht; total += (invVatInc - invWht)
+    })
     return { label: p.label, count: rows.length, net, vat, vatInc, wht, total }
   })
   const summaryTotal = summaryRows.reduce((acc, r) => ({
@@ -308,14 +312,15 @@ export default function PaidInvoices() {
     let totals = { net: 0, vat: 0, wht: 0, received: 0 }
     sorted.forEach((inv, i) => {
       const net = inv._net
-      const vat = net * 0.12
+      const vat = inv.is_vat ? net * 0.12 : 0
       const wht = net * 0.02
       // If scoped to company-only and this invoice also had subcon trips, the
       // full actual_amount_credited isn't this invoice's company-only share —
-      // fall back to the 1.10 estimate on the adjusted net instead.
+      // fall back to the estimate on the adjusted net instead (VAT invoices:
+      // net×1.12−net×0.02=net×1.10; Non-VAT: net−net×0.02=net×0.98).
       const received = (parseFloat(inv.actual_amount_credited) && (truckScope === 'all' || inv._fullyInScope))
         ? parseFloat(inv.actual_amount_credited)
-        : (net * 0.98)
+        : (net * (inv.is_vat ? 1.10 : 0.98))
       totals.net += net; totals.vat += vat; totals.wht += wht; totals.received += received
       const row = ws.getRow(5 + i)
       const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF9FAFB'

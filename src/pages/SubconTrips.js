@@ -152,7 +152,15 @@ export default function SubconTrips() {
   // Backed into from net minus the actual credited amount (real or
   // estimated), rather than a flat 2% of net — stays accurate even when a
   // real actual_amount_credited doesn't land exactly on the standard formula.
-  const whtAmount = (t) => t._amount - t._vatIncAmount
+  // Backed into from the invoice's VAT-inclusive-or-net amount minus the
+  // actual credited amount (real or estimated) — for a VAT invoice, credited
+  // can exceed net, so this must subtract from the VAT-inclusive figure, not
+  // bare net, or WHT would compute negative.
+  const whtAmount = (t) => {
+    const inv = invoiceMap[t.invoice_id]
+    const gross = inv?.is_vat ? t._amount * 1.12 : t._amount
+    return gross - t._vatIncAmount
+  }
   // Each invoice's total net across ALL its linked trips (any truck), needed to
   // proportion a real actual_amount_credited down to a single trip's share.
   const invoiceNetTotals = {}
@@ -160,15 +168,15 @@ export default function SubconTrips() {
   pmTrips.forEach(t => { if (t.invoice_id) invoiceNetTotals[t.invoice_id] = (invoiceNetTotals[t.invoice_id] || 0) + getTripAmount(t, 'pm') })
   // Always base "credited" on what Paid Invoices actually shows for that
   // invoice: the real actual_amount_credited (prorated by this trip's share
-  // of the invoice's total net) when present, otherwise the SAME estimate
-  // Paid Invoices itself falls back to — net minus 2% withholding tax =
-  // net × 0.98 (non-VAT registered, no VAT markup applies).
+  // of the invoice's total net) when present, otherwise the same estimate
+  // Paid Invoices itself falls back to — VAT invoices: net×1.12−net×0.02 =
+  // net×1.10; Non-VAT: net−net×0.02 = net×0.98.
   const creditedAmount = (t, amt) => {
     const inv = invoiceMap[t.invoice_id]
     const invNet = invoiceNetTotals[t.invoice_id] || 0
     const realCredited = inv && parseFloat(inv.actual_amount_credited)
     if (realCredited && invNet > 0) return (amt / invNet) * parseFloat(inv.actual_amount_credited)
-    return amt * 0.98
+    return amt * (inv?.is_vat ? 1.10 : 0.98)
   }
   // FIX 1: renamed to enrichedTrips to avoid conflict with Running Balance's allTrips
   const enrichedTrips = [

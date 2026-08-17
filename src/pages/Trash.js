@@ -153,7 +153,7 @@ export default function Trash() {
                       <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>#{inv.invoice_no}</span>
                       <span style={{ fontSize: 12 }}>{inv.client}</span>
                       <span style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDate(inv.invoice_date)} · {inv.truck_type}</span>
-                      <span style={{ fontSize: 13, fontFamily: 'var(--mono)', flex: 1 }}>₱{fmt(inv.total_sales_net || 0)}</span>
+                      <span style={{ fontSize: 13, fontFamily: 'var(--mono)', flex: 1 }}>₱{fmt((inv.total_sales_net || 0) * (inv.is_vat ? 1.12 : 1))}</span>
                       <span style={{ fontSize: 11, color: daysLeft(inv.deleted_at) <= 3 ? 'var(--danger)' : 'var(--muted)' }}>⏳ {daysLeft(inv.deleted_at)}d left</span>
                       <button className="btn-ghost btn-sm" onClick={() => handleRestore('invoices', inv.id)}>↩ Restore</button>
                       {isSuperuser && (

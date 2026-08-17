@@ -1789,7 +1789,8 @@ AS $function$
     case
       when i.actual_amount_credited is not null and it.inv_net > 0
         then (m.net_amount / it.inv_net) * i.actual_amount_credited
-      else m.net_amount * 1.10
+      when i.is_vat then m.net_amount * 1.10
+      else m.net_amount * 0.98
     end as credited_amount
   from mine m
   left join public.invoices i on i.id = m.invoice_id
@@ -1830,7 +1831,8 @@ AS $function$
     count(mt.*)::integer,
     sum(case when i.actual_amount_credited is not null and it.inv_net > 0
       then (mt.net_amount / it.inv_net) * i.actual_amount_credited
-      else mt.net_amount * 1.10 end)
+      when i.is_vat then mt.net_amount * 1.10
+      else mt.net_amount * 0.98 end)
   from my_trips mt
   join public.invoices i on i.id = mt.invoice_id
   left join inv_totals it on it.invoice_id = mt.invoice_id
