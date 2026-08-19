@@ -860,8 +860,7 @@ export default function CheckVouchers() {
                         <td>
                           <div style={{ display: 'flex', gap: 4 }}>
                             <button className="btn-ghost btn-sm" onClick={() => openEdit(v)}>Edit</button>
-                            <button className="btn-ghost btn-sm" onClick={() => handlePrintVoucher(v)}>📄 Voucher</button>
-                            {v.bank_template_id && <button className="btn-ghost btn-sm" onClick={() => handlePrintCheck(v)}>🖨️ Check</button>}
+                            <button className="btn-ghost btn-sm" onClick={() => handlePrintVoucher(v)}>📄 Print Voucher</button>
                             {isAdmin && <button className="btn-danger btn-sm" onClick={() => handleDelete(v.id, v.voucher_no)}>✕</button>}
                           </div>
                         </td>
