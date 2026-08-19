@@ -140,13 +140,16 @@ const GUIDES = [
       {
         heading: 'Adding a Prime Mover Trip',
         content: [
+          { type: 'text', text: 'The fields shown depend on the client you select — this is controlled by that client\'s "Prime Mover Trip Entry Style" set in Settings → Clientele (Container/Port by default, or Generic Van).' },
           { type: 'steps', items: [
             'Go to Trip Entry → Prime Mover tab.',
-            'Select the Trip Code: Hustling PSACC, Hauling PSACC, or SMC.',
-            'Fill in the standard fields plus the client field (required for PM).',
-            'For 20ft/40ft container trips, add per-container details using the + Add Container button.',
+            'Fill in Trip Date, Truck Plate, and Trip Code (built-in codes like SMC, plus any custom codes added in Settings → PM Trip Codes).',
+            'Select the Client — this determines which fields appear next.',
+            'Container/Port clients: pick Container Size (20ft/40ft), then fill the standard fields plus per-container details using + Add Container.',
+            'Generic Van clients: fill Driver, Van Number/Vessel, Destination, TOLL Ticket, TOLL Scale, and Rate/Total Amount instead — no container fields.',
             'Click Save Trip.',
           ]},
+          { type: 'note', text: 'A new client defaults to Container/Port style. Switch a client to Generic Van in Settings → Clientele if their Prime Mover trips are simple point-to-point van runs rather than container/port logistics.' },
         ],
       },
       {
@@ -183,6 +186,7 @@ const GUIDES = [
             'The system pulls all unbilled trips for that client in the period.',
             'Review the trips listed. You can remove individual trips using the ✕ button.',
             'Adjust the rate per trip if needed (requires Admin PIN).',
+            'Choose Invoice Type: Non-VAT (default) or VAT — see VAT & Withholding Tax below for what this changes.',
             'Click Generate Invoice. The invoice number starts blank for manual entry — type the number before printing.',
             'Click Print / Preview to open the SOA print dialog. Select signatories, then print or export.',
           ]},
@@ -245,7 +249,9 @@ const GUIDES = [
       {
         heading: 'VAT & Withholding Tax',
         content: [
-          { type: 'note', text: 'VAT is computed at 12% and withholding tax at 2% automatically. The SOA print and Excel show both the gross and net amounts, plus the grand total in Philippine peso words.' },
+          { type: 'text', text: '5 Gems is Non-VAT registered, so invoices default to Non-VAT — no 12% VAT markup, just the 2% withholding tax deduction most clients apply (Total Due = Net Sales × 0.98).' },
+          { type: 'note', text: 'Some clients still need a VAT-computed invoice. Choose VAT on the Invoice Type toggle when generating that invoice — the SOA print/export then shows the 12% VAT breakdown and Total Due = Net Sales × 1.12 − 2% W/Tax. This is chosen per invoice, not a global setting, and is saved with that invoice permanently.' },
+          { type: 'text', text: 'Every report that shows collections or amounts due — Invoice List, Client Balance, Aging Report, Paid Invoices, Cashflow, Dashboard, Year-over-Year — automatically uses the correct VAT or Non-VAT figure for each invoice, based on how that invoice was generated.' },
         ],
       },
       {
@@ -574,7 +580,7 @@ const GUIDES = [
           { type: 'steps', items: [
             'Go to Loans → Lending tab, click + Add to record a new lending with principal, interest rate, and term.',
             'Expand a record and click "Record Payment" to log amortization payments.',
-            'Click 🖨️ Print or 📊 Excel to export the schedule — the printed PDF now includes the full company header (name, VAT TIN, address, contact) and an "AMORTIZATION SCHEDULE" title.',
+            'Click 🖨️ Print or 📊 Excel to export the schedule — the printed PDF now includes the full company header (name, TIN, address, contact) and an "AMORTIZATION SCHEDULE" title.',
           ]},
         ],
       },
@@ -634,13 +640,14 @@ const GUIDES = [
         content: [
           { type: 'table', rows: [
             ['Tab', 'What You Can Do'],
-            ['Company Info', 'Company name, address, VAT TIN, contact, email'],
+            ['Company Info', 'Company name, address, TIN, contact, email'],
             ['Signatories', 'Add/edit people who sign documents (appears in signatory picker when printing)'],
             ['Trucks', 'Add/edit/deactivate trucks in the fleet'],
             ['Drivers', 'Add/edit drivers, assign to trucks'],
-            ['Clientele', 'Add/edit clients and their billing details'],
+            ['Clientele', 'Add/edit clients, their billing details, and Prime Mover Trip Entry Style (Container/Port or Generic Van)'],
             ['Commodities', 'Add/edit commodity types used in trip entry'],
             ['Routes', 'Add/remove custom Dump Truck routes — appear in Trip Entry and Manage Trips filter'],
+            ['PM Trip Codes', 'Add custom Prime Mover trip codes (e.g. for a new client) — no schema change needed, works for both Container and Van style clients'],
             ['Legal', 'View the End User License Agreement, Privacy Policy, and DMCA / Copyright Policy'],
             ['PWA Icons', 'Superuser only — app icon for install-to-homescreen'],
           ]},
@@ -657,6 +664,18 @@ const GUIDES = [
             'Click the × on any route pill to remove it.',
           ]},
           { type: 'note', text: 'The full list of built-in routes is shown under Settings → Routes for reference — they are always available and cannot be removed; only custom-added routes can be deleted.' },
+        ],
+      },
+      {
+        heading: 'Managing PM Trip Codes',
+        content: [
+          { type: 'text', text: 'Prime Mover trips use a Trip Code to identify which client/billing arrangement a trip belongs to (e.g. SMC, Hustling PSACC). The built-in codes always work; add more here whenever a new Prime Mover client comes on board.' },
+          { type: 'steps', items: [
+            'Go to Settings → PM Trip Codes.',
+            'Type the new code (usually the client name) and click Add, or press Enter.',
+            'New codes appear immediately in the Trip Code dropdown on Trip Entry, for both Container/Port and Generic Van style clients.',
+            'Click the × on any custom code pill to remove it — built-in codes cannot be removed.',
+          ]},
         ],
       },
       {
