@@ -28,12 +28,6 @@
 --   for 5 Gems rather than carrying it over silently.
 -- ============================================================
 
--- ============================================================
--- DRAGON SPEED TRUCKING — FULL DATABASE SETUP v2
--- Run entire script in Supabase SQL Editor
--- Safe to re-run — uses IF NOT EXISTS and ON CONFLICT DO NOTHING
--- ============================================================
-
 -- PROFILES
 create table if not exists public.profiles (
   id uuid references auth.users on delete cascade primary key,
@@ -641,7 +635,7 @@ alter table public.check_vouchers add column if not exists check_rows jsonb defa
 --   font_size_date, font_size_payee, font_size_amount, font_size_words,
 --   is_default
 -- ) values (
---   'Security Bank Corp', 'Dragon Speed Trucking Corporation', '000-059838-392', 'Lapu Lapu Branch',
+--   'Security Bank Corp', '[BANK NAME]', '[ACCOUNT NUMBER]', '[BRANCH]',
 --   203.2, 76.2,
 --   145, 18,
 --   28, 35,
