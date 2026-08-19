@@ -444,7 +444,7 @@ export default function Dashboard() {
                 <span className={`badge ${t._type === 'dump' ? 'badge-dump' : 'badge-prime'}`} style={{ fontSize: 10, minWidth: 58, justifyContent: 'center' }}>{t.truck_plate}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {t._type === 'dump' ? `${t.route}` : `${t.trip_code} · ${t.container_size}`}
+                    {t._type === 'dump' ? `${t.route}` : (t.driver_name || t.van_number ? `${t.trip_code}` : `${t.trip_code} · ${t.container_size}`)}
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDate(t.trip_date)}</div>
                 </div>

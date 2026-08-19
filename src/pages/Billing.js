@@ -1083,6 +1083,60 @@ export default function Billing() {
       r++ // spacer between sections
     })
 
+    // Generic Van trips — any trip_code not in the 3 built-in codes (covers
+    // both custom trip codes for van clients and any unexpected code, so
+    // nothing invoiced ever silently disappears from the printed SOA).
+    const vanTrips = tripsData.filter(t => !codes.includes(t.trip_code))
+    if (vanTrips.length > 0) {
+      const VAN_EXTRA = ['DRIVER','VAN NO. / VESSEL','DESTINATION','TOLL TICKET','TOLL SCALE','RATE']
+      const vanTotalUsedCols = 3 + VAN_EXTRA.length
+
+      ws.mergeCells(r,1,r,COLS)
+      const vTitleCell = ws.getCell(r,1)
+      vTitleCell.value = (vanTrips[0].trip_code || 'VAN TRIPS').toUpperCase()
+      vTitleCell.font = { bold:true, color:{argb:'FFFFFFFF'}, size:8.5 }
+      vTitleCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF333333'} }
+      vTitleCell.alignment = { vertical:'middle' }
+      r++
+
+      const vHeaderRow = r
+      headerCell(ws.getCell(vHeaderRow,1), 'TRANSACTION DATE')
+      headerCell(ws.getCell(vHeaderRow,2), 'TRUCK PLATE')
+      headerCell(ws.getCell(vHeaderRow,3), 'TRIP CODE')
+      VAN_EXTRA.forEach((label,i) => headerCell(ws.getCell(vHeaderRow,4+i), label))
+      ws.getRow(vHeaderRow).height = 26
+      r++
+
+      const vanTotal = vanTrips.reduce((s,t) => s + (parseFloat(t.supplier_amount)||0), 0)
+      vanTrips.forEach((t, i) => {
+        const bg = i % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2'
+        const row = ws.getRow(r)
+        dataCell(row.getCell(1), fmtDate(t.trip_date).toUpperCase(), bg)
+        dataCell(row.getCell(2), t.truck_plate, bg, {bold:true})
+        dataCell(row.getCell(3), t.trip_code, bg)
+        dataCell(row.getCell(4), t.driver_name||'—', bg)
+        dataCell(row.getCell(5), t.van_number||'—', bg)
+        dataCell(row.getCell(6), t.destination||'—', bg)
+        dataCell(row.getCell(7), t.toll_ticket||'—', bg)
+        dataCell(row.getCell(8), t.toll_scale||'—', bg)
+        dataCell(row.getCell(9), parseFloat(t.supplier_amount)||0, bg, {align:'right', numFmt:'#,##0.00'})
+        r++
+      })
+
+      const vTotalRow = r
+      const vGrayFill = 'FFF5F5F5'
+      ws.mergeCells(vTotalRow,1,vTotalRow,vanTotalUsedCols-1)
+      const vlc = ws.getCell(vTotalRow,1)
+      vlc.value = 'TOTAL'; vlc.font = { bold:true, size:9 }; vlc.alignment = { horizontal:'right' }
+      vlc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:vGrayFill} }; vlc.border = allBorders
+      const vvc = ws.getCell(vTotalRow,vanTotalUsedCols)
+      vvc.value = vanTotal; vvc.numFmt = '#,##0.00'; vvc.font = { bold:true, size:9 }
+      vvc.alignment = { horizontal:'right' }
+      vvc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:vGrayFill} }; vvc.border = allBorders
+      r++
+      r++
+    }
+
     // ── Amount in words + GRAND TOTAL / VATABLE / 12% VAT / TOTAL AMOUNT / TWAS / NET AMOUNT ──
     const totalsStartRow = r
     ws.mergeCells(r,1,r+5,9)
@@ -1772,6 +1826,44 @@ export default function Billing() {
             </div>
           )
         })}
+        {(() => {
+          const vanTrips = trips.filter(t => !codes.includes(t.trip_code))
+          if (vanTrips.length === 0) return null
+          const vanTotal = vanTrips.reduce((s,t) => s + (parseFloat(t.supplier_amount)||0), 0)
+          const vanCols = ['DATE','TRUCK PLATE','TRIP CODE','DRIVER','VAN NO. / VESSEL','DESTINATION','TOLL TICKET','TOLL SCALE','RATE']
+          return (
+            <div style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 8.5, fontWeight: 'bold', background: '#333', color: '#fff', padding: '1px 4px', marginBottom: 2 }}>{(vanTrips[0].trip_code || 'VAN TRIPS').toUpperCase()}</div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <thead><tr>{vanCols.map(c => <th key={c} style={thS}>{c}</th>)}</tr></thead>
+                <tbody>
+                  {vanTrips.map((t, i) => {
+                    const bg = i % 2 === 0 ? '#fff' : '#f2f2f2'
+                    return (
+                      <tr key={t.id}>
+                        <td style={{...tdS,background:bg}}>{fmtDate(t.trip_date).toUpperCase()}</td>
+                        <td style={{...tdS,background:bg,fontWeight:'bold'}}>{t.truck_plate}</td>
+                        <td style={{...tdS,background:bg}}>{t.trip_code}</td>
+                        <td style={{...tdS,background:bg}}>{t.driver_name||'—'}</td>
+                        <td style={{...tdS,background:bg}}>{t.van_number||'—'}</td>
+                        <td style={{...tdS,background:bg}}>{t.destination||'—'}</td>
+                        <td style={{...tdS,background:bg}}>{t.toll_ticket||'—'}</td>
+                        <td style={{...tdS,background:bg}}>{t.toll_scale||'—'}</td>
+                        <td style={{...tdS,background:bg,textAlign:'right'}}>{fmt(parseFloat(t.supplier_amount)||0)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={8} style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>TOTAL</td>
+                    <td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(vanTotal)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )
+        })()}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 4, gap: 12 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: '9.5px', fontStyle: 'italic', fontWeight: 'bold', lineHeight: 1.7, textTransform: 'uppercase' }}>{numberToWords(netAmount).toUpperCase()}</div>
