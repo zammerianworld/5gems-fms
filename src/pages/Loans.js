@@ -111,7 +111,7 @@ export default function Loans() {
     doc.setFontSize(13); doc.setFont(undefined,'bold')
     doc.text((loanSettings.company_name||'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 12, {align:'center'})
     doc.setFontSize(8); doc.setFont(undefined,'normal')
-    if (loanSettings.vat_tin) doc.text(`VAT REG. TIN: ${loanSettings.vat_tin}`, W/2, 17, {align:'center'})
+    if (loanSettings.vat_tin) doc.text(`TIN: ${loanSettings.vat_tin}`, W/2, 17, {align:'center'})
     if (loanSettings.address) doc.text(loanSettings.address, W/2, 21, {align:'center'})
     const contact = [loanSettings.contact, loanSettings.email].filter(Boolean).join(' / ')
     if (contact) doc.text(contact, W/2, 25, {align:'center'})

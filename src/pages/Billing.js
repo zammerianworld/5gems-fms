@@ -656,7 +656,7 @@ export default function Billing() {
 
     let r = 1
     mergeRow(r, companyName, { bold:true, size:13 }); r++
-    if (settings.vat_tin) { mergeRow(r, `VAT REG.TIN: ${settings.vat_tin}`, { size:8 }); r++ }
+    if (settings.vat_tin) { mergeRow(r, `TIN: ${settings.vat_tin}`, { size:8 }); r++ }
     if (settings.address) { mergeRow(r, `ADDRESS: ${settings.address.toUpperCase()}`, { size:8 }); r++ }
     if (settings.contact) { mergeRow(r, `CONTACT INFO: ${settings.contact}${settings.email?' / '+settings.email:''}`, { size:8 }); r++ }
     mergeRow(r, 'STATEMENT OF ACCOUNTS', { bold:true, size:11, border:{ bottom:{style:'medium', color:{argb:'FF000000'}} } }); r++
@@ -865,7 +865,7 @@ export default function Billing() {
 
     let r = 1
     mergeRow(r, companyName, { bold:true, size:13 }); r++
-    if (settings.vat_tin) { mergeRow(r, `VAT REG.TIN: ${settings.vat_tin}`, { size:8 }); r++ }
+    if (settings.vat_tin) { mergeRow(r, `TIN: ${settings.vat_tin}`, { size:8 }); r++ }
     if (settings.address) { mergeRow(r, `ADDRESS: ${settings.address.toUpperCase()}`, { size:8 }); r++ }
     if (settings.contact) { mergeRow(r, `CONTACT INFO: ${settings.contact}${settings.email?' / '+settings.email:''}`, { size:8 }); r++ }
     mergeRow(r, 'STATEMENT OF ACCOUNTS', { bold:true, size:11, border:{ bottom:{style:'medium', color:{argb:'FF000000'}} } }); r++
@@ -1430,7 +1430,7 @@ export default function Billing() {
       let y = 10
       doc.setFontSize(12); doc.setFont(undefined,'bold'); doc.text(companyName,W/2,y,{align:'center'}); y+=5
       doc.setFontSize(7); doc.setFont(undefined,'normal')
-      if (settings.vat_tin) { doc.text(`VAT REG. TIN: ${settings.vat_tin}`,W/2,y,{align:'center'}); y+=4 }
+      if (settings.vat_tin) { doc.text(`TIN: ${settings.vat_tin}`,W/2,y,{align:'center'}); y+=4 }
       if (settings.address) { doc.text(settings.address.toUpperCase(),W/2,y,{align:'center'}); y+=4 }
       if (settings.contact) { doc.text(`${settings.contact}${settings.email?' / '+settings.email:''}`,W/2,y,{align:'center'}); y+=4 }
       doc.setDrawColor(180); doc.line(14,y,W-14,y); y+=5
@@ -1494,7 +1494,7 @@ export default function Billing() {
     ws.getCell(r,1).font = { bold:true, size:13 }
     ws.getCell(r,1).alignment = { horizontal:'center' }
     r++
-    if (settings.vat_tin) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`VAT REG.TIN: ${settings.vat_tin}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
+    if (settings.vat_tin) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`TIN: ${settings.vat_tin}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     if (settings.address) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`ADDRESS: ${settings.address.toUpperCase()}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     if (settings.contact) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`CONTACT INFO: ${settings.contact}${settings.email?' / '+settings.email:''}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     ws.mergeCells(r,1,r,COLS)
@@ -1650,7 +1650,7 @@ export default function Billing() {
       <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5px', color: '#000', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1.5px solid #000' }}>
           <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()}</div>
-          {settings.vat_tin && <div style={{ fontSize: 9 }}>VAT REG.TIN: {settings.vat_tin}</div>}
+          {settings.vat_tin && <div style={{ fontSize: 9 }}>TIN: {settings.vat_tin}</div>}
           {settings.address && <div style={{ fontSize: 9 }}>ADDRESS: {settings.address.toUpperCase()}</div>}
           {settings.contact && <div style={{ fontSize: 9 }}>CONTACT INFO: {settings.contact}{settings.email ? ` / ${settings.email}` : ''}</div>}
           <div style={{ fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', marginTop: 3 }}>STATEMENT OF ACCOUNTS</div>
@@ -1779,7 +1779,7 @@ export default function Billing() {
       <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '9.5px', color: '#000', width: '100%' }}>
         <div style={{ textAlign: 'center', marginBottom: 4, paddingBottom: 4, borderBottom: '1.5px solid #000' }}>
           <div style={{ fontSize: 13, fontWeight: 'bold', textTransform: 'uppercase' }}>{(settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase()}</div>
-          {settings.vat_tin && <div style={{ fontSize: 9 }}>VAT REG.TIN: {settings.vat_tin}</div>}
+          {settings.vat_tin && <div style={{ fontSize: 9 }}>TIN: {settings.vat_tin}</div>}
           {settings.address && <div style={{ fontSize: 9 }}>ADDRESS: {settings.address.toUpperCase()}</div>}
           {settings.contact && <div style={{ fontSize: 9 }}>CONTACT INFO: {settings.contact}{settings.email ? ` / ${settings.email}` : ''}</div>}
           <div style={{ fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase', marginTop: 3 }}>STATEMENT OF ACCOUNTS</div>

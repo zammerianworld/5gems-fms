@@ -279,7 +279,7 @@ export default function Settings() {
                 </div>
               </div>
               <F label="Company Name" value={settings.company_name} onChange={v => setSettings(s => ({ ...s, company_name: v }))} span={2} />
-              <F label="VAT Registration TIN" value={settings.vat_tin} onChange={v => setSettings(s => ({ ...s, vat_tin: v }))} placeholder="000-190-742-00001 VAT" />
+              <F label="TIN" value={settings.vat_tin} onChange={v => setSettings(s => ({ ...s, vat_tin: v }))} placeholder="000-190-742-00001" />
               <F label="Contact Number" value={settings.contact} onChange={v => setSettings(s => ({ ...s, contact: v }))} />
               <F label="Email Address" value={settings.email} onChange={v => setSettings(s => ({ ...s, email: v }))} type="email" span={2} />
             </div>

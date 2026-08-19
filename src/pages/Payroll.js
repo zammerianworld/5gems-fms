@@ -661,7 +661,7 @@ export default function Payroll() {
         ${logo ? `<img src="${logo}" class="logo" alt="logo" />` : ''}
         <div>
           <div class="company-name">${companyName}</div>
-          ${settings.vat_tin ? `<div class="company-sub">VAT REG. TIN: ${settings.vat_tin}</div>` : ''}
+          ${settings.vat_tin ? `<div class="company-sub">TIN: ${settings.vat_tin}</div>` : ''}
           ${settings.address ? `<div class="company-sub">${settings.address.toUpperCase()}</div>` : ''}
           ${settings.contact ? `<div class="company-sub">${settings.contact}${settings.email ? ' / ' + settings.email : ''}</div>` : ''}
         </div>
@@ -1905,7 +1905,7 @@ function PrintPayroll({ entries, sigs = [], selectedCutoff, calcEarnings, calcDe
       <div style={S.companyName}>{companyName}</div>
       {address && <div style={S.companyInfo}>{address}</div>}
       {(contact || email) && <div style={S.companyInfo}>{[contact, email].filter(Boolean).join(' | ')}</div>}
-      {vatTin && <div style={S.companyInfo}>VAT REG. TIN: {vatTin}</div>}
+      {vatTin && <div style={S.companyInfo}>TIN: {vatTin}</div>}
 
       <div style={S.docTitle}>PAYROLL</div>
       <div style={S.period}>For the period: <strong>{periodLabel}</strong></div>

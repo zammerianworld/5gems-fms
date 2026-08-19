@@ -325,7 +325,7 @@ export default function SubconTrips() {
     ws.getCell(r,1).font = { bold:true, size:13 }
     ws.getCell(r,1).alignment = { horizontal:'center' }
     r++
-    if (settings.vat_tin) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`VAT REG.TIN: ${settings.vat_tin}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
+    if (settings.vat_tin) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`TIN: ${settings.vat_tin}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     if (settings.address) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`ADDRESS: ${settings.address.toUpperCase()}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     if (settings.contact) { ws.mergeCells(r,1,r,COLS); ws.getCell(r,1).value=`CONTACT INFO: ${settings.contact}${settings.email?' / '+settings.email:''}`; ws.getCell(r,1).font={size:8}; ws.getCell(r,1).alignment={horizontal:'center'}; r++ }
     ws.mergeCells(r,1,r,COLS)

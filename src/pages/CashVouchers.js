@@ -81,7 +81,7 @@ export default function CashVouchers() {
     doc.setFontSize(13); doc.setFont('helvetica','bold')
     doc.text(companyName, W/2, 18, { align: 'center' })
     doc.setFontSize(8); doc.setFont('helvetica','normal')
-    if (settings.vat_tin) doc.text(`VAT REG.TIN: ${settings.vat_tin}`, W/2, 23, { align: 'center' })
+    if (settings.vat_tin) doc.text(`TIN: ${settings.vat_tin}`, W/2, 23, { align: 'center' })
     if (settings.address) doc.text(`ADDRESS: ${settings.address.toUpperCase()}`, W/2, 27, { align: 'center' })
     if (settings.contact) doc.text(`${settings.contact}${settings.email?' / '+settings.email:''}`, W/2, 31, { align: 'center' })
 
