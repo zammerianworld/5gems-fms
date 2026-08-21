@@ -27,6 +27,7 @@ import CashVouchers from './pages/CashVouchers'
 import HistoricalData from './pages/HistoricalData'
 import Trash from './pages/Trash'
 import Payroll from './pages/Payroll'
+import Employees from './pages/Employees'
 import HowTo from './pages/HowTo'
 import MyTrips from './pages/MyTrips'
 import './index.css'
@@ -79,6 +80,7 @@ function AppRoutes() {
       <Route path="/historical" element={<ProtectedRoute adminOnly moduleKey="historical"><HistoricalData /></ProtectedRoute>} />
       <Route path="/trash" element={<ProtectedRoute adminOnly moduleKey="trash"><Trash /></ProtectedRoute>} />
       <Route path="/payroll" element={<ProtectedRoute adminOnly moduleKey="payroll"><Payroll /></ProtectedRoute>} />
+      <Route path="/employees" element={<ProtectedRoute adminOnly moduleKey="payroll"><Employees /></ProtectedRoute>} />
       <Route path="/how-to" element={<ProtectedRoute moduleKey="how_to"><HowTo /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

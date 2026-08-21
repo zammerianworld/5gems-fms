@@ -29,7 +29,7 @@ export default function Settings() {
   const [appBeta, setAppBeta] = useState(true)
   const [appBetaLabel, setAppBetaLabel] = useState('BETA — Testing Phase')
   const [versionSaving, setVersionSaving] = useState(false)
-  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Drivers', 'Clientele', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Clientele', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
   const [legalDoc, setLegalDoc] = useState('eula')
   const [tab, setTab] = useState('Company Info')
   const [confirmState, setConfirmState] = useState(null)
@@ -63,9 +63,6 @@ export default function Settings() {
   const [newSig, setNewSig] = useState({ full_name: '', title: '', is_default_prepared: false, is_default_approved: false })
   const [editingSig, setEditingSig] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [drivers, setDrivers] = useState([])
-  const [newDriver, setNewDriver] = useState({ driver_name: '', truck_id: '', notes: '' })
-  const [editingDriver, setEditingDriver] = useState(null)
   const [newTruck, setNewTruck] = useState(EMPTY_NEW_TRUCK)
   const [newClient, setNewClient] = useState({ nickname: '', full_name: '', address: '', tin: '', contact: '', trip_style: 'container' })
   const [newCommodity, setNewCommodity] = useState('')
@@ -75,12 +72,11 @@ export default function Settings() {
   useEffect(() => { fetchAll() }, [])
   const fetchAll = async () => {
     setLoading(true)
-    const [s, t, c, co, drv, sig] = await Promise.all([
+    const [s, t, c, co, sig] = await Promise.all([
       supabase.from('company_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('trucks').select('*').order('truck_type').order('plate'),
       supabase.from('clients').select('*').order('nickname'),
       supabase.from('commodities').select('*').order('for_type').order('name'),
-      supabase.from('drivers').select('*').order('driver_name'),
       supabase.from('signatories').select('*').order('sort_order').order('full_name'),
     ])
     if (s.data) {
@@ -96,26 +92,10 @@ export default function Settings() {
     if (rts) setRoutes(rts)
     const { data: tcs } = await supabase.from('saved_pm_trip_codes').select('*').order('label')
     if (tcs) setTripCodes(tcs)
-    if (drv.data) setDrivers(drv.data)
     if (sig.data) setSignatories(sig.data)
     setLoading(false)
   }
   const confirm = (message, onConfirm) => setConfirmState({ title: 'Confirm Removal', variant: 'danger', confirmLabel: 'Remove', message, onConfirm })
-  const addDriver = async () => {
-    if (!newDriver.driver_name) { showToast('Driver name required.', 'error'); return }
-    const { error } = await supabase.from('drivers').insert(newDriver)
-    if (error) showToast('Error: ' + error.message, 'error')
-    else { showToast('Driver added.'); setNewDriver({ driver_name: '', truck_id: '', notes: '' }); fetchAll() }
-  }
-  const saveDriver = async () => {
-    const { error } = await supabase.from('drivers').update(editingDriver).eq('id', editingDriver.id)
-    if (error) showToast('Error: ' + error.message, 'error')
-    else { showToast('Driver updated.'); setEditingDriver(null); fetchAll() }
-  }
-  const deleteDriver = (id, name) => confirm(`Remove driver "${name}"?`, async () => {
-    await supabase.rpc('permanent_delete', { p_table: 'drivers', p_id: id })
-    showToast('Removed.', 'info'); fetchAll()
-  })
   const saveSettings = async () => {
     setSaving(true)
     const { error } = await supabase.from('company_settings')
@@ -488,70 +468,6 @@ export default function Settings() {
                         </div></td>
                       </tr>
                     ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-        {tab === 'Drivers' && (
-          <>
-            <div className="card" style={{ marginBottom: 20 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 14 }}>Add Driver</h2>
-              <div className="form-grid" style={{ marginBottom: 14 }}>
-                <div className="form-group"><label className="label required">Driver Name</label>
-                  <input value={newDriver.driver_name} onChange={e => setNewDriver(d => ({ ...d, driver_name: e.target.value }))} placeholder="Full name" /></div>
-                <div className="form-group"><label className="label">Assigned Truck</label>
-                  <select value={newDriver.truck_id} onChange={e => setNewDriver(d => ({ ...d, truck_id: e.target.value }))}>
-                    <option value="">No specific truck</option>
-                    {trucks.map(t => <option key={t.id} value={t.id}>{t.plate} ({t.truck_type})</option>)}
-                  </select></div>
-                <div className="form-group"><label className="label">Notes</label>
-                  <input value={newDriver.notes} onChange={e => setNewDriver(d => ({ ...d, notes: e.target.value }))} placeholder="Optional notes" /></div>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <button className="btn-primary" onClick={addDriver}>Add Driver</button>
-              </div>
-            </div>
-            {editingDriver && (
-              <div className="card" style={{ marginBottom: 20, border: '1.5px solid var(--accent)' }}>
-                <h2 style={{ fontSize: 14, fontWeight: 500, marginBottom: 14 }}>Editing: {editingDriver.driver_name}</h2>
-                <div className="form-grid" style={{ marginBottom: 14 }}>
-                  <div className="form-group"><label className="label">Name</label>
-                    <input value={editingDriver.driver_name} onChange={e => setEditingDriver(d => ({ ...d, driver_name: e.target.value }))} /></div>
-                  <div className="form-group"><label className="label">Assigned Truck</label>
-                    <select value={editingDriver.truck_id || ''} onChange={e => setEditingDriver(d => ({ ...d, truck_id: e.target.value }))}>
-                      <option value="">No specific truck</option>
-                      {trucks.map(t => <option key={t.id} value={t.id}>{t.plate} ({t.truck_type})</option>)}
-                    </select></div>
-                  <div className="form-group"><label className="label">Notes</label>
-                    <input value={editingDriver.notes || ''} onChange={e => setEditingDriver(d => ({ ...d, notes: e.target.value }))} /></div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-                  <button className="btn-ghost" onClick={() => setEditingDriver(null)}>Cancel</button>
-                  <button className="btn-primary" onClick={saveDriver}>Save</button>
-                </div>
-              </div>
-            )}
-            <div className="table-wrap">
-              <table className="table">
-                <thead><tr><th>Driver Name</th><th>Assigned Truck</th><th>Notes</th><th></th></tr></thead>
-                <tbody>
-                  {drivers.length === 0
-                    ? <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>No drivers yet.</td></tr>
-                    : drivers.map(d => {
-                      const truck = trucks.find(t => t.id === d.truck_id)
-                      return (
-                        <tr key={d.id}>
-                          <td style={{ fontWeight: 500 }}>{d.driver_name}</td>
-                          <td>{truck ? <span className={`badge ${truck.truck_type === 'Dump Truck' ? 'badge-dump' : 'badge-prime'}`}>{truck.plate}</span> : <span className="muted">—</span>}</td>
-                          <td className="muted" style={{ fontSize: 12 }}>{d.notes || '—'}</td>
-                          <td><div style={{ display: 'flex', gap: 4 }}>
-                            <button className="btn-ghost btn-sm" onClick={() => setEditingDriver(d)}>Edit</button>
-                            <button className="btn-danger btn-sm" onClick={() => deleteDriver(d.id, d.driver_name)}>Remove</button>
-                          </div></td>
-                        </tr>
-                      )
-                    })}
                 </tbody>
               </table>
             </div>

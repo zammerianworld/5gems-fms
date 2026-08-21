@@ -315,105 +315,84 @@ const GUIDES = [
   {
     id: 'payroll',
     icon: '💼',
-    title: 'Payroll',
+    title: 'Employees',
     roles: ['admin', 'superuser'],
     sections: [
       {
         heading: 'Overview',
         content: [
-          { type: 'text', text: 'Payroll is semi-monthly with cutoffs on the 15th and last day of each month. It has five tabs: Payroll Register, Employees, Cash Advances, 13th Month, and Payslip.' },
+          { type: 'text', text: 'Employees has 4 top-level tabs: Admin, Support, Drivers, and Cash Advances. Admin and Support use the familiar semi-monthly Payroll Register (cutoffs on the 15th and last day of the month). Drivers use a completely different, trip-based payroll engine — pay is swept directly from actual logged trips rather than a fixed salary.' },
+          { type: 'note', text: 'The old standalone Payroll page still exists at a direct link for reference, but Employees is now the actively used module — all new payroll work should happen here.' },
         ],
       },
       {
-        heading: 'Setting Up Employees',
+        heading: 'Admin & Support — Employees and Payroll Register',
         content: [
           { type: 'steps', items: [
-            'Go to Payroll → Employees tab.',
-            'Click + Add Employee and fill in: Full Name, Position, Monthly Basic Rate, Monthly Allowance, and monthly SSS/PhilHealth/HDMF employee shares.',
-            'Save. The employee will appear in the dropdown when adding payroll entries.',
+            'Go to Employees → Admin or Support tab, click + Add Employee.',
+            'Fill in Full Name, Position, Monthly Basic Rate, Monthly Allowance, and monthly SSS/PhilHealth/HDMF employee shares.',
+            'To add a payroll entry: select the cutoff period, click + Add Entry, select the employee — with Auto-calculate on, Basic Salary/Allowance/premiums fill in automatically.',
+            'Adjust OT Hours, Rest Day Duty, Salary Adjustment, and Cash Advance Deduction as needed. OT Pay auto-computes as OT Hours × OT Rate as you type, and can still be overridden manually.',
+            'The live preview shows Earnings / Deductions / Net Pay before saving.',
+          ]},
+          { type: 'note', text: 'A 📋 Copy → [next cutoff] button appears once a cutoff has entries — duplicates everything to the next period, zeroing out one-time items (OT, rest day, salary adjustment, CA deduction) while carrying over standard items (basic salary, premiums, loans).' },
+        ],
+      },
+      {
+        heading: 'Drivers — Roster, Rates, Loans, and Contribution Brackets',
+        content: [
+          { type: 'text', text: 'Everything about a driver as a person and how they get paid lives in Employees → Drivers, in 5 sub-tabs.' },
+          { type: 'table', rows: [
+            ['Sub-tab', 'What it does'],
+            ['📋 Payroll Register', 'The actual trip-sweep computation for a chosen cutoff period — see below.'],
+            ['🚛 Roster', 'Add/edit drivers: name, assigned truck, SSS/PhilHealth/HDMF numbers, hire date, default pay type (fixed or percentage) and rate.'],
+            ['💰 Rates', 'Optional per-route or per-trip-code pay rules — lets one driver be fixed-rate on some routes and percentage-based on others. A blank route/trip code row is that driver\'s catch-all default.'],
+            ['🏦 Loans', 'SSS, HDMF (Pag-ibig), or company loans — principal, amortization per cutoff, and running balance, deducted automatically once a payroll entry is locked.'],
+            ['⚙️ Contribution Brackets', 'The SSS/PhilHealth/HDMF salary-bracket tables used to compute government contribution deductions — editable in-app, empty until real figures are entered.'],
           ]},
         ],
       },
       {
-        heading: 'Adding a Payroll Entry',
+        heading: 'Computing a Driver\'s Payroll for a Cutoff',
         content: [
           { type: 'steps', items: [
-            'Select the cutoff period from the dropdown (e.g. May 2026 (16–31)).',
-            'Click + Add Entry.',
-            'Select the employee. With Auto-calculate toggled on, Basic Salary, Allowance, and premium deductions fill in automatically from the employee record.',
-            'Adjust OT Hours, Rest Day Duty, Salary Adjustment, and Cash Advance Deduction as needed.',
-            'OT Pay auto-computes as OT Hours × OT Rate as you type — works whether Auto-calculate is on or off, including when editing an existing entry. You can still override OT Pay manually by typing directly into that field.',
-            'The live preview at the bottom shows Earnings / Deductions / Net Pay.',
-            'Click Save Entry.',
+            'Go to Drivers → 📋 Payroll Register, set the period From/To (or pick a previously used coverage from the dropdown).',
+            'Click Compute next to a driver — the system automatically sweeps every trip (Dump and Prime Mover) assigned to that driver that hasn\'t already been paid out in any prior cutoff, regardless of the trip\'s own date.',
+            'Pay per trip is resolved from that driver\'s Rates config (route/trip-code specific rules first, falling back to their roster default) — fixed amount or a percentage of the trip\'s gross.',
+            'Government contributions (SSS/PhilHealth/HDMF) are looked up automatically from the Contribution Brackets against the computed gross.',
+            'Review the trip breakdown, adjust or add an Extra Amount with a reason if needed, set the Cash Advance deduction (available balance is shown), then Save.',
+            'Once you\'re satisfied the cutoff is final, click Lock — this deducts loan amortizations from balances, records the CA deduction, and finalizes the payslip. Locked entries can no longer be edited.',
           ]},
-        ],
-      },
-      {
-        heading: 'Copy to Next Cutoff',
-        content: [
-          { type: 'steps', items: [
-            'Once a cutoff has entries, a 📋 Copy → [next cutoff] button appears in the header.',
-            'Click it to duplicate all entries to the next cutoff.',
-            'One-time items (OT, rest day, salary adjustment, cash advance deduction) are automatically zeroed out.',
-            'Standard items (basic salary, premiums, loans) carry over.',
-            'The system navigates to the new cutoff automatically so you can review and edit.',
-          ]},
+          { type: 'note', text: 'A trip is swept exactly once, ever — even a late-encoded trip from a prior period lands in whichever cutoff is currently open rather than getting lost or requiring you to reopen a closed period.' },
         ],
       },
       {
         heading: 'Cash Advances',
         content: [
           { type: 'steps', items: [
-            'Go to Cash Advances tab.',
-            'Click + Add Record to log a cash advance (↑ Advance) or a manual payment (↓ Payment).',
-            'The running balance is computed automatically in the ledger table.',
-            'Payroll deductions entered in the Payroll Register (Cash Advance Deduction field) are also reflected in the balance.',
-            'Summary cards at the top show Total Advances, Ledger Payments, Payroll Deductions, and Outstanding Balance per employee.',
+            'Go to Employees → Cash Advances — this ledger is shared across Admin, Support, and Drivers.',
+            'Click + Add Record to log a cash advance (↑ Advance) or a manual payment (↓ Payment), selecting either an employee or a driver.',
+            'The running balance is computed automatically, including deductions made through either payroll register (Admin/Support or Drivers).',
           ]},
         ],
       },
       {
-        heading: 'Printing the Payroll Register',
+        heading: '13th Month Pay — Two Separate Systems',
         content: [
+          { type: 'text', text: 'Admin staff keep the existing PD 851 formula system (Total Basic Salary Earned ÷ 12) under Employees → Admin → 13th Month, unchanged from before.' },
+          { type: 'text', text: 'Drivers and Support staff use a different, tenure-tiered system instead — go to the Tenure 13th Month section. Tenure (months employed, as of Dec 31) and tier are shown for reference only. The actual amount is always a direct entry, since that\'s upper management\'s decision, not something a formula should output.' },
           { type: 'steps', items: [
-            'Once entries exist for a cutoff, the 🖨️ Print button appears.',
-            'Click it to open the Signatory Picker — select who Prepared, Noted, and Approved the payroll.',
-            'Click Print. The output is a landscape letter-size register with all columns, CA balance, signatories, and a system-generated timestamp.',
+            'Select the year, then type the amount decided on for each driver/support staff member.',
+            'Click Save (or Update) — the tenure and tier shown alongside are informational only and don\'t drive the number.',
+            'Once paid, click Mark Paid to record the payment date.',
           ]},
         ],
       },
       {
-        heading: '13th Month Pay',
+        heading: 'Payslips',
         content: [
-          { type: 'text', text: 'Computed per PD 851: Total Basic Salary Earned for the year ÷ 12. Go to Payroll → 13th Month and select the year.' },
-          { type: 'table', rows: [
-            ['Cell color', 'Meaning'],
-            ['Green (with tooltip)', 'Auto-computed from Payroll Register entries for that month. Hover to see how many cutoff entries were found (should be 2 per month).'],
-            ['White (editable)', 'No system entries found — type the basic salary earned manually for that month.'],
-          ]},
-          { type: 'steps', items: [
-            'After typing manual values, click 💾 Save Manual Entries.',
-            'Click 🔄 Refresh after making changes in the Payroll Register to recompute the green cells.',
-            'TOTAL EARNED and 13TH MONTH columns update automatically (Total ÷ 12).',
-            'Click 🖨️ Print PDF or 📊 Excel to export — both show all employees × 12 months with totals, matching company letterhead.',
-          ]},
-          { type: 'note', text: 'If a green cell shows "1 entry found" instead of "2", that employee is missing one of the two cutoff entries for that month in the Payroll Register — check and add it there.' },
-        ],
-      },
-      {
-        heading: 'Payslip Generator',
-        content: [
-          { type: 'text', text: 'Generates standalone payslips for employees — primarily for bank loan applications, SSS/Pag-IBIG verification, and other external purposes. Not directly connected to the Payroll Register.' },
-          { type: 'steps', items: [
-            'Go to Payroll → 🧾 Payslip tab.',
-            'Type or select an employee name — all fields auto-fill from the employee record (basic salary, allowance, SSS, PhilHealth, HDMF). All values remain editable.',
-            'Fill in up to 6 cutoff periods. Each card has: Period From, Period To, Pay Date, and individual earnings fields (Basic Salary, Allowance, OT Pay, Rest Day Duty, Holiday Pay, Adjustment, Other).',
-            'Deductions (SSS, PhilHealth, HDMF, loans, CA) are shared across all cutoffs — fill once, applied to every printed payslip.',
-            'Net Pay is computed live per cutoff as you type.',
-            'Click 💾 Save Draft to save for later — drafts are listed at the top and can be loaded, edited, or deleted anytime.',
-            'Click 🖨️ Print Payslip(s) — opens a print preview with 2 payslips per sheet (one per half-page), separated by a dashed cut line. Only cutoffs with data are printed.',
-          ]},
-          { type: 'note', text: 'Payslip drafts are stored in Supabase and accessible to all staff with payroll access. The payslip uses the company logo and full header from Settings.' },
+          { type: 'text', text: 'Drivers get an added Trip Details table above the earnings section on their payslip, showing each trip that was swept into that cutoff. Admin/Support payslips follow the same layout without the trip table.' },
+          { type: 'note', text: 'Payslips print through the Signatory Picker, same as other documents — select who Prepared/Approved before printing.' },
         ],
       },
     ],
@@ -643,7 +622,6 @@ const GUIDES = [
             ['Company Info', 'Company name, address, TIN, contact, email'],
             ['Signatories', 'Add/edit people who sign documents (appears in signatory picker when printing)'],
             ['Trucks', 'Add/edit/deactivate trucks in the fleet'],
-            ['Drivers', 'Add/edit drivers, assign to trucks'],
             ['Clientele', 'Add/edit clients, their billing details, and Prime Mover Trip Entry Style (Container/Port or Generic Van)'],
             ['Commodities', 'Add/edit commodity types used in trip entry'],
             ['Routes', 'Add/remove custom Dump Truck routes — appear in Trip Entry and Manage Trips filter'],

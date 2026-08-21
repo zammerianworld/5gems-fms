@@ -212,7 +212,7 @@ export default function Cashflow() {
       bodyStyles: { fontSize: 8 },
       tableLineColor: [150, 150, 150], tableLineWidth: 0.1,
       margin: { left: 14, right: 14 },
-      foot: [[{ content: 'Total Checks', colSpan: 4, styles: { fontStyle: 'bold' } }, { content: `₱${fmt(totalCashIn)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
+      foot: [[{ content: 'Total Checks', colSpan: 4, styles: { fontStyle: 'bold' } }, { content: `PHP ${fmt(totalCashIn)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
       footStyles: { fillColor: [220, 255, 220], textColor: [0, 0, 0] },
     })
     y = doc.lastAutoTable.finalY + 8
@@ -228,7 +228,7 @@ export default function Cashflow() {
       bodyStyles: { fontSize: 8 },
       tableLineColor: [150, 150, 150], tableLineWidth: 0.1,
       margin: { left: 14, right: 14 },
-      foot: [[{ content: 'Total Checks', colSpan: 3, styles: { fontStyle: 'bold' } }, { content: `₱${fmt(totalChecks)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
+      foot: [[{ content: 'Total Checks', colSpan: 3, styles: { fontStyle: 'bold' } }, { content: `PHP ${fmt(totalChecks)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
       footStyles: { fillColor: [255, 220, 220], textColor: [0, 0, 0] },
     })
     y = doc.lastAutoTable.finalY + 8
@@ -248,7 +248,7 @@ export default function Cashflow() {
       bodyStyles: { fontSize: 8 },
       tableLineColor: [150, 150, 150], tableLineWidth: 0.1,
       margin: { left: 14, right: 14 },
-      foot: [[{ content: 'Total Fixed', colSpan: 3, styles: { fontStyle: 'bold' } }, { content: `₱${fmt(totalAmort + totalIns)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
+      foot: [[{ content: 'Total Fixed', colSpan: 3, styles: { fontStyle: 'bold' } }, { content: `PHP ${fmt(totalAmort + totalIns)}`, styles: { fontStyle: 'bold', halign: 'right' } }]],
       footStyles: { fillColor: [255, 220, 220], textColor: [0, 0, 0] },
     })
     y = doc.lastAutoTable.finalY + 10
@@ -256,11 +256,11 @@ export default function Cashflow() {
     // Summary
     doc.setFontSize(9); doc.setFont('helvetica', 'normal'); doc.setTextColor(0)
     const summaryRows = [
-      ['Total Cash In', `₱${fmt(totalCashIn)}`],
-      ['Total Cash Out (Checks)', `₱${fmt(totalChecks)}`],
-      ['Total Fixed Obligations', `₱${fmt(totalAmort + totalIns)}`],
-      ['TOTAL CASH OUT', `₱${fmt(totalCashOut)}`],
-      ['NET CASHFLOW', `${netCashflow >= 0 ? '+' : ''}₱${fmt(netCashflow)}`],
+      ['Total Cash In', `PHP ${fmt(totalCashIn)}`],
+      ['Total Cash Out (Checks)', `PHP ${fmt(totalChecks)}`],
+      ['Total Fixed Obligations', `PHP ${fmt(totalAmort + totalIns)}`],
+      ['TOTAL CASH OUT', `PHP ${fmt(totalCashOut)}`],
+      ['NET CASHFLOW', `${netCashflow >= 0 ? '+' : ''}PHP ${fmt(netCashflow)}`],
     ]
     autoTable(doc, {
       startY: y,

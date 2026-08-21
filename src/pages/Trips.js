@@ -14,7 +14,7 @@ const EMPTY_DUMP = {
   island_zone_origin: 'MIN', island_origin_code: '',
   island_zone_dest: 'MIN', island_dest_code: '',
   weight_tons: '', rmsd_smfi_saf_dr: '', sto_no: '',
-  rate_per_ton: '', remarks: '',
+  rate_per_ton: '', remarks: '', driver_id: '',
 }
 
 // Container defaults per trip code
@@ -45,6 +45,9 @@ const EMPTY_PM = {
   // still get populated from `rate` at save time, so all existing billing math
   // elsewhere in the app keeps working unchanged.
   driver_name: '', van_number: '', destination: '', toll_ticket: '', toll_scale: '', rate: '',
+  // driver_id (FK to drivers, for payroll trip-sweep) is a separate concept
+  // from driver_name above (free-typed, shown on the van SOA) — both coexist.
+  driver_id: '',
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -128,6 +131,7 @@ export default function Trips() {
   const [filterRoute, setFilterRoute] = useState('')
   const [savedRoutes, setSavedRoutes] = useState([])
   const [tripCodes, setTripCodes] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [filterCommodity, setFilterCommodity] = useState('')
   const [filterTruck, setFilterTruck] = useState('')
   const [filterPayStatus, setFilterPayStatus] = useState('') // '' | 'unbilled' | 'invoiced' | 'paid'
@@ -154,7 +158,7 @@ export default function Trips() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [dt, pt, tr, cl, co, inv, rts, tcs] = await Promise.all([
+    const [dt, pt, tr, cl, co, inv, rts, tcs, dv] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       supabase.from('trucks').select('*').order('truck_type').order('plate'),
@@ -163,6 +167,7 @@ export default function Trips() {
       fetchAllRows(() => supabase.from('invoices').select('id,invoice_no,status,date_credited').is('deleted_at', null)),
       supabase.from('saved_routes').select('label').order('label'),
       supabase.from('saved_pm_trip_codes').select('label').order('label'),
+      supabase.from('drivers').select('id,driver_name,truck_id').eq('active', true).order('driver_name'),
     ])
     if (dt.data) {
       setDumpTrips(dt.data)
@@ -177,6 +182,7 @@ export default function Trips() {
     // savedRates removed — rates now derived from trip history
     if (rts.data) setSavedRoutes(rts.data.map(r => r.label))
     if (tcs.data) setTripCodes(tcs.data.map(c => c.label))
+    if (dv.data) setDrivers(dv.data)
     if (inv.data) {
       setInvoiceMap(Object.fromEntries(inv.data.map(i => [i.id, i.invoice_no])))
       setInvoiceInfo(Object.fromEntries(inv.data.map(i => [i.id, i])))
@@ -258,7 +264,7 @@ export default function Trips() {
 
     const proceedSaveDump = async () => {
       setSaving(true)
-      const payload = { ...f, weight_tons: parseFloat(f.weight_tons) || 0, rate_per_ton: parseFloat(f.rate_per_ton) || 0, created_by: profile?.id }
+      const payload = { ...f, weight_tons: parseFloat(f.weight_tons) || 0, rate_per_ton: parseFloat(f.rate_per_ton) || 0, driver_id: f.driver_id || null, created_by: profile?.id }
       let error
       if (editId) ({ error } = await supabase.from('trips_dump').update(payload).eq('id', editId))
       else ({ error } = await supabase.from('trips_dump').insert(payload))
@@ -344,6 +350,7 @@ export default function Trips() {
             stripping_fee: 0,
             emr_date: null,
             date_completion: null,
+            driver_id: f.driver_id || null,
             created_by: profile?.id,
           }
         : {
@@ -352,6 +359,7 @@ export default function Trips() {
             stripping_fee: (f.containers || []).reduce((s, c) => s + (parseFloat(c.stripping_fee) || 0), 0),
             emr_date: f.emr_date || null,
             date_completion: f.date_completion || null,
+            driver_id: f.driver_id || null,
             created_by: profile?.id,
           }
       let error
@@ -745,9 +753,15 @@ export default function Trips() {
           <p className="section-label">Trip Info</p>
           <div className="form-grid" style={{ marginBottom: 16 }}>
             <SF label="Transaction / Trip Date" value={dumpForm.trip_date} onChange={v => setDumpForm(f => ({ ...f, trip_date: v }))} req type="date" />
-            <SS label="Truck Plate" value={dumpForm.truck_plate} onChange={v => setDumpForm(f => ({ ...f, truck_plate: v }))} req
+            <SS label="Truck Plate" value={dumpForm.truck_plate} onChange={v => {
+                const match = drivers.find(d => d.truck_id === trucks.find(t => t.plate === v)?.id)
+                setDumpForm(f => ({ ...f, truck_plate: v, driver_id: match?.id || '' }))
+              }} req
               options={dumpTrucks.map(t => ({ value: t.plate, label: t.plate + (t.truck_code ? ' (' + t.truck_code + ')' : '') }))}
               placeholder={dumpTrucks.length === 0 ? 'Add trucks in Settings first' : 'Select truck plate'} />
+            <SS label="Driver" value={dumpForm.driver_id} onChange={v => setDumpForm(f => ({ ...f, driver_id: v }))}
+              options={drivers.map(d => ({ value: d.id, label: d.driver_name }))}
+              placeholder="Defaults to truck's assigned driver — change if relief driving" />
             {(() => {
               const allRoutes = [...new Set([...DUMP_TRUCK_ROUTES, ...savedRoutes])].sort()
               return <SS label="Route" value={dumpForm.route} onChange={v => setDumpForm(f => ({ ...f, route: v }))} req options={allRoutes} placeholder="Select route" />
@@ -845,9 +859,15 @@ export default function Trips() {
           <p className="section-label">Trip Info</p>
           <div className="form-grid" style={{ marginBottom: 16 }}>
             <SF label="Transaction / Trip Date" value={pmForm.trip_date} onChange={v => setPmForm(f => ({ ...f, trip_date: v }))} req type="date" />
-            <SS label="Truck Plate" value={pmForm.truck_plate} onChange={v => setPmForm(f => ({ ...f, truck_plate: v }))} req
+            <SS label="Truck Plate" value={pmForm.truck_plate} onChange={v => {
+                const match = drivers.find(d => d.truck_id === trucks.find(t => t.plate === v)?.id)
+                setPmForm(f => ({ ...f, truck_plate: v, driver_id: match?.id || '', driver_name: f.driver_name || match?.driver_name || '' }))
+              }} req
               options={pmTrucks.map(t => ({ value: t.plate, label: t.plate + (t.truck_code ? ' (' + t.truck_code + ')' : '') }))}
               placeholder={pmTrucks.length === 0 ? 'Add trucks in Settings first' : 'Select truck plate'} />
+            <SS label="Driver" value={pmForm.driver_id} onChange={v => setPmForm(f => ({ ...f, driver_id: v, driver_name: f.driver_name || drivers.find(d => d.id === v)?.driver_name || '' }))}
+              options={drivers.map(d => ({ value: d.id, label: d.driver_name }))}
+              placeholder="Defaults to truck's assigned driver — change if relief driving" />
             <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...PM_TRIP_CODES, ...tripCodes]} placeholder="Select trip code" />
             <div className="form-group">
               <label className="label required">Client

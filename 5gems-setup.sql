@@ -1035,7 +1035,10 @@ declare
     'signatories','print_templates','payslip_drafts',
     'payroll_employees','payroll_entries','company_loans','finances','vouchers',
     'company_loan_payments','payroll_13th_manual','payroll_cash_advances',
-    'pdc_checks','expense_stocks','pin_attempts','historical_payments'
+    'pdc_checks','expense_stocks','pin_attempts','historical_payments',
+    'driver_rates','driver_loans','driver_payroll_entries',
+    'sss_brackets','philhealth_brackets','hdmf_brackets',
+    'tenure_13th_tiers','tenure_13th_month'
   ];
   pname text;
 begin
@@ -1905,3 +1908,237 @@ alter table public.trips_pm add column if not exists rate numeric(12,2) default 
 -- client codes can be added via Settings > PM Trip Codes with no
 -- schema change needed (mirrors how Routes already works).
 alter table public.trips_pm drop constraint if exists trips_pm_trip_code_check;
+-- ============================================================
+-- DRIVER PAYROLL MODULE (ported from DSTC, August 2026)
+-- Trip-based driver payroll: roster, mixed fixed/percentage rates,
+-- loans, government contribution brackets, tenure-tiered 13th month
+-- for Drivers + Support. Reverse-engineered directly from the actual
+-- DSTC application code (Employees.js, DriversPayroll.js,
+-- Tenure13thMonth.js) since the original 3 migration files weren't
+-- included in the deployment zip — every column below is confirmed
+-- by an actual select/insert/update call in that code, not guessed.
+-- Safe to re-run — IF NOT EXISTS / DROP...IF EXISTS throughout.
+-- ============================================================
+
+-- ── Extend existing tables ──────────────────────────────────
+alter table public.drivers add column if not exists sss_no text default '';
+alter table public.drivers add column if not exists philhealth_no text default '';
+alter table public.drivers add column if not exists hdmf_no text default '';
+alter table public.drivers add column if not exists hire_date date;
+alter table public.drivers add column if not exists pay_type text default 'fixed';
+alter table public.drivers add column if not exists percentage_rate numeric default 0;
+
+alter table public.payroll_employees add column if not exists category text default 'admin';
+-- Not yet wired into any UI as of this port — reserved for future use, matches DSTC's live schema.
+alter table public.payroll_employees add column if not exists pay_frequency text default 'monthly';
+
+alter table public.payroll_cash_advances add column if not exists driver_id uuid references public.drivers(id) on delete set null;
+
+alter table public.trips_dump add column if not exists driver_id uuid references public.drivers(id) on delete set null;
+alter table public.trips_pm add column if not exists driver_id uuid references public.drivers(id) on delete set null;
+
+-- ── DRIVER RATES — per driver, optionally scoped to a specific route/trip
+--    code, so one driver can be fixed-rate on some routes and percentage-
+--    based on others. A blank route/trip_code row is the driver's default. ──
+create table if not exists public.driver_rates (
+  id uuid default gen_random_uuid() primary key,
+  driver_id uuid not null references public.drivers(id) on delete cascade,
+  truck_type text not null default 'Dump Truck',
+  route text,
+  trip_code text,
+  pay_type text not null default 'fixed',
+  rate_per_trip numeric default 0,
+  percentage_rate numeric default 0,
+  notes text default ''
+);
+
+-- ── DRIVER LOANS ─────────────────────────────────────────────
+create table if not exists public.driver_loans (
+  id uuid default gen_random_uuid() primary key,
+  driver_id uuid not null references public.drivers(id) on delete cascade,
+  loan_type text not null default 'sss',
+  principal numeric not null default 0,
+  amortization_per_cutoff numeric default 0,
+  balance numeric default 0,
+  date_issued date,
+  description text default '',
+  active boolean default true
+);
+
+-- ── DRIVER PAYROLL ENTRIES — one row per driver per cutoff. trip_breakdown
+--    and loan_deductions are JSON snapshots taken at compute time, so a
+--    later change to a trip's amount or a loan's balance doesn't silently
+--    change a payslip that's already been generated. ──
+create table if not exists public.driver_payroll_entries (
+  id uuid default gen_random_uuid() primary key,
+  driver_id uuid not null references public.drivers(id) on delete cascade,
+  cutoff_date date not null,
+  period_start date,
+  period_end date,
+  trip_breakdown jsonb default '[]'::jsonb,
+  gross_trip_earnings numeric default 0,
+  sss_employee numeric default 0,
+  philhealth_employee numeric default 0,
+  hdmf_employee numeric default 0,
+  contribution_override boolean default false,
+  loan_deductions jsonb default '[]'::jsonb,
+  ca_deduction numeric default 0,
+  extra_amount numeric default 0,
+  extra_reason text default '',
+  net_pay numeric default 0,
+  locked boolean default false,
+  locked_at timestamptz,
+  locked_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz default now(),
+  unique (driver_id, cutoff_date)
+);
+
+-- ── GOVERNMENT CONTRIBUTION BRACKETS — editable in-app, empty until real
+--    figures are entered. SSS stores a flat employee_share; PhilHealth/HDMF
+--    store a rate applied to gross (HDMF additionally supports a peso cap). ──
+create table if not exists public.sss_brackets (
+  id uuid default gen_random_uuid() primary key,
+  min_salary numeric not null default 0,
+  max_salary numeric,
+  employee_share numeric default 0,
+  employer_share numeric default 0
+);
+
+create table if not exists public.philhealth_brackets (
+  id uuid default gen_random_uuid() primary key,
+  min_salary numeric not null default 0,
+  max_salary numeric,
+  employee_rate numeric default 0,
+  employer_rate numeric default 0
+);
+
+create table if not exists public.hdmf_brackets (
+  id uuid default gen_random_uuid() primary key,
+  min_salary numeric not null default 0,
+  max_salary numeric,
+  employee_rate numeric default 0,
+  employer_rate numeric default 0,
+  employee_cap numeric
+);
+
+-- ── TENURE-TIERED 13TH MONTH (Drivers + Support only — Admin's existing
+--    manual system in payroll_13th_manual stays untouched). Tier/tenure
+--    are reference-only display; the actual amount is always a direct
+--    entry, per upper management's decision, never formula-derived. ──
+create table if not exists public.tenure_13th_tiers (
+  id uuid default gen_random_uuid() primary key,
+  sort_order integer default 0,
+  min_months integer not null default 0,
+  max_months integer,
+  tier_key text,
+  tier_label text
+);
+
+create table if not exists public.tenure_13th_month (
+  id uuid default gen_random_uuid() primary key,
+  driver_id uuid references public.drivers(id) on delete cascade,
+  employee_id uuid references public.payroll_employees(id) on delete cascade,
+  year integer not null,
+  tier text,
+  base_amount numeric default 0,
+  final_amount numeric default 0,
+  paid boolean default false,
+  paid_date date,
+  check (driver_id is not null or employee_id is not null)
+);
+
+-- ============================================================
+-- RLS + GRANTS — explicit grants are required, not just RLS policies;
+-- Postgres checks table-level privileges first, so RLS alone isn't
+-- enough (this exact gap was called out from DSTC's own experience
+-- porting this module: a missing grants file caused every write to
+-- these tables to 403 silently).
+-- ============================================================
+alter table public.driver_rates enable row level security;
+alter table public.driver_loans enable row level security;
+alter table public.driver_payroll_entries enable row level security;
+alter table public.sss_brackets enable row level security;
+alter table public.philhealth_brackets enable row level security;
+alter table public.hdmf_brackets enable row level security;
+alter table public.tenure_13th_tiers enable row level security;
+alter table public.tenure_13th_month enable row level security;
+
+grant select, insert, update, delete on public.driver_rates to authenticated, service_role;
+grant select, insert, update, delete on public.driver_loans to authenticated, service_role;
+grant select, insert, update, delete on public.driver_payroll_entries to authenticated, service_role;
+grant select, insert, update, delete on public.sss_brackets to authenticated, service_role;
+grant select, insert, update, delete on public.philhealth_brackets to authenticated, service_role;
+grant select, insert, update, delete on public.hdmf_brackets to authenticated, service_role;
+grant select, insert, update, delete on public.tenure_13th_tiers to authenticated, service_role;
+grant select, insert, update, delete on public.tenure_13th_month to authenticated, service_role;
+
+drop policy if exists "driver_rates_all" on public.driver_rates;
+create policy "driver_rates_all" on public.driver_rates for all using (auth.role() = 'authenticated');
+
+drop policy if exists "driver_loans_all" on public.driver_loans;
+create policy "driver_loans_all" on public.driver_loans for all using (auth.role() = 'authenticated');
+
+drop policy if exists "driver_payroll_entries_all" on public.driver_payroll_entries;
+create policy "driver_payroll_entries_all" on public.driver_payroll_entries for all using (auth.role() = 'authenticated');
+
+drop policy if exists "sss_brackets_all" on public.sss_brackets;
+create policy "sss_brackets_all" on public.sss_brackets for all using (auth.role() = 'authenticated');
+
+drop policy if exists "philhealth_brackets_all" on public.philhealth_brackets;
+create policy "philhealth_brackets_all" on public.philhealth_brackets for all using (auth.role() = 'authenticated');
+
+drop policy if exists "hdmf_brackets_all" on public.hdmf_brackets;
+create policy "hdmf_brackets_all" on public.hdmf_brackets for all using (auth.role() = 'authenticated');
+
+drop policy if exists "tenure_13th_tiers_all" on public.tenure_13th_tiers;
+create policy "tenure_13th_tiers_all" on public.tenure_13th_tiers for all using (auth.role() = 'authenticated');
+
+drop policy if exists "tenure_13th_month_all" on public.tenure_13th_month;
+create policy "tenure_13th_month_all" on public.tenure_13th_month for all using (auth.role() = 'authenticated');
+
+-- ── Wire into permanent_delete (the RPC every delete button in the app uses) ──
+CREATE OR REPLACE FUNCTION public.permanent_delete(p_table text, p_id uuid)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_role text;
+  v_rows int;
+begin
+  select role into v_role from public.profiles where id = auth.uid();
+  if v_role not in ('admin', 'superuser') then
+    raise exception 'Unauthorized: admin or superuser required';
+  end if;
+
+  if p_table = 'trips_dump' then delete from public.trips_dump where id = p_id;
+  elsif p_table = 'trips_pm' then delete from public.trips_pm where id = p_id;
+  elsif p_table = 'invoices' then delete from public.invoices where id = p_id;
+  elsif p_table = 'expenses' then delete from public.expenses where id = p_id;
+  elsif p_table = 'orcr_records' then delete from public.orcr_records where id = p_id;
+  elsif p_table = 'pdc_checks' then delete from public.pdc_checks where id = p_id;
+  elsif p_table = 'clients' then delete from public.clients where id = p_id;
+  elsif p_table = 'extra_income' then delete from public.extra_income where id = p_id;
+  elsif p_table = 'loans' then delete from public.loans where id = p_id;
+  elsif p_table = 'cash_vouchers' then delete from public.cash_vouchers where id = p_id;
+  elsif p_table = 'drivers' then delete from public.drivers where id = p_id;
+  elsif p_table = 'trucks' then delete from public.trucks where id = p_id;
+  elsif p_table = 'commodities' then delete from public.commodities where id = p_id;
+  elsif p_table = 'signatories' then delete from public.signatories where id = p_id;
+  elsif p_table = 'profiles' then delete from public.profiles where id = p_id;
+  elsif p_table = 'check_vouchers' then delete from public.check_vouchers where id = p_id;
+  elsif p_table = 'bank_templates' then delete from public.bank_templates where id = p_id;
+  elsif p_table = 'saved_pm_trip_codes' then delete from public.saved_pm_trip_codes where id = p_id;
+  elsif p_table = 'driver_rates' then delete from public.driver_rates where id = p_id;
+  elsif p_table = 'driver_loans' then delete from public.driver_loans where id = p_id;
+  elsif p_table = 'sss_brackets' then delete from public.sss_brackets where id = p_id;
+  elsif p_table = 'philhealth_brackets' then delete from public.philhealth_brackets where id = p_id;
+  elsif p_table = 'hdmf_brackets' then delete from public.hdmf_brackets where id = p_id;
+  else raise exception 'Invalid table: %', p_table;
+  end if;
+
+  GET DIAGNOSTICS v_rows = ROW_COUNT;
+  return v_rows > 0;
+end;
+$function$;

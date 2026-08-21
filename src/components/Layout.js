@@ -22,7 +22,7 @@ const NAV_FINANCE = [
   { path: '/year-over-year', label: 'Year-over-Year', icon: '📈', moduleKey: 'yoy' },
   { path: '/cashflow', label: 'Cashflow', icon: '💰', moduleKey: 'cashflow' },
   { path: '/vouchers', label: 'Check Vouchers', icon: '🖨️', moduleKey: 'vouchers' },
-  { path: '/payroll', label: 'Payroll', icon: '💼', moduleKey: 'payroll' },
+  { path: '/employees', label: 'Employees', icon: '💼', moduleKey: 'payroll' },
   { path: '/loans', label: 'Loans', icon: '🏦', moduleKey: 'loans' },
   { path: '/extra-income', label: 'Extra Income', icon: '💹', moduleKey: 'extra_income' },
   { path: '/cash-vouchers', label: 'Cash Vouchers', icon: '💵', moduleKey: 'cash_vouchers' },
