@@ -8,7 +8,6 @@ import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
 
 const today = () => new Date().toISOString().slice(0, 10)
-const currentMonth = () => new Date().toISOString().slice(0, 7)
 
 const EMPTY = {
   lender: '', description: '', total_payable: '', term_months: '',
@@ -143,27 +142,6 @@ export default function Loans() {
 
     doc.save(`${loan.borrower}-${mode}-schedule.pdf`)
     showToast('PDF saved.')
-  }
-
-  const handleExportScheduleExcel = (loan, paidList, mode) => {
-    const rows = buildScheduleData(loan, paidList, mode)
-    const title = `${loan.borrower} — ${mode === 'original' ? 'Original' : 'Revised'} Amortization Schedule`
-    const headers = mode === 'original'
-      ? ['#','Sched. Date','Monthly Amort.','Interest','Principal Pmt','Outstanding','Amount Paid','Running Balance','As of']
-      : ['#','Date','Amort.','Interest','Principal','Outstanding','Status']
-    const data = mode === 'original'
-      ? rows.map((r,i) => {
-          let rb = loan.total_collectible - paidList.slice(0,i+1).reduce((s,p)=>s+(p?.amount||0),0)
-          return [r.month, r.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), r.amort, r.interest, r.principal, r.outstanding, r.actual?(r.actual.amount):'', r.actual?Math.max(0,rb):'', r.actual?fmtDate(r.actual.payment_date):'']
-        })
-      : rows.map(r => [r.month, r.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'}), r.amort, r.interest, r.principal, r.outstanding, r.actual?'Paid':r===rows[rows.length-1]?'Final':'Pending'])
-    const ws = XLSX.utils.aoa_to_sheet([[title],[],headers,...data])
-    ws['!merges'] = [{s:{r:0,c:0},e:{r:0,c:headers.length-1}}]
-    ws['!cols'] = headers.map(()=>({wch:16}))
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, mode === 'original' ? 'Original Schedule' : 'Revised Schedule')
-    XLSX.writeFile(wb, `${loan.borrower}-${mode}-schedule.xlsx`)
-    showToast('Excel exported.')
   }
 
   const handleExportBothExcel = (loan, paidList) => {

@@ -539,7 +539,6 @@ export default function SubconTrips() {
     const isLandscape = printOrientation === 'landscape'
     const doc = new jsPDF({ orientation: printOrientation, unit: 'mm', format: 'letter' })
     const W = isLandscape ? 279.4 : 215.9
-    const f2 = (n) => Number(n||0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
     doc.setFontSize(12); doc.setFont('helvetica', 'bold')
     doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 12, { align: 'center' })
     doc.setFontSize(9.5); doc.setFont('helvetica', 'normal')

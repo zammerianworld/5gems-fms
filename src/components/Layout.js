@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import { supabase } from '../lib/supabase'
 import GlobalSearch from './GlobalSearch'
+import ConnectivityIndicator from './ConnectivityIndicator'
 
 // Nav grouped by category
 const NAV_OPERATIONS = [
@@ -16,10 +17,6 @@ const NAV_OPERATIONS = [
 ]
 
 const NAV_FINANCE = [
-  { path: '/reports', label: 'Reports', icon: '📊', moduleKey: 'reports' },
-  { path: '/midyear-report', label: 'Midyear Report', icon: '📋', moduleKey: 'reports' },
-  { path: '/summary', label: 'Overall Summary', icon: '📋', moduleKey: 'summary' },
-  { path: '/year-over-year', label: 'Year-over-Year', icon: '📈', moduleKey: 'yoy' },
   { path: '/cashflow', label: 'Cashflow', icon: '💰', moduleKey: 'cashflow' },
   { path: '/vouchers', label: 'Check Vouchers', icon: '🖨️', moduleKey: 'vouchers' },
   { path: '/employees', label: 'Employees', icon: '💼', moduleKey: 'payroll' },
@@ -27,6 +24,13 @@ const NAV_FINANCE = [
   { path: '/extra-income', label: 'Extra Income', icon: '💹', moduleKey: 'extra_income' },
   { path: '/cash-vouchers', label: 'Cash Vouchers', icon: '💵', moduleKey: 'cash_vouchers' },
   { path: '/historical', label: 'Historical Data', icon: '📅', moduleKey: 'historical' },
+]
+
+const NAV_REPORTS = [
+  { path: '/reports', label: 'Reports', icon: '📊', moduleKey: 'reports' },
+  { path: '/midyear-report', label: 'Midyear Report', icon: '📋', moduleKey: 'reports' },
+  { path: '/summary', label: 'Overall Summary', icon: '📋', moduleKey: 'summary' },
+  { path: '/year-over-year', label: 'Year-over-Year', icon: '📈', moduleKey: 'yoy' },
 ]
 
 const NAV_SYSTEM = [
@@ -41,7 +45,7 @@ const NAV_SYSTEM = [
 
 // Keep for compatibility
 const NAV_STAFF = NAV_OPERATIONS
-const NAV_ADMIN = NAV_FINANCE
+const NAV_ADMIN = [...NAV_FINANCE, ...NAV_REPORTS]
 const NAV_SUPERUSER = []
 
 export default function Layout({ children }) {
@@ -172,8 +176,12 @@ export default function Layout({ children }) {
 
           {/* Finance — admin + superuser */}
           {isAdmin && (<>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }}>Finance & Reports</div>
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }}>Finance</div>
             {NAV_FINANCE.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
+              <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
+            ))}
+            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }}>Reports</div>
+            {NAV_REPORTS.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
               <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
             ))}
           </>)}
@@ -208,7 +216,7 @@ export default function Layout({ children }) {
         </nav>
 
         {/* Mobile bottom nav */}
-      <nav style={{ display: 'none' }} className="mobile-bottom-nav">
+      <nav style={{ display: 'none' }} className={`mobile-bottom-nav${sidebarOpen ? ' sidebar-is-open' : ''}`}>
         {[
           { path: '/', icon: '🏠', label: 'Home' },
           { path: '/trips', icon: '🚛', label: 'Trips' },
@@ -284,7 +292,9 @@ export default function Layout({ children }) {
           gap: 10,
           padding: '10px 14px',
           background: '#1a1a1a',
-          position: 'sticky',
+          position: 'fixed',
+          left: 0,
+          right: 0,
           top: 0,
           zIndex: 100,
           borderBottom: '1px solid rgba(255,255,255,0.08)',
@@ -296,11 +306,13 @@ export default function Layout({ children }) {
             {navLogo
               ? <img src={navLogo} alt="Logo" style={{ maxHeight: 28, maxWidth: 140, objectFit: 'contain', objectPosition: 'left center' }} onError={() => setNavLogo('')} />
               : <>
-                  <div style={{ width: 24, height: 24, background: 'var(--accent)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>🐉</div>
+                  <div style={{ width: 24, height: 24, background: 'var(--accent)', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>🚚</div>
                   <span style={{ fontSize: 13, fontWeight: 600, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{companyName}</span>
                 </>
             }
           </div>
+          <ConnectivityIndicator mode="inline" />
+
           {/* Search icon for mobile */}
           <button onClick={() => setSearchOpen(true)} style={{
             background: 'none', border: 'none', color: '#fff', fontSize: 18, cursor: 'pointer', padding: '0 4px',
@@ -315,6 +327,10 @@ export default function Layout({ children }) {
         {children}
       </main>
 
+      <div className="connectivity-desktop-only">
+        <ConnectivityIndicator />
+      </div>
+
       <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
 
       <style>{`
@@ -323,12 +339,15 @@ export default function Layout({ children }) {
           .mobile-topbar { display: none !important; }
           .mobile-close-btn { display: none !important; }
           .app-sidebar { transform: translateX(0) !important; }
+          .connectivity-desktop-only { display: block !important; }
         }
         @media (max-width: 767px) {
           .desktop-sidebar-spacer { display: none !important; }
           .mobile-topbar { display: flex !important; }
+          .main-content { padding-top: 52px; }
           .app-sidebar { transform: translateX(-100%); }
           .app-sidebar.open { transform: translateX(0); }
+          .connectivity-desktop-only { display: none !important; }
         }
       `}</style>
 

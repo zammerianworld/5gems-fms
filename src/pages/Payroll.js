@@ -223,12 +223,6 @@ export default function Payroll() {
     setThirteenthLoading(false)
   }, [showToast])
 
-  const saveManualEntry = async (empId, month, value, year) => {
-    const amount = parseFloat(value) || 0
-    await supabase.from('payroll_13th_manual').delete().eq('employee_id', empId).eq('year', year).eq('month', month)
-    if (amount > 0) await supabase.from('payroll_13th_manual').insert({ employee_id: empId, year: parseInt(year), month, amount })
-  }
-
   const saveAllManual = async () => {
     setSavingManual(true)
     const totalEntries = Object.values(thirteenthManual).reduce((s, mo) =>

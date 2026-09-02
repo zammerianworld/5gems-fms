@@ -16,7 +16,7 @@ const STATUS_COLORS = {
   Cancelled: { bg: 'var(--danger-light)', color: 'var(--danger)' },
 }
 
-const TABS = ['Vouchers', 'Issued by Month', 'PDC Tracker', 'Bank Templates']
+const TABS = ['Vouchers', 'Issued by Month', 'PDC Tracker']
 
 const EMPTY_CHECK_ROW = { check_date: '', check_no: '', description: '', amount: '' }
 
@@ -50,7 +50,6 @@ export default function CheckVouchers() {
 
   const [tab, setTab] = useState('Vouchers')
   const [vouchers, setVouchers] = useState([])
-  const [templates, setTemplates] = useState([])
   const [settings, setSettings] = useState({})
   const [loading, setLoading] = useState(true)
   const [sigDialog, setSigDialog] = useState(false)
@@ -65,7 +64,6 @@ export default function CheckVouchers() {
   const [voucher_no, setVoucherNo] = useState('')
   const [voucher_date, setVoucherDate] = useState(new Date().toISOString().slice(0, 10))
   const [payee, setPayee] = useState('')
-  const [bank_template_id, setBankTemplateId] = useState('')
   const [status, setStatus] = useState('Pending')
   const [approved_by, setApprovedBy] = useState('')
   const [remarks, setRemarks] = useState('')
@@ -78,22 +76,6 @@ export default function CheckVouchers() {
 
   // Multiple checks
   const [checkRows, setCheckRows] = useState([{ ...EMPTY_CHECK_ROW }])
-
-  // Template form
-  const [showTemplateForm, setShowTemplateForm] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState(null)
-  const [tmplForm, setTmplForm] = useState({
-    bank_name: '', account_name: '', account_number: '', branch: '',
-    check_width_mm: 215.9, check_height_mm: 88.9,
-    date_x: 150, date_y: 12, payee_x: 25, payee_y: 28,
-    amount_figures_x: 160, amount_figures_y: 28,
-    amount_words_x: 15, amount_words_y: 38,
-    amount_words_x2: 15, amount_words_y2: 45,
-    signature_x: 140, signature_y: 68,
-    font_size_date: 9, font_size_payee: 10,
-    font_size_amount: 10, font_size_words: 9,
-    check_bg_image: '', is_default: false,
-  })
 
   const [filterStatus, setFilterStatus] = useState('')
   const [filterMonth, setFilterMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -118,18 +100,15 @@ export default function CheckVouchers() {
   const [confirmModal, setConfirmModal] = useState(null)
   const [search, setSearch] = useState('')
   const [previewVoucher, setPreviewVoucher] = useState(null)
-  const [checkPreview, setCheckPreview] = useState(null)
   const [pdfOrientation, setPdfOrientation] = useState('portrait')
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [v, t, s] = await Promise.all([
+    const [v, s] = await Promise.all([
       supabase.from('check_vouchers').select('*').order('created_at', { ascending: false }),
-      supabase.from('bank_templates').select('*').order('bank_name'),
       supabase.from('company_settings').select('*').eq('id', 1).maybeSingle(),
     ])
     if (v.data) setVouchers(v.data)
-    if (t.data) setTemplates(t.data)
     if (s.data) setSettings(s.data)
     setLoading(false)
   }, [])
@@ -140,7 +119,7 @@ export default function CheckVouchers() {
     setPdcLoading(true)
     const [pdcRes, voucherRes] = await Promise.all([
       supabase.from('pdc_checks').select('*').order('check_date'),
-      supabase.from('check_vouchers').select('id,voucher_no,payee,bank_template_id,check_no,check_date,amount,status,check_rows,mode').order('voucher_date'),
+      supabase.from('check_vouchers').select('id,voucher_no,payee,check_no,check_date,amount,status,check_rows,mode').order('voucher_date'),
     ])
 
     // Standalone PDC entries
@@ -288,13 +267,19 @@ export default function CheckVouchers() {
       showToast('Voucher-linked checks cannot be deleted here. Delete the voucher instead.', 'error')
       return
     }
-    await supabase.rpc('permanent_delete', { p_table: 'pdc_checks', p_id: c.id })
-    fetchPdc()
+    setConfirmModal({
+      title: 'Delete PDC Entry', variant: 'danger', confirmLabel: 'Delete',
+      message: `Delete PDC check ${c.check_no || ''} for ${c.payee || 'this payee'}? This cannot be undone.`,
+      onConfirm: async () => {
+        await supabase.rpc('permanent_delete', { p_table: 'pdc_checks', p_id: c.id })
+        fetchPdc()
+      }
+    })
   }
 
   const resetForm = () => {
     setMode('single'); setVoucherNo(''); setVoucherDate(new Date().toISOString().slice(0, 10))
-    setPayee(''); setBankTemplateId(''); setStatus('Pending')
+    setPayee(''); setStatus('Pending')
     setApprovedBy(settings.soa_noted_by_name || ''); setRemarks('')
     setCheckNo(''); setCheckDate(new Date().toISOString().slice(0, 10))
     setDescription(''); setAmount('')
@@ -305,8 +290,6 @@ export default function CheckVouchers() {
   const openNew = () => {
     resetForm()
     setVoucherNo(genCVNo(vouchers))
-    const defTemplate = templates.find(t => t.is_default)
-    if (defTemplate) setBankTemplateId(defTemplate.id)
     setApprovedBy(settings.soa_noted_by_name || '')
     setShowForm(true)
   }
@@ -315,7 +298,7 @@ export default function CheckVouchers() {
     setEditingVoucher(v)
     setMode(v.mode || 'single')
     setVoucherNo(v.voucher_no); setVoucherDate(v.voucher_date)
-    setPayee(v.payee); setBankTemplateId(v.bank_template_id || '')
+    setPayee(v.payee)
     setStatus(v.status); setApprovedBy(v.approved_by || ''); setRemarks(v.remarks || '')
     setCheckNo(v.check_no || ''); setCheckDate(v.check_date || '')
     setDescription(v.description || ''); setAmount(v.amount || '')
@@ -341,7 +324,7 @@ export default function CheckVouchers() {
     setSaving(true)
 
     const payload = {
-      voucher_no, voucher_date, payee, bank_template_id: bank_template_id || null,
+      voucher_no, voucher_date, payee,
       status, approved_by, remarks, mode,
       amount: Math.abs(totalAmount),
       // Single check fields
@@ -457,9 +440,8 @@ export default function CheckVouchers() {
     if (!isMultiple) {
       // Single: Check Number, Date, Check Date
       doc.setFont(undefined, 'bold'); doc.text('Check Number: ', 14, headerY)
-      doc.setFont(undefined, 'normal')
       const cnW = doc.getTextWidth('Check Number: ')
-      doc.setTextColor(0, 0, 200); doc.setFont(undefined, 'bold')
+      doc.setTextColor(0, 0, 200)
       doc.text(v.check_no || '', 14 + cnW, headerY)
       doc.setTextColor(0); doc.setFont(undefined, 'normal'); headerY += 6
       doc.text(`Date: ${fmtDate(v.voucher_date)}`, 14, headerY); headerY += 6
@@ -610,9 +592,6 @@ export default function CheckVouchers() {
     showToast('Voucher PDF saved.')
   }
 
-  // ── CHECK OVERLAY PDF ─────────────────────────────────────────────────────
-  const handlePrintCheck = (v) => { setSigPrintVoucher(v); setSigDialog(true) }
-
   const filtered = vouchers.filter(v => {
     if (filterStatus && v.status !== filterStatus) return false
     if (search && !v.payee?.toLowerCase().includes(search.toLowerCase()) &&
@@ -642,11 +621,6 @@ export default function CheckVouchers() {
         {tab === 'Vouchers' && (
             <button className="btn-primary" onClick={() => { if (showForm) { setShowForm(false); resetForm() } else openNew() }}>
               {showForm ? '✕ Cancel' : '+ New Voucher'}
-            </button>
-          )}
-          {tab === 'Bank Templates' && isAdmin && (
-            <button className="btn-primary" onClick={() => setShowTemplateForm(!showTemplateForm)}>
-              {showTemplateForm ? '✕ Cancel' : '+ New Template'}
             </button>
           )}
         </div>
@@ -700,13 +674,6 @@ export default function CheckVouchers() {
                   <datalist id="payee-suggestions">
                     {recurringPayees.map(p => <option key={p} value={p} />)}
                   </datalist>
-                </div>
-                <div className="form-group">
-                  <label className="label">Bank Template</label>
-                  <select value={bank_template_id} onChange={e => setBankTemplateId(e.target.value)}>
-                    <option value="">Select bank (for check print)</option>
-                    {templates.map(t => <option key={t.id} value={t.id}>{t.bank_name} — {t.account_number}</option>)}
-                  </select>
                 </div>
                 <div className="form-group">
                   <label className="label">Status</label>
@@ -873,183 +840,6 @@ export default function CheckVouchers() {
         </>
       )}
 
-      {/* ── BANK TEMPLATES TAB ── */}
-      {tab === 'Bank Templates' && isAdmin && (
-        <>
-          {(showTemplateForm || editingTemplate) && (
-            <div className="card" style={{ marginBottom: 24 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>{editingTemplate ? `Edit: ${editingTemplate.bank_name}` : 'New Bank Template'}</h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>Configure field positions in mm from top-left of check for the print overlay.</p>
-              <div className="form-grid" style={{ marginBottom: 16 }}>
-                {[
-                  { label: 'Bank Name', key: 'bank_name', placeholder: 'e.g. Security Bank Corp' },
-                  { label: 'Account Name', key: 'account_name', placeholder: 'Registered name' },
-                  { label: 'Account Number', key: 'account_number', placeholder: 'e.g. 1234-5678-90' },
-                  { label: 'Branch', key: 'branch', placeholder: 'Branch name' },
-                ].map(f => (
-                  <div key={f.key} className="form-group">
-                    <label className="label">{f.label}</label>
-                    <input value={tmplForm[f.key] || ''} onChange={e => setTmplForm(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} />
-                  </div>
-                ))}
-              </div>
-              <p className="section-label">Check Size (mm)</p>
-              <div className="form-grid" style={{ marginBottom: 16 }}>
-                {[
-                  { label: 'Check Width', key: 'check_width_mm', hint: 'e.g. 203.2 (8 inches)' },
-                  { label: 'Check Height', key: 'check_height_mm', hint: 'e.g. 76.2 (3 inches)' },
-                ].map(f => (
-                  <div key={f.key} className="form-group">
-                    <label className="label">{f.label}</label>
-                    <input type="number" step="0.1" value={tmplForm[f.key] || ''} onChange={e => setTmplForm(p => ({ ...p, [f.key]: parseFloat(e.target.value) || 0 }))} placeholder={f.hint} />
-                    <div style={{ fontSize: 11, color: 'var(--hint)', marginTop: 2 }}>{f.hint}</div>
-                  </div>
-                ))}
-              </div>
-              <p className="section-label">Print Field Positions (mm from top-left of check)</p>
-              <div style={{ padding: '8px 12px', background: 'var(--accent-light)', borderRadius: 6, fontSize: 12, color: 'var(--accent-dark)', marginBottom: 12 }}>
-                💡 X = distance from left edge. Y = distance from top edge. Upload a check scan below to help calibrate.
-              </div>
-              <div className="form-grid" style={{ marginBottom: 16 }}>
-                {[
-                  { label: 'Date — X', key: 'date_x' }, { label: 'Date — Y', key: 'date_y' },
-                  { label: 'Payee Name — X', key: 'payee_x' }, { label: 'Payee Name — Y', key: 'payee_y' },
-                  { label: 'Amount (₱ figures) — X', key: 'amount_figures_x' }, { label: 'Amount (₱ figures) — Y', key: 'amount_figures_y' },
-                  { label: 'Amount in Words Line 1 — X', key: 'amount_words_x' }, { label: 'Amount in Words Line 1 — Y', key: 'amount_words_y' },
-                  { label: 'Amount in Words Line 2 — X', key: 'amount_words_x2' }, { label: 'Amount in Words Line 2 — Y', key: 'amount_words_y2' },
-                ].map(f => (
-                  <div key={f.key} className="form-group">
-                    <label className="label">{f.label}</label>
-                    <input type="number" step="0.5" value={tmplForm[f.key] || ''} onChange={e => setTmplForm(p => ({ ...p, [f.key]: parseFloat(e.target.value) || 0 }))} />
-                  </div>
-                ))}
-              </div>
-              <p className="section-label">Font Sizes (pt)</p>
-              <div className="form-grid" style={{ marginBottom: 16 }}>
-                {[
-                  { label: 'Date', key: 'font_size_date' }, { label: 'Payee Name', key: 'font_size_payee' },
-                  { label: 'Amount Figures', key: 'font_size_amount' }, { label: 'Amount Words', key: 'font_size_words' },
-                ].map(f => (
-                  <div key={f.key} className="form-group">
-                    <label className="label">{f.label}</label>
-                    <input type="number" step="0.5" value={tmplForm[f.key] || ''} onChange={e => setTmplForm(p => ({ ...p, [f.key]: parseFloat(e.target.value) || 0 }))} />
-                  </div>
-                ))}
-              </div>
-              <p className="section-label">Check Background (voided check scan)</p>
-              <input type="file" accept="image/*" onChange={e => {
-                const file = e.target.files[0]; if (!file) return
-                const reader = new FileReader()
-                reader.onloadend = () => setTmplForm(p => ({ ...p, check_bg_image: reader.result }))
-                reader.readAsDataURL(file)
-              }} style={{ marginBottom: 8 }} />
-              {tmplForm.check_bg_image && (
-                <div style={{ marginBottom: 12 }}>
-                  <img src={tmplForm.check_bg_image} alt="Check preview" style={{ maxWidth: '100%', maxHeight: 100, objectFit: 'contain', border: '0.5px solid var(--border)', borderRadius: 6 }} />
-                  <button className="btn-ghost btn-sm" style={{ marginTop: 6, display: 'block' }} onClick={() => setTmplForm(p => ({ ...p, check_bg_image: '' }))}>Remove</button>
-                </div>
-              )}
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, marginBottom: 16 }}>
-                <input type="checkbox" checked={tmplForm.is_default} onChange={e => setTmplForm(p => ({ ...p, is_default: e.target.checked }))} />
-                Set as default bank
-              </label>
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-                <button className="btn-ghost" onClick={() => { setShowTemplateForm(false); setEditingTemplate(null) }}>Cancel</button>
-                <button className="btn-primary" onClick={async () => {
-                  if (!tmplForm.bank_name) { showToast('Bank name required.', 'error'); return }
-                  setSaving(true)
-                  const { error } = editingTemplate
-                    ? await supabase.from('bank_templates').update(tmplForm).eq('id', editingTemplate.id)
-                    : await supabase.from('bank_templates').insert(tmplForm)
-                  if (error) showToast('Error: ' + error.message, 'error')
-                  else { showToast('Template saved.'); setShowTemplateForm(false); setEditingTemplate(null); fetchAll() }
-                  setSaving(false)
-                }} disabled={saving}>{saving ? 'Saving…' : 'Save Template'}</button>
-              </div>
-            </div>
-          )}
-
-          {templates.length === 0 && !showTemplateForm
-            ? <div className="empty-state"><p>No bank templates yet. Add one to enable check printing.</p></div>
-            : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-                {templates.map(t => (
-                  <div key={t.id} className="card" style={{ border: t.is_default ? '1.5px solid var(--accent)' : undefined }}>
-                    {t.is_default && <div style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 500, marginBottom: 6 }}>⭐ Default</div>}
-                    <h3 style={{ fontSize: 15, fontWeight: 600, marginBottom: 2 }}>{t.bank_name}</h3>
-                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{t.account_name}</div>
-                    <div style={{ fontSize: 12, fontFamily: 'var(--mono)', marginBottom: 6 }}>{t.account_number}</div>
-                    {t.branch && <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{t.branch} Branch</div>}
-                    {t.check_bg_image && <img src={t.check_bg_image} alt="Check" style={{ width: '100%', maxHeight: 70, objectFit: 'contain', borderRadius: 4, marginBottom: 8, border: '0.5px solid var(--border)' }} />}
-                    <div style={{ fontSize: 11, color: 'var(--hint)', marginBottom: 10 }}>{t.check_width_mm} × {t.check_height_mm} mm</div>
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <button className="btn-ghost btn-sm" onClick={() => { setEditingTemplate(t); setTmplForm(t); setShowTemplateForm(false) }}>Edit</button>
-                      <button className="btn-danger btn-sm" onClick={async () => {
-                        setConfirmModal({ title: 'Delete Template', variant: 'danger', confirmLabel: 'Delete', message: `Delete template "${t.bank_name}"? This cannot be undone.`, onConfirm: async () => {
-                          await supabase.rpc('permanent_delete', { p_table: 'bank_templates', p_id: t.id })
-                          showToast('Deleted.', 'info'); fetchAll()
-                        }})
-                      }}>Delete</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-        </>
-      )}
-      {/* Check Overlay Preview Modal */}
-      {checkPreview && (() => {
-        const template = templates.find(t => t.id === checkPreview.bank_template_id)
-        const total = Math.abs(checkPreview.mode === 'multiple'
-          ? (checkPreview.check_rows || []).reduce((s, r) => s + (parseFloat(r.amount) || 0), 0)
-          : parseFloat(checkPreview.amount) || 0)
-        const d = checkPreview.check_date ? new Date(checkPreview.check_date + 'T00:00:00') : new Date()
-        const dateStr = `${String(d.getMonth()+1).padStart(2,'0')}  ${String(d.getDate()).padStart(2,'0')}  ${d.getFullYear()}`
-        const W = template?.check_width_mm || 203.2
-        const H = template?.check_height_mm || 76.2
-        const scale = 3 // px per mm for preview
-        return (
-          <div className="modal-overlay" onClick={() => setCheckPreview(null)}>
-            <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700, width: '95vw' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>Check Preview — {checkPreview.voucher_no}</h3>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button className="btn-primary btn-sm" onClick={() => { handlePrintCheck(checkPreview); setCheckPreview(null) }}>🖨️ Print Check</button>
-                  <button className="btn-ghost btn-sm" onClick={() => setCheckPreview(null)}>✕ Close</button>
-                </div>
-              </div>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>
-                This is an approximate preview. Actual print positions depend on your bank template measurements.
-              </p>
-              {/* Check preview canvas */}
-              <div style={{ position: 'relative', width: W * scale, height: H * scale, maxWidth: '100%', border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', background: '#f0f4f8', margin: '0 auto' }}>
-                {template?.check_bg_image && (
-                  <img src={template.check_bg_image} alt="Check" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', objectFit: 'fill' }} />
-                )}
-                {/* Date */}
-                <div style={{ position: 'absolute', left: (template?.date_x || 145) * scale, top: (template?.date_y || 18) * scale - 10, fontSize: (template?.font_size_date || 9) * scale / 3, fontFamily: 'monospace', whiteSpace: 'nowrap', color: '#000' }}>
-                  {dateStr}
-                </div>
-                {/* Payee */}
-                <div style={{ position: 'absolute', left: (template?.payee_x || 28) * scale, top: (template?.payee_y || 35) * scale - 10, fontSize: (template?.font_size_payee || 9) * scale / 3, fontFamily: 'Arial', fontWeight: 'bold', whiteSpace: 'nowrap', color: '#000' }}>
-                  {(checkPreview.payee || '').toUpperCase()}
-                </div>
-                {/* Amount figures */}
-                <div style={{ position: 'absolute', left: (template?.amount_figures_x || 155) * scale, top: (template?.amount_figures_y || 35) * scale - 10, fontSize: (template?.font_size_amount || 9) * scale / 3, fontFamily: 'monospace', whiteSpace: 'nowrap', color: '#000' }}>
-                  ₱ {fmtAmt(total)}
-                </div>
-                {/* Amount in words */}
-                <div style={{ position: 'absolute', left: (template?.amount_words_x || 12) * scale, top: (template?.amount_words_y || 48) * scale - 10, fontSize: (template?.font_size_words || 8) * scale / 3, fontFamily: 'Arial', whiteSpace: 'nowrap', color: '#1a6bbd', maxWidth: (W - (template?.amount_words_x || 12) - 10) * scale }}>
-                  {numberToWords(total).toUpperCase()}
-                </div>
-              </div>
-              <p style={{ fontSize: 11, color: 'var(--hint)', marginTop: 8, textAlign: 'center' }}>
-                {template ? `Template: ${template.bank_name} — ${template.check_width_mm}×${template.check_height_mm}mm` : 'No template selected'}
-              </p>
-            </div>
-          </div>
-        )
-      })()}
 
       {/* Preview Modal */}
       {previewVoucher && (

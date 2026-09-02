@@ -1260,16 +1260,6 @@ export default function Billing() {
     setBulkExporting(false)
   }
 
-  const handleSaveSOAPDF = (tripsOverride, invNoOverride, invDateOverride, clientOverride, typeOverride) => {
-    const trips2 = tripsOverride || billedTrips
-    const invNo2 = invNoOverride || invoiceNo
-    const invDate2 = invDateOverride || invoiceDate
-    const client2 = clientOverride || selectedClient
-    const type2 = typeOverride || truckType
-    setPrintAfterPreview(true)
-    setPreviewModal({ trips: trips2, invoice: { id: 'print', invoice_no: invNo2, invoice_date: invDate2, client: client2, truck_type: type2 } })
-  }
-
   const handleRecalcAll = async () => {
     if (filteredInvoices.length === 0) return
     setRecalcingAll(true)
@@ -1364,52 +1354,6 @@ export default function Billing() {
     doc.setFont(undefined,'normal'); doc.setFontSize(8)
     doc.text(`${sorted.filter(i=>i.status!=='Paid').length} unpaid invoice(s) — Generated: ${new Date().toLocaleDateString('en-PH')}`, 14, y)
     doc.save(`FMS-AR-${client.replace(/[^a-zA-Z0-9]/g,'-')}.pdf`)
-  }
-
-  const handleSaveAgingPDF = async () => {
-    await fetchAll()
-    const now3 = new Date()
-    const getDaysAging = (inv) => Math.floor((now3 - new Date(inv.invoice_date)) / 86400000)
-    const f2 = (n) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: [279.4, 215.9] })
-    const W = 279.4
-    const cols = ['Date', 'Invoice No.', 'Client', 'Type', 'Status', 'Net Sales', 'Total Sales', 'Days', 'Remarks']
-    const colStyles = { 5: { halign: 'right' }, 6: { halign: 'right' }, 7: { halign: 'center' } }
-    const isSingleBucket = agingBucket !== 'all'
-    const bDef = [
-      { key: 'b60', label: 'CRITICAL (60d+)', color: [220,38,38], fill: [255,235,235], items: agingDisplayed.filter(i => getDaysAging(i) >= 60).sort((a,b) => getDaysAging(b)-getDaysAging(a)) },
-      { key: 'b45', label: 'WARNING (45–59d)', color: [194,65,12], fill: [255,243,224], items: agingDisplayed.filter(i => { const d=getDaysAging(i); return d>=45&&d<=59 }).sort((a,b)=>getDaysAging(b)-getDaysAging(a)) },
-      { key: 'b30', label: 'MILD (30–44d)', color: [180,134,11], fill: [255,253,231], items: agingDisplayed.filter(i => { const d=getDaysAging(i); return d>=30&&d<=44 }).sort((a,b)=>getDaysAging(b)-getDaysAging(a)) },
-      { key: 'b0', label: 'NOT YET DUE (0d or less)', color: [37,99,235], fill: [239,246,255], items: agingDisplayed.filter(i => getDaysAging(i) <= 0).sort((a,b)=>getDaysAging(a)-getDaysAging(b)) },
-      { key: 'b1', label: 'CURRENT (1–29d)', color: [21,128,61], fill: [240,253,244], items: agingDisplayed.filter(i => { const d=getDaysAging(i); return d>=1&&d<=29 }).sort((a,b)=>getDaysAging(b)-getDaysAging(a)) },
-    ]
-    const selectedBucket = bDef.find(b => b.key === agingBucket)
-    const bucketsToRender = isSingleBucket ? [selectedBucket].filter(Boolean) : bDef.filter(b => b.items.length > 0)
-    const allItems = bucketsToRender.flatMap(b => b.items)
-    doc.setFontSize(12); doc.setFont(undefined, 'bold')
-    doc.text((settings.company_name || 'FLEET MANAGEMENT SYSTEM').toUpperCase(), W/2, 10, { align: 'center' })
-    doc.setFontSize(7.5); doc.setFont(undefined, 'normal')
-    const dateStr = now3.toLocaleDateString('en-PH', { month: '2-digit', day: '2-digit', year: '2-digit' })
-    const modeLabel = agingShowAll ? 'All Unpaid' : 'Overdue'
-    const bucketLabel = isSingleBucket ? (selectedBucket?.label || '') : 'Critical to Current'
-    doc.text(`AGING REPORT — ${modeLabel} — ${bucketLabel} — As of ${dateStr} — ${allItems.length} invoice(s)`, W/2, 16, { align: 'center' })
-    doc.setDrawColor(200); doc.line(14, 19, W-14, 19)
-    let startY = 22
-    const grandNet = allItems.reduce((s,i) => s+(i.total_sales_net||0), 0)
-    bucketsToRender.forEach(bucket => {
-      if (!bucket.items.length) return
-      doc.setFontSize(8.5); doc.setFont(undefined, 'bold'); doc.setTextColor(...bucket.color)
-      doc.text(`${bucket.label}  (${bucket.items.length} invoice${bucket.items.length>1?'s':''})`, 14, startY); doc.setTextColor(0)
-      const rows = bucket.items.map(inv => { const net=inv.total_sales_net||0; const days=getDaysAging(inv); return [fmtDate(inv.invoice_date)||'', inv.invoice_no, inv.client, inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, f2(net), f2(inv.is_vat ? net*1.12 : net), `${days}d`, inv.remarks||''] })
-      const subNet = bucket.items.reduce((s,i) => s+(i.total_sales_net||0), 0)
-      const subVatInc = bucket.items.reduce((s,i) => s+(i.total_sales_net||0)*(i.is_vat?1.12:1), 0)
-      autoTable(doc, { startY: startY+3, head: [cols], body: rows, foot: [['','','','',`Subtotal (${bucket.items.length})`,f2(subNet),f2(subVatInc),'','']], showFoot:'lastPage', headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7,fillColor:bucket.fill}, footStyles:{fillColor:[240,240,240],fontStyle:'bold',fontSize:7.5}, columnStyles:colStyles, didParseCell:(data)=>{ if(data.section==='body'&&data.column.index===7){data.cell.styles.textColor=bucket.color;data.cell.styles.fontStyle='bold'} }, margin:{left:14,right:14,bottom:32} })
-      startY = doc.lastAutoTable.finalY + 6
-    })
-    if (bucketsToRender.length > 0) { doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setDrawColor(100); doc.line(14,startY,W-14,startY); startY+=5; doc.text(`GRAND TOTAL (${allItems.length} invoices)`,14,startY); doc.text(`Total Sales: ${f2(grandNet)}`,W-14,startY,{align:'right'}) }
-    const label = isSingleBucket ? (selectedBucket?.label||'bucket') : 'AllBuckets'
-    doc.save(`Aging-${label.replace(/[^a-z0-9]/gi,'-')}-${now3.toISOString().slice(0,10)}.pdf`)
-    showToast('Aging report exported.')
   }
 
   const handlePrintAllOverdue = (sigs = []) => {

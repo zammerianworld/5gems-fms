@@ -123,6 +123,7 @@ export default function Trips() {
 
   const [dumpForm, setDumpForm] = useState(EMPTY_DUMP)
   const [pmForm, setPmForm] = useState(EMPTY_PM)
+  const [pmDestinations, setPmDestinations] = useState({}) // { [trip_code]: [destination, ...] }
 
   const [activeTab, setActiveTab] = useState('Dump Truck')
   const now = new Date()
@@ -198,6 +199,25 @@ export default function Trips() {
       if (location.state?.activeTab || location.state?.search) window.history.replaceState({}, document.title)
     })
   }, [fetchAll])
+
+  // PM destination dropdown pulls straight from driver_rates — one source of
+  // truth, so staff can only ever pick a destination that already has a rate
+  // configured. Refetched on mount only; a brand-new destination added via
+  // the Rates tab won't appear here until the page reloads, same tradeoff
+  // as everywhere else driver_rates is read.
+  useEffect(() => {
+    supabase.from('driver_rates').select('trip_code,destination').eq('truck_type', 'Prime Mover').not('destination', 'is', null).then(({ data }) => {
+      const grouped = {}
+      ;(data || []).forEach(r => {
+        if (!r.trip_code || !r.destination) return
+        if (!grouped[r.trip_code]) grouped[r.trip_code] = new Set()
+        grouped[r.trip_code].add(r.destination)
+      })
+      const asArrays = {}
+      Object.entries(grouped).forEach(([code, set]) => { asArrays[code] = [...set].sort() })
+      setPmDestinations(asArrays)
+    })
+  }, [])
 
   const trucksOfType = (type) => trucks.filter(t => t.truck_type === type && t.active !== false)
   const isSubconTruck = (plate) => trucks.find(t => t.plate === plate)?.ownership === 'subcon'
@@ -919,6 +939,10 @@ export default function Trips() {
             <div className="form-grid" style={{ marginBottom: 16 }}>
               <SF label="Waybill No. (our doc)" value={pmForm.waybill_no} onChange={v => setPmForm(f => ({ ...f, waybill_no: v.trim() }))} />
               <SF label="Vessel" value={pmForm.vessel} onChange={v => setPmForm(f => ({ ...f, vessel: v }))} />
+              <SS label="Driver Rate Destination" value={pmForm.destination || 'PENDING'}
+                onChange={v => setPmForm(f => ({ ...f, destination: v === 'PENDING' ? '' : v }))}
+                options={[{ value: 'PENDING', label: '⚑ Pending / not yet listed' }, ...(pmDestinations['Hustling PSACC'] || [])]}
+                placeholder="Select destination" />
             </div>
           </>)}
 
@@ -945,6 +969,10 @@ export default function Trips() {
                   ))}
                 </datalist>
               </div>
+              <SS label="Driver Rate Destination" value={pmForm.destination || 'PENDING'}
+                onChange={v => setPmForm(f => ({ ...f, destination: v === 'PENDING' ? '' : v }))}
+                options={[{ value: 'PENDING', label: '⚑ Pending / not yet listed' }, ...(pmDestinations['Hauling PSACC'] || [])]}
+                placeholder="Select destination" />
             </div>
           </>)}
 
@@ -959,6 +987,10 @@ export default function Trips() {
               <SF label="Port of Destination" value={pmForm.port_destination} onChange={v => setPmForm(f => ({ ...f, port_destination: v }))} />
               <SF label="Shipper Address" value={pmForm.shipper_address} onChange={v => setPmForm(f => ({ ...f, shipper_address: v }))} />
               <SF label="Consignee Address" value={pmForm.consignee_address} onChange={v => setPmForm(f => ({ ...f, consignee_address: v }))} />
+              <SS label="Driver Rate Destination" value={pmForm.destination || 'PENDING'}
+                onChange={v => setPmForm(f => ({ ...f, destination: v === 'PENDING' ? '' : v }))}
+                options={[{ value: 'PENDING', label: '⚑ Pending / not yet listed' }, ...(pmDestinations['SMC'] || [])]}
+                placeholder="Select destination" />
             </div>
           </>)}
 
@@ -1134,7 +1166,7 @@ export default function Trips() {
           <div className="table-wrap">
             <table className="table">
               <thead><tr>
-                <th>Date</th><th>Plate</th><th>Trip Code</th><th>Client</th>
+                <th>Date</th><th>Plate</th><th>Driver</th><th>Trip Code</th><th>Client</th>
                 <th>Container</th><th>Con Van No.</th>
                 <th className="text-right">Amount (₱)</th><th></th>
               </tr></thead>
@@ -1150,7 +1182,13 @@ export default function Trips() {
                   <tr key={t.id} style={{ opacity: t.invoice_id ? 0.65 : 1 }}>
                     <td className="mono" style={{ fontSize: 12 }}>{fmtDate(t.trip_date)}</td>
                     <td style={{ fontWeight: 500, fontFamily: 'var(--mono)' }}>{t.truck_plate}</td>
-                    <td><span className="badge badge-prime" style={{ fontSize: 11 }}>{t.trip_code}</span></td>
+                    <td style={{ fontSize: 12, color: 'var(--muted)' }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
+                    <td>
+                      <span className="badge badge-prime" style={{ fontSize: 11 }}>{t.trip_code}</span>
+                      {['Hustling PSACC', 'Hauling PSACC', 'SMC'].includes(t.trip_code) && !t.destination && (
+                        <span title="Destination not set — driver rate can't match until this is set" style={{ marginLeft: 5, fontSize: 10, color: '#dc2626', background: '#fef2f2', padding: '2px 5px', borderRadius: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>⚑ No dest.</span>
+                      )}
+                    </td>
                     <td style={{ fontWeight: 500 }}>{t.client || '—'}</td>
                     <td style={{ fontSize: 12 }}>{isVan ? '🚐 Van' : t.container_size}</td>
                     <td style={{ fontSize: 12, color: 'var(--muted)' }}>

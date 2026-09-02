@@ -14,7 +14,8 @@ import { buildPayslipDoc } from '../lib/payslipTemplate'
 const EMPTY_EMPLOYEE = {
   full_name: '', position: '', basic_rate_monthly: '', allowance_monthly: '',
   sss_employee: '', sss_employer: '', philhealth_employee: '', philhealth_employer: '',
-  hdmf_employee: '', hdmf_employer: '', is_active: true, notes: '', category: 'admin'
+  hdmf_employee: '', hdmf_employer: '', is_active: true, notes: '', category: 'admin',
+  hire_date: '', termination_date: '', employee_no: '',
 }
 
 const EMPTY_ENTRY = {
@@ -69,7 +70,7 @@ const PRINT_STYLE = `
 
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
 export default function Employees() {
-  const { isAdmin, profile } = useAuth()
+  const { isAdmin, isSuperuser, profile } = useAuth()
   const { toast, showToast } = useToast()
 
   // ── GROUP (top-level page structure) ───────────────────────────────────
@@ -173,7 +174,7 @@ export default function Employees() {
     try {
       const { data } = await supabase
         .from('payroll_entries')
-        .select('*, payroll_employees(full_name, position)')
+        .select('*, payroll_employees(full_name, position, employee_no)')
         .eq('cutoff_date', cutoff)
         .order('created_at')
       setEntries(data || [])
@@ -223,13 +224,26 @@ export default function Employees() {
     ]).finally(() => setLoading(false))
   }, [])
 
+  // The mount-only fetch above can go stale if a driver or employee is
+  // added after initial load — refresh whenever Cash Advances is actually
+  // opened, not just once at app start.
+  const fetchAllPeopleForCa = useCallback(async () => {
+    const [e, d] = await Promise.all([
+      supabase.from('payroll_employees').select('id,full_name,category').order('full_name'),
+      supabase.from('drivers').select('id,driver_name').eq('active', true).order('driver_name'),
+    ])
+    setAllEmployees(e.data || [])
+    setAllDrivers(d.data || [])
+  }, [])
+  useEffect(() => { if (activeTab === 'cash-advance') fetchAllPeopleForCa() }, [activeTab, fetchAllPeopleForCa])
+
   const fetch13thData = useCallback(async (year) => {
     setThirteenthLoading(true)
     try {
       const [entriesRes, manualRes, empsRes] = await Promise.all([
         supabase.from('payroll_entries').select('employee_id, cutoff_date, basic_rate, basic_days').order('cutoff_date'),
         supabase.from('payroll_13th_manual').select('*').eq('year', year).then(r => r.error ? { data: [] } : r),
-        supabase.from('payroll_employees').select('id, full_name, position').order('full_name')
+        supabase.from('payroll_employees').select('id, full_name, position').eq('category', 'admin').order('full_name')
       ])
       setThirteenthEntries(entriesRes.data || [])
       setThirteenthEmps(empsRes.data || [])
@@ -256,12 +270,6 @@ export default function Employees() {
     }
     setThirteenthLoading(false)
   }, [showToast])
-
-  const saveManualEntry = async (empId, month, value, year) => {
-    const amount = parseFloat(value) || 0
-    await supabase.from('payroll_13th_manual').delete().eq('employee_id', empId).eq('year', year).eq('month', month)
-    if (amount > 0) await supabase.from('payroll_13th_manual').insert({ employee_id: empId, year: parseInt(year), month, amount })
-  }
 
   const saveAllManual = async () => {
     setSavingManual(true)
@@ -457,17 +465,17 @@ export default function Employees() {
     if (!sigs || sigs.length === 0) return
     const pageH = doc.internal.pageSize.getHeight()
     let sigY = doc._pendingSigY || (pageH - 30)
-    if (sigY + 28 > pageH - 6) { doc.addPage(); sigY = 14 }
-    const perSlot = (W - 28) / sigs.length
+    if (sigY + 17 > pageH - 6) { doc.addPage(); sigY = 14 }
+    const perSlot = (W - 8) / sigs.length
     sigs.forEach((s, idx) => {
-      const slotX = 14 + idx * perSlot + perSlot / 2
-      doc.setFontSize(5.5); doc.setFont(undefined, 'normal'); doc.setTextColor(120)
+      const slotX = doc._payslipRightX != null ? doc._payslipRightX + idx * perSlot + perSlot / 2 : 14 + idx * perSlot + perSlot / 2
+      doc.setFontSize(5); doc.setFont(undefined, 'normal'); doc.setTextColor(120)
       doc.text(`${s.label}:`, slotX, sigY, { align: 'center' })
-      doc.setDrawColor(150); doc.line(slotX - 28, sigY + 7, slotX + 28, sigY + 7)
-      doc.setFont(undefined, 'bold'); doc.setFontSize(7); doc.setTextColor(0)
-      doc.text((s.name || '').toUpperCase(), slotX, sigY + 11, { align: 'center' })
-      doc.setFont(undefined, 'normal'); doc.setFontSize(6); doc.setTextColor(255, 30, 0)
-      doc.text(s.title || '', slotX, sigY + 15, { align: 'center' })
+      doc.setDrawColor(150); doc.line(slotX - perSlot / 2 + 3, sigY + 6, slotX + perSlot / 2 - 3, sigY + 6)
+      doc.setFont(undefined, 'bold'); doc.setFontSize(6); doc.setTextColor(0)
+      doc.text((s.name || '').toUpperCase(), slotX, sigY + 9.5, { align: 'center' })
+      doc.setFont(undefined, 'normal'); doc.setFontSize(5.5); doc.setTextColor(255, 30, 0)
+      doc.text(s.title || '', slotX, sigY + 13, { align: 'center' })
       doc.setTextColor(0)
     })
   }
@@ -479,12 +487,13 @@ export default function Employees() {
 
   const doPrintSinglePayslip = (entry, sigs) => {
     const empName = entry.payroll_employees?.full_name || employees.find(x => x.id === entry.employee_id)?.full_name || '—'
+    const empNo = entry.payroll_employees?.employee_no || employees.find(x => x.id === entry.employee_id)?.employee_no || ''
     const companyName = settings.company_name || 'FLEET MANAGEMENT SYSTEM'
     const companyAddress = settings.company_address || ''
     const cutoffLabel = fmtDate(entry.cutoff_date)
 
     const doc = buildPayslipDoc({
-      no: entry.slip_no || 1,
+      employeeNo: empNo,
       month: cutoffLabel,
       date: cutoffLabel,
       employeeName: empName,
@@ -502,12 +511,11 @@ export default function Employees() {
         { label: 'Pag-ibig/SSS Loan', amount: p(entry.hdmf_loan) + p(entry.sss_loan) },
         { label: 'Personal Loan', amount: 0 },
         { label: 'Cash Advance', amount: p(entry.cash_advance_deduction) },
-        { label: 'SSS HELPER', amount: 0 },
       ],
     })
 
-    doc._pendingSigY = doc._payslipEndY + 10
-    addSigsToDoc(doc, sigs, 215.9)
+    doc._pendingSigY = doc._payslipEndY + 3
+    addSigsToDoc(doc, sigs, doc._payslipRightW || 215.9)
     doc.save(`Payslip-${empName.replace(/\s+/g, '-')}-${entry.cutoff_date}.pdf`)
   }
 
@@ -533,6 +541,9 @@ export default function Employees() {
       is_active: empForm.is_active,
       notes: empForm.notes,
       category: group,
+      hire_date: empForm.hire_date || null,
+      termination_date: empForm.termination_date || null,
+      employee_no: empForm.employee_no || null,
     }
     const { error } = editingEmpId
       ? await supabase.from('payroll_employees').update(payload).eq('id', editingEmpId)
@@ -1036,19 +1047,6 @@ export default function Employees() {
               : 'Admin, Support Staff, Drivers, and Cash Advances in one place'}
           </div>
         </div>
-        {activeTab === 'payroll' && (
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', padding: 3, borderRadius: 8 }}>
-            {[{ key: 'admin', label: 'Admin' }, { key: 'support', label: 'Support Staff' }].map(o => (
-              <button key={o.key} onClick={() => setGroup(o.key)} style={{
-                padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none',
-                background: group === o.key ? 'var(--surface)' : 'transparent',
-                color: group === o.key ? 'var(--text)' : 'var(--muted)',
-                boxShadow: group === o.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-              }}>{o.label}</button>
-            ))}
-          </div>
-        )}
-        )}
         {activeTab === 'cash-advance' && isAdmin && (
           <button onClick={() => { setEditingCaId(null); setCaForm(EMPTY_CA); setShowCaForm(true) }}
             style={{ padding: '7px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
@@ -1081,15 +1079,28 @@ export default function Employees() {
 
       {activeTab === 'payroll' && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
-          <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', padding: 3, borderRadius: 8 }}>
-            {[{ key: 'register', label: '📋 Register' }, { key: 'roster', label: '👤 Roster' }].map(o => (
-              <button key={o.key} onClick={() => setPayrollView(o.key)} style={{
-                padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none',
-                background: payrollView === o.key ? 'var(--surface)' : 'transparent',
-                color: payrollView === o.key ? 'var(--text)' : 'var(--muted)',
-                boxShadow: payrollView === o.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
-              }}>{o.label}</button>
-            ))}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', padding: 3, borderRadius: 8 }}>
+              {[{ key: 'admin', label: 'Admin' }, { key: 'support', label: 'Support Staff' }].map(o => (
+                <button key={o.key} onClick={() => setGroup(o.key)} style={{
+                  padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none',
+                  background: group === o.key ? 'var(--surface)' : 'transparent',
+                  color: group === o.key ? 'var(--text)' : 'var(--muted)',
+                  boxShadow: group === o.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                }}>{o.label}</button>
+              ))}
+            </div>
+            <div style={{ width: 1, height: 22, background: 'var(--border)' }} />
+            <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', padding: 3, borderRadius: 8 }}>
+              {[{ key: 'register', label: '📋 Register' }, { key: 'roster', label: '👤 Roster' }].map(o => (
+                <button key={o.key} onClick={() => setPayrollView(o.key)} style={{
+                  padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12, fontWeight: 600, border: 'none',
+                  background: payrollView === o.key ? 'var(--surface)' : 'transparent',
+                  color: payrollView === o.key ? 'var(--text)' : 'var(--muted)',
+                  boxShadow: payrollView === o.key ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                }}>{o.label}</button>
+              ))}
+            </div>
           </div>
 
           {payrollView === 'register' && (
@@ -1525,6 +1536,17 @@ export default function Employees() {
             <FormRow label="Position">
               <input value={empForm.position} onChange={e => setEmpForm(f => ({ ...f, position: e.target.value }))} placeholder="e.g. Admin Officer" style={INPUT} />
             </FormRow>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
+              <FormRow label="Employee No.">
+                <input value={empForm.employee_no} onChange={e => setEmpForm(f => ({ ...f, employee_no: e.target.value }))} placeholder="e.g. 23-001" style={INPUT} />
+              </FormRow>
+              <FormRow label="Hire Date">
+                <DateInput value={empForm.hire_date} onChange={e => setEmpForm(f => ({ ...f, hire_date: e.target.value }))} style={INPUT} />
+              </FormRow>
+              <FormRow label="Termination Date">
+                <DateInput value={empForm.termination_date} onChange={e => setEmpForm(f => ({ ...f, termination_date: e.target.value }))} style={INPUT} />
+              </FormRow>
+            </div>
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
               <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Monthly Rates</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
@@ -1857,7 +1879,7 @@ export default function Employees() {
       )}
 
       {/* ══ TAB: DRIVERS (trip-based payroll) ══ */}
-      {activeTab === 'drivers' && <DriversPayroll isAdmin={isAdmin} profile={profile} showToast={showToast} settings={settings} />}
+      {activeTab === 'drivers' && <DriversPayroll isAdmin={isAdmin} isSuperuser={isSuperuser} profile={profile} showToast={showToast} settings={settings} />}
 
       {/* ══ TAB: PAYSLIP GENERATOR ══ */}
       {activeTab === 'payslip' && (

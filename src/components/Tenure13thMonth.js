@@ -37,7 +37,7 @@ export default function Tenure13thMonth({ isAdmin, profile, showToast, settings 
     setLoading(true)
     const [dr, emp, tr, rec] = await Promise.all([
       supabase.from('drivers').select('id,driver_name,hire_date').eq('active', true).order('driver_name'),
-      supabase.from('payroll_employees').select('id,full_name,basic_rate_monthly').eq('category', 'support').eq('is_active', true).order('full_name'),
+      supabase.from('payroll_employees').select('id,full_name,basic_rate_monthly,hire_date').eq('category', 'support').eq('is_active', true).order('full_name'),
       supabase.from('tenure_13th_tiers').select('*').order('sort_order'),
       supabase.from('tenure_13th_month').select('*').eq('year', year),
     ])
@@ -52,7 +52,7 @@ export default function Tenure13thMonth({ isAdmin, profile, showToast, settings 
 
   const people = [
     ...drivers.map(d => ({ key: `driver:${d.id}`, id: d.id, kind: 'driver', name: d.driver_name, hire_date: d.hire_date, suggestedBase: null })),
-    ...supportStaff.map(e => ({ key: `emp:${e.id}`, id: e.id, kind: 'emp', name: e.full_name, hire_date: null, suggestedBase: e.basic_rate_monthly })),
+    ...supportStaff.map(e => ({ key: `emp:${e.id}`, id: e.id, kind: 'emp', name: e.full_name, hire_date: e.hire_date, suggestedBase: e.basic_rate_monthly })),
   ]
 
   const getAmount = (person) => {

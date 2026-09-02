@@ -24,7 +24,6 @@ const EXPENSE_ORDER = [
 ]
 const pct = (val, total) => total > 0 ? ((val / total) * 100).toFixed(2) + '%' : '0.00%'
 const f2 = (n) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
-const fmtDate = (d) => { if (!d) return ''; return new Date(d + 'T00:00:00').toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) }
 export default function Reports() {
   const { toast, showToast } = useToast()
   const { profile } = useAuth()
@@ -243,9 +242,6 @@ export default function Reports() {
     const driver = getDriver(truck.id)
     return { byRoute, totalSales, wht2, expenseLines, totalExpenses, netIncome, tripCount, driver, isHistorical: false }
   }
-  const getSigs = () => mode === 'Management Report'
-    ? { prep: settings.mgmt_prepared_by_name, prepTitle: settings.mgmt_prepared_by_title, noted: settings.mgmt_noted_by_name, notedTitle: settings.mgmt_noted_by_title }
-    : { prep: settings.bk_prepared_by_name, prepTitle: settings.bk_prepared_by_title, noted: settings.bk_noted_by_name, notedTitle: settings.bk_noted_by_title }
   const reportTrucks = selectedTruck === 'all' ? companyTrucks : companyTrucks.filter(t => t.id === selectedTruck)
   const handleSavePDF = () => { setSigDialog(true) }
   const doSavePDF = (sigs) => {

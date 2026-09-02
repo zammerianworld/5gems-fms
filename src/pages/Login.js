@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../components/AuthContext'
 import { supabase } from '../lib/supabase'
+import ConnectivityIndicator from '../components/ConnectivityIndicator'
 
 // Log login attempt to Supabase
 async function logAttempt({ user_name, user_role, email, status }) {
@@ -144,10 +145,12 @@ export default function Login() {
   }
 
   return (
-    <div style={{
-      minHeight: '100vh', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', background: '#0f1f2e', padding: 20,
-    }}>
+    <>
+      <ConnectivityIndicator />
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', background: '#0f1f2e', padding: 20,
+      }}>
       <div style={{ width: '100%', maxWidth: 380 }}>
         {/* Logo */}
         <div style={{ textAlign: 'center', marginBottom: 32 }}>
@@ -213,5 +216,6 @@ export default function Login() {
         </p>
       </div>
     </div>
+    </>
   )
 }

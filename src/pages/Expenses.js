@@ -129,7 +129,6 @@ export default function Expenses() {
   const [loading, setLoading] = useState(true)
   const [sortKey, setSortKey] = useState('expense_date')
   const [sortDir, setSortDir] = useState('desc')
-  const toggleSort = (k) => { setSortKey(k); setSortDir(d => k === sortKey ? (d === 'asc' ? 'desc' : 'asc') : 'desc') }
   const [customAdminCats, setCustomAdminCats] = useState([])
   const [customOpCats, setCustomOpCats] = useState([])
   const [showCatManager, setShowCatManager] = useState(false)
@@ -555,7 +554,6 @@ export default function Expenses() {
 
   const toggleInsTruck = (id) => { setInsForm(f => ({...f, truck_ids: f.truck_ids.includes(id)?f.truck_ids.filter(x=>x!==id):[...f.truck_ids,id]})) }
   const insMonthlyPerTruck = (ins) => (ins.annual_amount||0)/(ins.truck_ids?.length||1)/12
-  const insActiveInMonth = (ins, ym) => { const start=new Date(ins.start_date); const end=new Date(start); end.setMonth(end.getMonth()+12); const check=new Date(ym+'-01'); return check>=start&&check<end }
 
   const filtered = expenses.filter(e => {
     const mM = !filterMonth||e.expense_date?.startsWith(filterMonth)

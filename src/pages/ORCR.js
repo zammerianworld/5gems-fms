@@ -8,7 +8,6 @@ import { supabase, fmtDate, logAudit } from '../lib/supabase'
 import ExcelJS from 'exceljs'
 import { useToast, Toast } from '../components/Toast'
 
-const today = () => new Date().toISOString().slice(0, 10)
 
 const EMPTY = {
   vehicle_name: '', plate_no: '', vehicle_type: 'truck', or_number: '', cr_number: '',

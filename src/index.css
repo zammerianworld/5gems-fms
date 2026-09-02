@@ -172,6 +172,7 @@ button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-we
 
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; align-items: center; }
 .filter-bar input, .filter-bar select { width: auto; flex: 1; min-width: 150px; font-size: 13px; }
+.filter-bar select { max-width: 220px; }
 
 /* ── MOBILE RESPONSIVE ── */
 @media (min-width: 768px) {
@@ -223,6 +224,13 @@ button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-we
   .btn-primary, .btn-ghost, .btn-danger { min-height: 40px; }
   .btn-sm { min-height: 34px; padding: 6px 12px; }
 
+  /* .no-scroll + .table-dense (table-layout:fixed + width:100%) together
+     leave no escape hatch on mobile when a table genuinely needs more room
+     than the viewport — the fixed layout can never overflow to trigger
+     scrolling in the first place. Override both, scoped to mobile only. */
+  .table-wrap.no-scroll { overflow-x: auto !important; }
+  .table-dense { table-layout: auto !important; width: auto !important; min-width: 100%; }
+
   /* Page title smaller */
   .page-title { font-size: 18px !important; }
 
@@ -241,6 +249,7 @@ button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-we
     margin: 0 !important;
     max-height: 92vh;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 20px 16px 32px !important;
   }
 
@@ -267,6 +276,7 @@ button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-we
     width: 100% !important; 
     flex: none !important;
     min-width: 0 !important;
+    max-width: none !important;
   }
   .filter-bar .btn-ghost, .filter-bar .btn-sm { width: 100% !important; }
 
@@ -346,6 +356,14 @@ button { cursor: pointer; border: none; border-radius: var(--radius-sm); font-we
     border-top: 0.5px solid var(--border);
     z-index: 200;
     box-shadow: 0 -2px 12px rgba(0,0,0,0.08);
+  }
+  /* Sidebar overlay and bottom nav share z-index 200 — whichever renders
+     later in the DOM wins the stacking tie, which could put the bottom nav
+     on top of the sidebar's own content. This compound selector (two
+     classes beats one, regardless of source order) guarantees the bottom
+     nav stays hidden whenever the sidebar overlay is open. */
+  .mobile-bottom-nav.sidebar-is-open {
+    display: none !important;
   }
   /* Extra padding so content doesn't hide behind bottom nav */
   .main-content { padding-bottom: 60px; }

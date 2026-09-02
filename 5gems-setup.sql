@@ -2142,3 +2142,101 @@ begin
   return v_rows > 0;
 end;
 $function$;
+-- ============================================================
+-- DRIVER PAYROLL v2 (September 2026) — verified directly against
+-- DSTC's real source code and its actual tracked migrations
+-- (007-016), not reconstructed from description alone this time.
+-- Corrects an earlier speculative version of this section that got
+-- several real details wrong before the source was available —
+-- see the port summary for what changed.
+-- ============================================================
+
+-- ── Driver classification — column is `classification` (not `ownership`
+--    as first guessed), same values as trucks.ownership.
+alter table public.drivers add column if not exists classification text default 'company';
+alter table public.drivers drop constraint if exists drivers_classification_check;
+alter table public.drivers add constraint drivers_classification_check check (classification in ('company', 'subcon', 'special_subcon'));
+
+-- ── Reliever flag — used throughout DSTC's own app code but genuinely
+--    absent from every one of DSTC's own tracked migration files (the
+--    same untracked-drift pattern found repeatedly elsewhere this
+--    project) — adding it here since no migration provides it.
+alter table public.drivers add column if not exists is_reliever boolean default false;
+
+-- ── Employee numbers — both drivers and Admin/Support.
+alter table public.drivers add column if not exists employee_no text;
+alter table public.payroll_employees add column if not exists employee_no text;
+
+-- ── Hire/termination dates for Admin & Support (drivers already have
+--    hire_date from the base module; termination_date needed for both).
+alter table public.payroll_employees add column if not exists hire_date date;
+alter table public.payroll_employees add column if not exists termination_date date;
+alter table public.drivers add column if not exists termination_date date;
+
+-- ── Fleet-wide "General" rates — a driver_rates row with driver_id = null
+--    applies to any driver on that route/trip code, unless that driver has
+--    their own specific rate, which takes priority.
+alter table public.driver_rates alter column driver_id drop not null;
+
+-- ── Mixed fixed/percentage pay — pay_type now lives per rate rule, not as
+--    one flag on the whole driver. drivers.pay_type/percentage_rate become
+--    the fallback default used only when no driver_rates row matches.
+alter table public.driver_rates add column if not exists pay_type text default 'fixed';
+alter table public.driver_rates drop constraint if exists driver_rates_pay_type_check;
+alter table public.driver_rates add constraint driver_rates_pay_type_check check (pay_type in ('fixed', 'percentage'));
+alter table public.driver_rates add column if not exists percentage_rate numeric(5,2) default 0;
+
+-- ── Structured Prime Mover rate matching — container_size and van_status
+--    are new columns on driver_rates (the rate RULE definition). destination
+--    deliberately reuses the trips_pm.destination column that already
+--    exists for 5 Gems' Generic Van entry feature — verified safe: DSTC's
+--    structured matching only ever applies to the 3 built-in trip codes
+--    (Hustling PSACC, Hauling PSACC, SMC), and Generic Van clients always
+--    use their own custom trip codes, so the two never collide in practice.
+--    van_status itself is read from the EXISTING per-container containers[]
+--    field for Hustling PSACC trips — no new trips_pm column needed for it.
+alter table public.driver_rates add column if not exists container_size text;
+alter table public.driver_rates add column if not exists van_status text;
+alter table public.driver_rates add column if not exists destination text;
+
+-- ── Precise lock/unlock reversal — tracks the exact CA and expense
+--    records a lock created, so unlocking deletes exactly those rows
+--    instead of guessing via date/description matching.
+alter table public.driver_payroll_entries add column if not exists ca_payment_record_id uuid references public.payroll_cash_advances(id) on delete set null;
+alter table public.driver_payroll_entries add column if not exists expense_record_ids uuid[];
+
+-- ── locked_by references auth.users directly (Supabase's own auth schema),
+--    not public.profiles as the earlier speculative version had it.
+alter table public.driver_payroll_entries drop constraint if exists driver_payroll_entries_locked_by_fkey;
+alter table public.driver_payroll_entries alter column locked_by type uuid using locked_by::uuid;
+alter table public.driver_payroll_entries add constraint driver_payroll_entries_locked_by_fkey foreign key (locked_by) references auth.users(id) on delete set null;
+
+-- ── Cash advance ledger — proper mutual-exclusivity constraint (a CA record
+--    belongs to either an employee or a driver, never both) plus relaxing
+--    employee_id, which was likely not-null before driver_id existed.
+alter table public.payroll_cash_advances alter column employee_id drop not null;
+alter table public.payroll_cash_advances drop constraint if exists ca_one_owner_check;
+alter table public.payroll_cash_advances add constraint ca_one_owner_check
+  check ((employee_id is not null and driver_id is null) or (employee_id is null and driver_id is not null));
+
+-- ── Viewer: which driver ran a trip on their own truck. Subcon truck
+--    owners pay their own drivers and legitimately need this — scoped
+--    tightly to trips on their own plate(s), not the full driver roster.
+create or replace function public.get_my_trip_drivers() returns table(id uuid, driver_name text) as $$
+  select distinct d.id, d.driver_name
+  from public.drivers d
+  where d.id in (
+    select driver_id from public.trips_dump where truck_plate = any(public.viewer_plates()) and driver_id is not null
+    union
+    select driver_id from public.trips_pm where truck_plate = any(public.viewer_plates()) and driver_id is not null
+  );
+$$ language sql security definer stable;
+
+-- ============================================================
+-- NOT ported: DSTC's own superuser-profile-row fix (migration 010).
+-- That migration hardcodes DSTC's specific auth.uid() and
+-- @dragonspeed.internal email — pure DSTC account data, not portable.
+-- The underlying concern (superuser needs a real profiles row for
+-- is_admin() checks to work) was already flagged separately — confirm
+-- 5 Gems' superuser has one rather than assuming.
+-- ============================================================
