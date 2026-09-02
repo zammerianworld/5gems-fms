@@ -112,6 +112,12 @@ const GUIDES = [
           { type: 'note', text: "All confirmation prompts (delete, duplicate warnings, status changes) now appear as styled pop-ups matching the app design — not the browser's plain default pop-up. Duplicate warnings (e.g. same SMCSL WB already exists) show the conflicting record's plate and date so you can double-check before saving anyway." },
         ],
       },
+      {
+        heading: 'Connection Status',
+        content: [
+          { type: 'note', text: 'Two small colored dots show connection health — "Internet" (your device\'s connection to the app itself) and "Server" (the connection to the database) are tracked separately, since one can be fine while the other is slow. On desktop they float in the top-right corner; on mobile they sit in the top bar. Green = good, yellow = slow, red = down. Visible even on the Login screen, before you sign in.' },
+        ],
+      },
     ],
   },
   {
@@ -150,6 +156,7 @@ const GUIDES = [
             'Click Save Trip.',
           ]},
           { type: 'note', text: 'A new client defaults to Container/Port style. Switch a client to Generic Van in Settings → Clientele if their Prime Mover trips are simple point-to-point van runs rather than container/port logistics.' },
+          { type: 'note', text: 'For the built-in trip codes (Hustling PSACC, Hauling PSACC, SMC) specifically, a separate "Driver Rate Destination" dropdown also appears — this is unrelated to the Generic Van Destination field above, and instead controls which driver pay rate applies to the trip. See the Employees guide, Structured Prime Mover Rate Matching, for details.' },
         ],
       },
       {
@@ -330,7 +337,7 @@ const GUIDES = [
         content: [
           { type: 'steps', items: [
             'Go to Employees → Admin or Support tab, click + Add Employee.',
-            'Fill in Full Name, Position, Monthly Basic Rate, Monthly Allowance, and monthly SSS/PhilHealth/HDMF employee shares.',
+            'Fill in Full Name, Employee Number, Position, Hire Date, Monthly Basic Rate, Monthly Allowance, and monthly SSS/PhilHealth/HDMF employee shares. Termination Date can be set later when the employee leaves.',
             'To add a payroll entry: select the cutoff period, click + Add Entry, select the employee — with Auto-calculate on, Basic Salary/Allowance/premiums fill in automatically.',
             'Adjust OT Hours, Rest Day Duty, Salary Adjustment, and Cash Advance Deduction as needed. OT Pay auto-computes as OT Hours × OT Rate as you type, and can still be overridden manually.',
             'The live preview shows Earnings / Deductions / Net Pay before saving.',
@@ -341,29 +348,42 @@ const GUIDES = [
       {
         heading: 'Drivers — Roster, Rates, Loans, and Contribution Brackets',
         content: [
-          { type: 'text', text: 'Everything about a driver as a person and how they get paid lives in Employees → Drivers, in 5 sub-tabs.' },
+          { type: 'text', text: 'Everything about a driver as a person and how they get paid lives in Employees, Drivers tab, in 5 sub-tabs.' },
           { type: 'table', rows: [
             ['Sub-tab', 'What it does'],
-            ['📋 Payroll Register', 'The actual trip-sweep computation for a chosen cutoff period — see below.'],
-            ['🚛 Roster', 'Add/edit drivers: name, assigned truck, SSS/PhilHealth/HDMF numbers, hire date, default pay type (fixed or percentage) and rate.'],
-            ['💰 Rates', 'Optional per-route or per-trip-code pay rules — lets one driver be fixed-rate on some routes and percentage-based on others. A blank route/trip code row is that driver\'s catch-all default.'],
-            ['🏦 Loans', 'SSS, HDMF (Pag-ibig), or company loans — principal, amortization per cutoff, and running balance, deducted automatically once a payroll entry is locked.'],
-            ['⚙️ Contribution Brackets', 'The SSS/PhilHealth/HDMF salary-bracket tables used to compute government contribution deductions — editable in-app, empty until real figures are entered.'],
+            ['Payroll Register', 'The actual trip-sweep computation for a chosen cutoff period — see below.'],
+            ['Roster', 'Add/edit drivers: name, employee number, assigned truck, SSS/PhilHealth/HDMF numbers, hire and termination dates, default pay type (fixed or percentage) and rate, classification, and reliever flag.'],
+            ['Rates', 'Optional per-route or per-trip-code pay rules — a driver can be fixed-rate on some routes and percentage-based on others. A blank route/trip code row is that driver catch-all default.'],
+            ['Loans', 'SSS, HDMF (Pag-ibig), or company loans — principal, amortization per cutoff, and running balance, deducted automatically once a payroll entry is locked.'],
+            ['Contribution Brackets', 'The SSS/PhilHealth/HDMF salary-bracket tables used to compute government contribution deductions — editable in-app, empty until real figures are entered.'],
           ]},
+          { type: 'text', text: 'Classification (Company, Subcon, or Special Subcon) mirrors how trucks are classified in Settings — assigning a Subcon or Special Subcon truck to a driver auto-suggests the matching classification. Subcon-classified drivers are excluded from the Payroll Register by default, since 5 Gems does not run their payroll — a per-session checkbox on the register lets you include one when needed.' },
+          { type: 'text', text: 'The Reliever flag marks a driver who covers for others rather than having one fixed assigned truck — this keeps an unassigned driver looking intentional in the roster rather than like a missing record.' },
+          { type: 'text', text: 'Rate rules can also apply fleet-wide: leave a rate rule Driver blank and it becomes a General rate, applying to every driver on that route or trip code unless a specific driver has their own override for the same route/code — the specific rate always wins.' },
         ],
       },
       {
-        heading: 'Computing a Driver\'s Payroll for a Cutoff',
+        heading: 'Structured Prime Mover Rate Matching',
+        content: [
+          { type: 'text', text: 'For the built-in trip codes only (Hustling PSACC, Hauling PSACC, SMC), rate rules can be scoped by Container Size, Loaded/Empty status, and Destination — set these on the rate itself in the Rates sub-tab.' },
+          { type: 'text', text: 'On Trip Entry, the matching Destination field for these three trip codes is a dropdown, not free text — it only lists destinations that already have a rate configured, so a typo or a new, unrated destination cannot silently make a trip unpayable. Add the destination as a rate first, then it appears on Trip Entry.' },
+          { type: 'note', text: 'A trip on one of these three codes with no destination selected is flagged with a red ⚑ No dest. badge in Manage Trips, and is forced to ₱0 when payroll is computed for it rather than guessing a rate — set the destination on the trip (or add the missing rate) to resolve it.' },
+        ],
+      },
+      {
+        heading: 'Computing a Driver Payroll for a Cutoff',
         content: [
           { type: 'steps', items: [
-            'Go to Drivers → 📋 Payroll Register, set the period From/To (or pick a previously used coverage from the dropdown).',
-            'Click Compute next to a driver — the system automatically sweeps every trip (Dump and Prime Mover) assigned to that driver that hasn\'t already been paid out in any prior cutoff, regardless of the trip\'s own date.',
-            'Pay per trip is resolved from that driver\'s Rates config (route/trip-code specific rules first, falling back to their roster default) — fixed amount or a percentage of the trip\'s gross.',
+            'Go to Drivers, Payroll Register, set the period From/To (or pick a previously used coverage from the dropdown).',
+            'Subcon-classified drivers are hidden by default — use the include checkbox on the register if you need to compute one for a specific reason.',
+            'Click Compute next to a driver — every trip (Dump and Prime Mover) assigned to that driver that has not already been paid out in any prior cutoff gets swept in, regardless of the trip own date.',
+            'Pay per trip is resolved in order: that driver exact rate for the route/trip code, then that driver own catch-all rate, then a fleet-wide General rate for the same route/trip code, then the fleet-wide General catch-all, then finally the driver roster-level default pay type and rate.',
             'Government contributions (SSS/PhilHealth/HDMF) are looked up automatically from the Contribution Brackets against the computed gross.',
             'Review the trip breakdown, adjust or add an Extra Amount with a reason if needed, set the Cash Advance deduction (available balance is shown), then Save.',
-            'Once you\'re satisfied the cutoff is final, click Lock — this deducts loan amortizations from balances, records the CA deduction, and finalizes the payslip. Locked entries can no longer be edited.',
+            'Once satisfied the cutoff is final, click Lock — this deducts loan amortizations from balances, records the CA deduction, and posts a per-truck expense for each truck the driver included trips were on that cutoff, then finalizes the payslip. Locked entries cannot be edited.',
           ]},
           { type: 'note', text: 'A trip is swept exactly once, ever — even a late-encoded trip from a prior period lands in whichever cutoff is currently open rather than getting lost or requiring you to reopen a closed period.' },
+          { type: 'note', text: 'Unlocking, or deleting an already-locked entry, is superuser-only — both reverse the exact CA record and expense records that locking created, precisely, not by guessing. Admins can still delete an entry that has not been locked yet.' },
         ],
       },
       {
@@ -513,6 +533,13 @@ const GUIDES = [
         heading: 'Check Vouchers',
         content: [
           { type: 'text', text: 'Check Vouchers generates PH-format check vouchers for printing. Fill in payee, amount, account details, and description. The printed output follows standard Philippine accounting voucher format.' },
+          { type: 'note', text: 'Each saved voucher has a single Print Voucher button — this opens the Signatory dialog before generating the PDF.' },
+        ],
+      },
+      {
+        heading: 'PDC Tracker',
+        content: [
+          { type: 'text', text: 'The PDC Tracker tab lists post-dated checks. Entries linked to a voucher cannot be deleted here directly — delete the voucher itself instead, and the linked entry goes with it. Standalone entries can be deleted from this tab, with a confirmation prompt first.' },
         ],
       },
       {
