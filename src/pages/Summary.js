@@ -15,7 +15,7 @@ const pmSaleValue = (t) => {
 }
 
 export default function Summary() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [periodType, setPeriodType] = useState('Monthly')
   const [dataMode, setDataMode] = useState('auto') // auto | live | historical
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
@@ -528,7 +528,7 @@ export default function Summary() {
         />
       )}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

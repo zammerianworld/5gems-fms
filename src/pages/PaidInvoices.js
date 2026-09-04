@@ -12,7 +12,7 @@ const STATUS_COLORS = {
 }
 
 export default function PaidInvoices() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const navigate = useNavigate()
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -624,7 +624,7 @@ export default function PaidInvoices() {
         )
       }
       </>)}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

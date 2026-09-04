@@ -112,7 +112,7 @@ const EMPTY_INS = {
 
 export default function Expenses() {
   const { profile, isAdmin } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [expenses, setExpenses] = useState([])
   const [trucks, setTrucks] = useState([])
   const [amortizations, setAmortizations] = useState([])
@@ -1235,7 +1235,7 @@ export default function Expenses() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

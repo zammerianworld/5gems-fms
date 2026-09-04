@@ -11,7 +11,7 @@ const STATUS_COLORS = { Pending: { bg: '#FEF9C3', color: '#92400E' }, Approved: 
 
 export default function CashVouchers() {
   const { isAdmin, profile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [vouchers, setVouchers] = useState([])
   const [settings, setSettings] = useState({})
   const [loading, setLoading] = useState(true)
@@ -256,7 +256,7 @@ export default function CashVouchers() {
         </div>
       )}
       <SignatoryDialog open={sigDialog} onClose={()=>setSigDialog(false)} onPrint={doPrint} settings={settings} profile={profile} docType="Cash Voucher" />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

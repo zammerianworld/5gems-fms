@@ -5,7 +5,7 @@ import { useToast, Toast } from '../components/Toast'
 
 export default function MyAccount() {
   const { profile, isSuperuser, isAdmin, refreshProfile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
 
   const [currentPassword, setCurrentPassword] = useState('')
   const [newPassword, setNewPassword] = useState('')
@@ -176,7 +176,7 @@ export default function MyAccount() {
         </div>
       )}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

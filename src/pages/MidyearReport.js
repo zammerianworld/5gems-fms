@@ -39,7 +39,7 @@ const TABS = [
 const pctOf = (val, total) => total > 0 ? ((val / total) * 100).toFixed(2) + '%' : '—'
 
 export default function MidyearReport() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { profile } = useAuth()
   const [activeTab, setActiveTab] = useState('per-truck')
   const [year, setYear] = useState(2026)
@@ -957,7 +957,7 @@ export default function MidyearReport() {
 
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

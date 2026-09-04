@@ -30,7 +30,7 @@ const expiryBadge = (dateStr, threshold = 30) => {
 }
 
 export default function ORCR() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { isAdmin, profile } = useAuth()
   const [records, setRecords] = useState([])
   const [settings, setSettings] = useState({})
@@ -515,7 +515,7 @@ export default function ORCR() {
         </div>
       )}
       <SignatoryDialog open={sigDialog} onClose={()=>setSigDialog(false)} onPrint={doPrint} settings={settings} profile={profile} docType="OR/CR Report" />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

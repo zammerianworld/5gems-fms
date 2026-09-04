@@ -27,7 +27,7 @@ const fmtTime = (ts) => new Date(ts).toLocaleTimeString('en-PH', { hour: '2-digi
 const fmtDateFull = (ts) => new Date(ts).toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
 
 export default function Activity() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [logs, setLogs] = useState([])
   const [loading, setLoading] = useState(true)
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().slice(0, 10))
@@ -81,7 +81,7 @@ export default function Activity() {
 
   return (
     <div className="page">
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
 
       <div className="page-header" style={{ marginBottom: 20 }}>
         <div>

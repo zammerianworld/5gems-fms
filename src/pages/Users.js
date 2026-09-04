@@ -60,7 +60,7 @@ const STAFF_DEFAULTS = ['dashboard','trips','expenses','subcon','how_to','billin
 const ADMIN_DEFAULTS = ALL_MODULES.map(m => m.key)
 
 export default function Users() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { isSuperuser } = useAuth()
   const [users, setUsers] = useState([])
   const [trucks, setTrucks] = useState([])
@@ -389,7 +389,7 @@ export default function Users() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

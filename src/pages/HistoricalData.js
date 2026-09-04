@@ -29,7 +29,7 @@ const EMPTY = {
 
 export default function HistoricalData() {
   const { isAdmin } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [records, setRecords] = useState([])
   const [trucks, setTrucks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -581,7 +581,7 @@ export default function HistoricalData() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   )

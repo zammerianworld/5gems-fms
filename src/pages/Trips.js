@@ -104,7 +104,7 @@ function DL({ label, value, onChange, req, list, listId, placeholder, type = 'te
 
 export default function Trips() {
   const { profile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const navigate = useNavigate()
 
   const [truckType, setTruckType] = useState(null)
@@ -135,6 +135,7 @@ export default function Trips() {
   const [drivers, setDrivers] = useState([])
   const [filterCommodity, setFilterCommodity] = useState('')
   const [filterTruck, setFilterTruck] = useState('')
+  const [filterDriver, setFilterDriver] = useState('')
   const [filterPayStatus, setFilterPayStatus] = useState('') // '' | 'unbilled' | 'invoiced' | 'paid'
   const [filterPMCode, setFilterPMCode] = useState('')
   const [filterPMClient, setFilterPMClient] = useState('')
@@ -557,12 +558,14 @@ export default function Trips() {
     (!filterRoute || t.route === filterRoute) &&
     (!filterCommodity || t.commodity === filterCommodity) &&
     (!filterTruck || t.truck_plate === filterTruck) &&
+    (!filterDriver || t.driver_id === filterDriver) &&
     (!filterMonth || t.trip_date?.startsWith(filterMonth)) &&
     (!search || [t.client, t.truck_plate, t.route, t.commodity, t.smcsl_wb].some(v => v?.toLowerCase().includes(search.toLowerCase())))
   )
   const filteredPM = pmTrips.filter(t =>
     matchPayStatus(t) &&
     (!filterTruck || t.truck_plate === filterTruck) &&
+    (!filterDriver || t.driver_id === filterDriver) &&
     (!filterMonth || t.trip_date?.startsWith(filterMonth)) &&
     (!filterPMCode || t.trip_code === filterPMCode) &&
     (!filterPMClient || t.client === filterPMClient) &&
@@ -1070,6 +1073,10 @@ export default function Trips() {
           <option value="">All trucks</option>
           {trucksOfType(activeTab).map(t => <option key={t.plate} value={t.plate}>{t.plate}</option>)}
         </select>
+        <select value={filterDriver} onChange={e => setFilterDriver(e.target.value)} style={{ width: 'auto' }}>
+          <option value="">All drivers</option>
+          {drivers.map(d => <option key={d.id} value={d.id}>{d.driver_name}</option>)}
+        </select>
         <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)} style={{ width: 'auto' }}>
           <option value="">📅 All months</option>
           {allTripMonths.map(m => {
@@ -1107,7 +1114,7 @@ export default function Trips() {
           <div className="table-wrap">
             <table className="table">
               <thead><tr>
-                <th>Date</th><th>Plate</th><th>Route</th><th>Client</th>
+                <th>Date</th><th>Plate</th><th>Driver</th><th>Route</th><th>Client</th>
                 <th>Commodity</th><th>SMCSL WB</th>
                 <th className="text-right">Weight (t)</th><th className="text-right">Rate</th><th className="text-right">Amount (₱)</th><th></th>
               </tr></thead>
@@ -1124,6 +1131,7 @@ export default function Trips() {
                       {t.truck_plate}
                       {isSubconTruck(t.truck_plate) && <span className="badge" style={{ fontSize: 9, background: 'rgba(139,92,246,0.12)', color: '#6d28d9', marginLeft: 4 }}>🤝</span>}
                     </td>
+                    <td style={{ fontSize: 12, color: 'var(--muted)' }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                     <td style={{ fontSize: 12 }}>
                       {t.route}
                       {t.remarks && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 1, fontStyle: 'italic' }}>{t.remarks}</div>}
@@ -1167,7 +1175,7 @@ export default function Trips() {
             <table className="table">
               <thead><tr>
                 <th>Date</th><th>Plate</th><th>Driver</th><th>Trip Code</th><th>Client</th>
-                <th>Container</th><th>Con Van No.</th>
+                <th>Container</th><th>Con Van No.</th><th>Client Doc</th>
                 <th className="text-right">Amount (₱)</th><th></th>
               </tr></thead>
               <tbody>
@@ -1195,6 +1203,12 @@ export default function Trips() {
                       {isVan
                         ? (t.van_number || '—')
                         : ((t.containers || []).map(c => c.con_van_no || c.van_no).filter(Boolean).join(', ') || t.vessel || t.waybill_no || '—')}
+                    </td>
+                    <td style={{ fontSize: 12, color: 'var(--muted)' }}>
+                      {t.trip_code === 'SMC' ? (t.smcsl_waybill_no || '—')
+                        : t.trip_code === 'Hustling PSACC' ? ((t.containers || []).map(c => c.cts_no).filter(Boolean).join(', ') || '—')
+                        : t.trip_code === 'Hauling PSACC' ? ((t.containers || []).map(c => c.bl_no).filter(Boolean).join(', ') || '—')
+                        : '—'}
                     </td>
                     <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt((t.supplier_amount || 0) + (t.stripping_fee || 0))}</td>
                     <td>
@@ -1513,7 +1527,7 @@ export default function Trips() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   )

@@ -71,7 +71,7 @@ const PRINT_STYLE = `
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
 export default function Employees() {
   const { isAdmin, isSuperuser, profile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
 
   // ── GROUP (top-level page structure) ───────────────────────────────────
   // 'admin' | 'support' scope the existing payroll_employees roster below by
@@ -1035,7 +1035,7 @@ export default function Employees() {
   // ── RENDER ──────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '16px 12px' }}>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
 
       {/* ── HEADER ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>

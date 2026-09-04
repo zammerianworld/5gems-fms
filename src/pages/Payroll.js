@@ -57,7 +57,7 @@ const PRINT_STYLE = `
 // ── MAIN COMPONENT ─────────────────────────────────────────────────────────
 export default function Payroll() {
   const { isAdmin, profile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
 
   // ── DATA STATE ──────────────────────────────────────────────────────────
   const [employees, setEmployees] = useState([])
@@ -923,7 +923,7 @@ export default function Payroll() {
   // ── RENDER ──────────────────────────────────────────────────────────────
   return (
     <div style={{ padding: '16px 12px' }}>
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
 
       {/* ── HEADER ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>

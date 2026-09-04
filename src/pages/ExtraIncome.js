@@ -8,7 +8,7 @@ const SOURCE_TYPES = ['Side Trip', 'Sale of Asset', 'Rental', 'Other']
 
 export default function ExtraIncome() {
   const { profile, isAdmin } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [income, setIncome] = useState([])
   const [trucks, setTrucks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -214,7 +214,7 @@ export default function ExtraIncome() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

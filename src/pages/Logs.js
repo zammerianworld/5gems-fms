@@ -30,7 +30,7 @@ const ACTION_COLORS = {
 }
 
 export default function Logs() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { profile, isSuperuser, isAdmin } = useAuth()
   const [tab, setTab] = useState('login')
   const [date, setDate] = useState(TODAY)
@@ -372,7 +372,7 @@ export default function Logs() {
         </>
       ))}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   )

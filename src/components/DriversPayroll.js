@@ -532,10 +532,11 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
       message: 'Unlock this entry? This reverses the loan deductions, cash advance payment, and per-truck expense records posted when it was locked, so they can be corrected — the entry will need to be locked again once you\'re done editing.',
       onConfirm: async () => {
         await reverseLockSideEffects(entry)
-        const { error } = await supabase.from('driver_payroll_entries').update({
+        const { data, error } = await supabase.from('driver_payroll_entries').update({
           locked: false, locked_at: null, locked_by: null, ca_payment_record_id: null,
-        }).eq('id', entry.id)
+        }).eq('id', entry.id).select()
         if (error) { showToast('Error: ' + error.message, 'error'); return }
+        if (!data || data.length === 0) { showToast('Unlock did not apply — you may not have permission to unlock this entry.', 'error'); return }
         showToast('Entry unlocked.')
         fetchAll()
         fetchAllHistory()
@@ -551,8 +552,9 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
       message: `Delete this payroll entry for ${driverName} (${entry.cutoff_date})? This can't be undone — the trips it covered become available to include again.${lockedWarning}`,
       onConfirm: async () => {
         if (entry.locked) await reverseLockSideEffects(entry)
-        const { error } = await supabase.from('driver_payroll_entries').delete().eq('id', entry.id)
+        const { data, error } = await supabase.from('driver_payroll_entries').delete().eq('id', entry.id).select()
         if (error) { showToast('Error: ' + error.message, 'error'); return }
+        if (!data || data.length === 0) { showToast('Delete did not apply — you may not have permission to delete this entry.', 'error'); return }
         showToast('Entry deleted.')
         fetchAll()
         fetchPastPeriods()

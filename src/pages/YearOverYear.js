@@ -10,7 +10,7 @@ import ExcelJS from 'exceljs'
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
 export default function YearOverYear() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { profile } = useAuth()
   const [sigDialog, setSigDialog] = useState(false)
   const [sigPendingFormat, setSigPendingFormat] = useState(null) // 'pdf' | 'excel'
@@ -721,7 +721,7 @@ export default function YearOverYear() {
           </div>
         </div>
       </>)}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
       <SignatoryDialog
         open={sigDialog}
         onClose={() => { setSigDialog(false); setSigPendingFormat(null) }}

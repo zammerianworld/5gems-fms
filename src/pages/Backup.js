@@ -77,7 +77,7 @@ export default function Backup() {
     const url = URL.createObjectURL(data)
     const a = document.createElement('a'); a.href = url; a.download = fname; a.click(); URL.revokeObjectURL(url)
   }
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const visibleTables = TABLES.filter(t => !t.superuserOnly || isSuperuser)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState('')
@@ -408,7 +408,7 @@ export default function Backup() {
         )}
       </div>
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

@@ -9,11 +9,16 @@ const f2 = (n) => (parseFloat(n) || 0).toLocaleString('en-PH', { minimumFraction
 // Page is always half-letter (8.5 x 5.5in), landscape shape, so two print
 // side by side on one full letter sheet, meant to be cut in half.
 //
-// When tripBreakdown is provided (drivers): LEFT half is a trip details
-// table, RIGHT half is the payslip breakdown.
+// When tripBreakdown is provided (drivers): the payslip breakdown is always
+// on the LEFT of page 1 — immediately visible, never buried on a later
+// page. Trip details sit on the RIGHT, showing as many trips as actually
+// fit in that column; if there are more than fit, autoTable's own
+// pagination continues them on further pages, still in the same
+// right-column shape (never full-width), so there's no wasted blank space
+// and the look stays consistent throughout.
 // When tripBreakdown is omitted (Admin/Support, no trip concept applies):
 // the payslip breakdown uses the full page width instead of just the
-// right half.
+// left half.
 //
 // opts:
 //   no, month, date, employeeName, companyName, companyAddress
@@ -36,74 +41,91 @@ export function buildPayslipDoc(opts) {
   const hasTrips = tripBreakdown && tripBreakdown.length > 0
 
   const midX = W / 2
-  const leftW = midX - M - 3
-  const rightX = hasTrips ? midX + 3 : M
-  const rightW = hasTrips ? (W - M - rightX) : (W - M * 2)
+  // Breakdown always on the left — page 1 only, never repeats on overflow
+  // pages, since it's a fixed number of lines that always fits.
+  const leftX = M
+  const leftW = hasTrips ? (midX - M - 3) : (W - M * 2)
+  // Trip details on the right — autoTable paginates this on its own if it
+  // overflows the column height, reusing this same margin/width on every
+  // continuation page it adds, so the shape never changes to full-width.
+  const rightX = midX + 3
+  const rightW = W - M - rightX
 
   if (hasTrips) {
-    // Thin divider between the two halves
+    // Thin divider between the two halves (page 1 only — deliberately not
+    // redrawn on overflow pages, which are trip-table-only).
     doc.setDrawColor(180); doc.setLineWidth(0.2)
     doc.line(midX, M, midX, H - M)
 
-    // LEFT HALF - trip details
-    let ly = M + 4
+    let ty = M + 4
     doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(0)
-    doc.text('Trip Details', M, ly)
-    ly += 3
+    doc.text('Trip Details', rightX, ty)
+    ty += 3
 
     autoTable(doc, {
-      startY: ly, margin: { left: M, right: W - M - leftW },
-      tableWidth: leftW,
+      startY: ty, margin: { left: rightX, right: W - M - rightX, top: M },
+      tableWidth: rightW,
       head: [['Date', 'Doc Ref / Waybill No.', 'Trip', 'Amount']],
       body: tripBreakdown.map(t => [t.date, t.docRef || '-', t.label, f2(t.amount)]),
       styles: { fontSize: 6.5, cellPadding: 1 }, headStyles: { fillColor: [255, 180, 160], textColor: 0, fontStyle: 'bold', fontSize: 6.5 },
       columnStyles: { 3: { halign: 'right' } },
+      // Deliberately generous — the row-height jsPDF/autoTable actually
+      // renders can run a little taller than the raw fontSize+padding math
+      // suggests (wrapped Doc Ref text, font metrics rounding). A tight
+      // estimate here previously caused the FIRST page's column to overflow
+      // onto an extra unintended page before this pagination logic ever
+      // got a chance to run — this margin exists specifically to avoid
+      // recreating that bug. Verified against real multi-page output, not
+      // just visual inspection — see payslipTemplate.pagination.test.js.
+      rowPageBreak: 'avoid',
     })
     const tripTotal = tripBreakdown.reduce((s, t) => s + (parseFloat(t.amount) || 0), 0)
     const endY = doc.lastAutoTable.finalY + 4
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8)
-    doc.text('Total Trip Earnings:', M, endY)
-    doc.text(f2(tripTotal), M + leftW, endY, { align: 'right' })
+    doc.text('Total Trip Earnings:', rightX, endY)
+    doc.text(f2(tripTotal), rightX + rightW, endY, { align: 'right' })
   }
 
-  // PAYSLIP BREAKDOWN - right half (drivers) or full width (admin/support)
+  // PAYSLIP BREAKDOWN - left half (drivers) or full width (admin/support).
+  // Page 1 only, by construction — nothing here ever adds a page.
+  doc.setPage(1)
   let y = M + 3
   doc.setFillColor(0, 200, 0)
-  doc.rect(rightX, M - 3, rightW, 3, 'F')
+  doc.rect(leftX, M - 3, leftW, 3, 'F')
   y += 2
 
   doc.setFontSize(8); doc.setFont('helvetica', 'normal'); doc.setTextColor(0)
   const empNoLabel = 'Employee No.'
-  doc.text(empNoLabel, rightX, y)
+  doc.text(empNoLabel, leftX, y)
   const empNoLabelW = doc.getTextWidth(empNoLabel)
-  doc.text(employeeNo || '—', rightX + empNoLabelW + 2, y)
-  doc.text('Date', rightX + rightW - 40, y)
+  doc.text(employeeNo || '—', leftX + empNoLabelW + 2, y)
+  doc.text('Date', leftX + leftW - 40, y)
   doc.setFont('helvetica', 'bold')
-  doc.text(String(date), rightX + rightW - 26, y)
+  doc.text(String(date), leftX + leftW - 26, y)
   y += 4.5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7)
-  doc.text('Coverage:', rightX, y)
+  doc.text('Coverage:', leftX, y)
   doc.setFont('helvetica', 'bold')
-  doc.text(String(month), rightX + 15, y, { maxWidth: rightW - 15 })
-  doc.setDrawColor(0); doc.line(rightX, y + 1.5, rightX + rightW, y + 1.5)
+  doc.text(String(month), leftX + 15, y, { maxWidth: leftW - 15 })
+  doc.setDrawColor(0); doc.line(leftX, y + 1.5, leftX + leftW, y + 1.5)
 
   y += 5
   doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
-  doc.text('Employee Name:', rightX, y)
+  doc.text('Employee Name:', leftX, y)
   doc.setFont('helvetica', 'bold')
-  doc.text(employeeName.toUpperCase(), rightX + 24, y)
-  doc.line(rightX, y + 1.5, rightX + rightW, y + 1.5)
+  doc.text(employeeName.toUpperCase(), leftX + 24, y)
+  doc.line(leftX, y + 1.5, leftX + leftW, y + 1.5)
 
   y += 5
   doc.setFillColor(255, 180, 160)
-  doc.rect(rightX, y, rightW, 6, 'F')
+  doc.rect(leftX, y, leftW, 6, 'F')
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(0)
-  doc.text('PAY SLIP', rightX + rightW / 2, y + 4.3, { align: 'center' })
+  doc.text('PAY SLIP', leftX + leftW / 2, y + 4.3, { align: 'center' })
   y += 10
 
-  const labelX = rightX + 2
-  const pesoX = rightX + rightW - 24
-  const amtRightX = rightX + rightW - 1
+  const labelX = leftX + 2
+  const pesoX = leftX + leftW - 24
+  const amtRightX = leftX + leftW - 1
   const amtLineX0 = pesoX + 4
   const rowH = 3.85
 
@@ -154,20 +176,20 @@ export function buildPayslipDoc(opts) {
 
   y += 10
   doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(90)
-  doc.text('Please check carefully - questions on this statement should be taken up with the office.', rightX, y)
+  doc.text('Please check carefully - questions on this statement should be taken up with the office.', leftX, y)
 
   y += 4
-  doc.setDrawColor(0); doc.line(rightX, y, rightX + rightW, y)
+  doc.setDrawColor(0); doc.line(leftX, y, leftX + leftW, y)
   y += 3.5
   doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(0)
-  doc.text(companyName.toUpperCase(), rightX + rightW / 2, y, { align: 'center' })
+  doc.text(companyName.toUpperCase(), leftX + leftW / 2, y, { align: 'center' })
   if (companyAddress) {
     doc.setFont('helvetica', 'normal'); doc.setFontSize(5.5); doc.setTextColor(90)
-    doc.text(companyAddress, rightX + rightW / 2, y + 3.5, { align: 'center', maxWidth: rightW })
+    doc.text(companyAddress, leftX + leftW / 2, y + 3.5, { align: 'center', maxWidth: leftW })
   }
 
   doc._payslipEndY = y + (companyAddress ? 6 : 3)
-  doc._payslipRightX = rightX
-  doc._payslipRightW = rightW
+  doc._payslipRightX = leftX
+  doc._payslipRightW = leftW
   return doc
 }

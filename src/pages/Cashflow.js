@@ -5,7 +5,7 @@ import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
 export default function Cashflow() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [vouchers, setVouchers] = useState([])
   const [subconDump, setSubconDump] = useState([])
   const [subconPM, setSubconPM] = useState([])
@@ -635,7 +635,7 @@ export default function Cashflow() {
           </div>
         </div>
       )}
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

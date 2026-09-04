@@ -7,7 +7,7 @@ const AUTO_PURGE_DAYS = 30
 
 export default function Trash() {
   const { isAdmin, isSuperuser } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [tab, setTab] = useState('Trips')
   const [dumpTrash, setDumpTrash] = useState([])
   const [pmTrash, setPmTrash] = useState([])
@@ -214,7 +214,7 @@ export default function Trash() {
         </div>
       )}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

@@ -25,7 +25,7 @@ const EXPENSE_ORDER = [
 const pct = (val, total) => total > 0 ? ((val / total) * 100).toFixed(2) + '%' : '0.00%'
 const f2 = (n) => Number(n || 0).toLocaleString('en-PH', { minimumFractionDigits: 2 })
 export default function Reports() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { profile } = useAuth()
   const [mode, setMode] = useState('Management Report')
   const [customStartDate, setCustomStartDate] = useState('')
@@ -665,7 +665,7 @@ export default function Reports() {
         )
       })()}
       <SignatoryDialog open={sigDialog} onClose={()=>setSigDialog(false)} onPrint={doSavePDF} settings={settings} profile={profile} docType="Report" />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

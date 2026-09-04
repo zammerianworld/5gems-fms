@@ -18,7 +18,7 @@ const STATUS_COLORS = {
   'On Hold': { bg: 'rgba(202,138,4,0.12)', color: '#a16207' },
 }
 export default function Billing() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { isAdmin, profile } = useAuth()
   const location = useLocation()
   const printRef = useRef()
@@ -34,6 +34,7 @@ export default function Billing() {
   const [invoices, setInvoices] = useState([])
   const [settings, setSettings] = useState({})
   const [trucks, setTrucks] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [clientsList, setClientsList] = useState([])
   const [commodities, setCommodities] = useState([])
   const [savedOriginCodes, setSavedOriginCodes] = useState([])
@@ -151,7 +152,7 @@ export default function Billing() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [dt, pt, adt, apt, inv, sett, tk, co, cl] = await Promise.all([
+    const [dt, pt, adt, apt, inv, sett, tk, co, cl, dv] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('invoice_id', null).order('trip_date')),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('invoice_id', null).order('trip_date')),
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
@@ -161,6 +162,7 @@ export default function Billing() {
       supabase.from('trucks').select('id,plate,ownership,truck_type'),
       supabase.from('commodities').select('name').order('name'),
       supabase.from('clients').select('*').order('nickname'),
+      supabase.from('drivers').select('id,driver_name'),
     ])
     if (dt.data) { setDumpTrips(dt.data); setSavedOriginCodes([...new Set(dt.data.map(t => t.island_origin_code).filter(Boolean))].sort()); setSavedDestCodes([...new Set(dt.data.map(t => t.island_dest_code).filter(Boolean))].sort()) }
     if (pt.data) setPmTrips(pt.data)
@@ -189,6 +191,7 @@ export default function Billing() {
     if (sett.data) setSettings(sett.data)
     if (co.data) setCommodities(co.data.map(c => c.name))
     if (tk.data) setTrucks(tk.data)
+    if (dv.data) setDrivers(dv.data)
     if (cl.data) setClientsList(cl.data)
     setLoading(false)
   }, [])
@@ -1937,6 +1940,7 @@ export default function Billing() {
                         <input type="checkbox" checked={sel} onChange={() => toggleTrip(t.id, t)} onClick={e => e.stopPropagation()} style={{ width: 'auto' }} />
                         <span style={{ fontSize: 12, color: 'var(--muted)', minWidth: 90 }}>{t.trip_date}</span>
                         <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, minWidth: 80 }}>{t.truck_plate}</span>
+                        <span style={{ fontSize: 11, color: 'var(--muted)', minWidth: 90 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</span>
                         <span style={{ fontSize: 12, flex: 1 }}>{truckType === 'Dump Truck' ? `${t.smcsl_wb?t.smcsl_wb+' · ':''}${t.route||''} · ${t.commodity||''}` : `${t.trip_code||''} · ${t.container_size||''} · ${t.vessel||t.waybill_no||''}`}</span>
                         <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600 }}>₱{fmt(amt)}</span>
                       </div>
@@ -2740,7 +2744,7 @@ export default function Billing() {
 
       <SignatoryDialog open={agingSigDialog} onClose={() => setAgingSigDialog(false)} onPrint={(sigs) => { setAgingSigDialog(false); agingSigCallback&&agingSigCallback(sigs) }} settings={settings} profile={profile} docType="Aging Report" />
       <SignatoryDialog open={sigDialog || bulkExportSigPending} onClose={() => { setSigDialog(false); setExcelSigPending(null); setBulkExportSigPending(false) }} onPrint={doTriggerPrint} settings={settings} profile={profile} docType={bulkExportSigPending ? `Bulk SOA Excel (${bulkExportIds.length})` : excelSigPending ? "SOA Excel" : "SOA"} />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

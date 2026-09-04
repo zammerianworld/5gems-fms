@@ -46,7 +46,7 @@ const genCVNo = (existing) => {
 
 export default function CheckVouchers() {
   const { profile, isAdmin } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
 
   const [tab, setTab] = useState('Vouchers')
   const [vouchers, setVouchers] = useState([])
@@ -1307,7 +1307,7 @@ export default function CheckVouchers() {
 
       <ConfirmDialog state={confirmModal} onClose={() => setConfirmModal(null)} />
       <SignatoryDialog open={sigDialog} onClose={()=>setSigDialog(false)} onPrint={doPrint} settings={settings} profile={profile} docType="Check Voucher" />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

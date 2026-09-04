@@ -23,10 +23,11 @@ const getPaymentStatus = (t, tab) => {
 }
 export default function SubconTrips() {
   const { profile } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [dumpTrips, setDumpTrips] = useState([])
   const [pmTrips, setPmTrips] = useState([])
   const [trucks, setTrucks] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
   const [subconTab, setSubconTab] = useState('regular')
@@ -62,7 +63,7 @@ export default function SubconTrips() {
   const [settings, setSettings] = useState({})
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [tr, dt, pt, inv, exp, am, ins, allTr, stg] = await Promise.all([
+    const [tr, dt, pt, inv, exp, am, ins, allTr, stg, dv] = await Promise.all([
       supabase.from('trucks').select('id,plate,truck_type,ownership,subcon_name,start_date,end_date').in('ownership', ['subcon', 'special_subcon']),
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
@@ -72,6 +73,7 @@ export default function SubconTrips() {
       supabase.from('insurances').select('*'),
       supabase.from('trucks').select('id,plate,ownership,start_date,end_date').neq('ownership', 'subcon'),
       supabase.from('company_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('drivers').select('id,driver_name'),
     ])
     const subconPlates = new Set((tr.data || []).map(t => t.plate))
     if (dt.data) setDumpTrips(dt.data.filter(t => subconPlates.has(t.truck_plate)))
@@ -86,16 +88,22 @@ export default function SubconTrips() {
     // overhead together with owned trucks, only true third-party subcon is excluded.
     if (allTr.data) setAllCompanyTrucks(allTr.data.filter(t => t.ownership !== 'subcon'))
     if (stg.data) setSettings(stg.data)
+    if (dv.data) setDrivers(dv.data)
     setLoading(false)
   }, [])
   useEffect(() => { fetchAll() }, [fetchAll])
   const invoiceMap = Object.fromEntries(invoices.map(i => [i.id, i]))
   const enrichTrip = (t) => {
     const inv = invoiceMap[t.invoice_id]
+    // Keep the raw stored values separate from the inferred display values —
+    // the edit form must always start from what's actually saved, never
+    // from this inference, or opening the edit panel for any reason would
+    // silently bake the inferred date in as if deliberately confirmed.
+    const withRaw = { ...t, _rawClientPaid: t.client_paid, _rawClientPaidDate: t.client_paid_date }
     if (inv && inv.status === 'Paid' && !t.client_paid) {
-      return { ...t, client_paid: true, client_paid_date: t.client_paid_date || inv.date_credited }
+      return { ...withRaw, client_paid: true, client_paid_date: t.client_paid_date || inv.date_credited }
     }
-    return t
+    return withRaw
   }
   const getPartnerName = (plate) => trucks.find(t => t.plate === plate)?.subcon_name || '—'
   // ── AUTO EXPENSE SHARE CALCULATOR ──────────────────────────────────────────
@@ -767,8 +775,8 @@ export default function SubconTrips() {
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 'auto' }}>
               <option value="">All status</option>
               <option value="client_paid">✅ Client Paid</option>
-              {subconTab === 'regular' && <option value="subcon_paid">🔵 Sub-con Paid</option>}
-              {subconTab === 'regular' && <option value="fully_settled">✅ Fully Settled</option>}
+              <option value="subcon_paid">🔵 Sub-con Paid</option>
+              <option value="fully_settled">✅ Fully Settled</option>
               <option value="unpaid">⏳ Unpaid</option>
             </select>
             {(search || filterTruck || filterStatus || filterCreditMonth) &&
@@ -851,6 +859,17 @@ export default function SubconTrips() {
                     {editingTrip._vatIncAmount > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--success)', fontWeight: 500, marginBottom: 8 }}>
                         Net to sub-con: ₱{fmt(editingTrip._vatIncAmount - (parseFloat(editingTrip.subcon_expense_share) || 0))}
+                      </div>
+                    )}
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, marginBottom: 10 }}>
+                      <input type="checkbox" checked={editingTrip.subcon_paid || false}
+                        onChange={e => setEditingTrip(t => ({ ...t, subcon_paid: e.target.checked, subcon_paid_date: e.target.checked ? (t.subcon_paid_date || today()) : '' }))} />
+                      Mark Sub-con as Paid
+                    </label>
+                    {editingTrip.subcon_paid && (
+                      <div className="form-group" style={{ marginBottom: 10 }}>
+                        <label className="label">Date Paid</label>
+                        <input type="date" value={editingTrip.subcon_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, subcon_paid_date: e.target.value }))} />
                       </div>
                     )}
                     <div className="form-group" style={{ margin: 0 }}>
@@ -982,7 +1001,7 @@ export default function SubconTrips() {
                                   <td className="muted">{t._type === 'dump' ? (t.route || '—') : `${t.trip_code || '—'} · ${t.container_size || ''}`}</td>
                                   <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt(t._vatIncAmount)}</td>
                                   <td><span style={{ padding: '2px 7px', borderRadius: 5, fontSize: 10, fontWeight: 500, background: ps.bg, color: ps.color }}>{ps.label}</span></td>
-                                  <td><button className="btn-ghost btn-sm" onClick={() => setEditingTrip({ ...t })}>Edit</button></td>
+                                  <td><button className="btn-ghost btn-sm" onClick={() => setEditingTrip({ ...t, client_paid: t._rawClientPaid || false, client_paid_date: t._rawClientPaidDate || '' })}>Edit</button></td>
                                 </tr>
                               )
                             })}
@@ -1079,6 +1098,7 @@ export default function SubconTrips() {
                         ? <th key={i} onClick={() => toggleSort(col[0])} style={{ cursor:'pointer', userSelect:'none' }}>{col[1]} {sortKey===col[0]?(sortDir==='asc'?'▲':'▼'):''}</th>
                         : <th key={i}>{['Partner','Invoice','Trip'][i-2]}</th>
                       )}
+                      <th>Driver</th>
                       <th className="text-right">DS Billing</th>
                       {subconTab === 'regular' && <th className="text-right">Sub-con Cost</th>}
                       {subconTab === 'regular' && <th className="text-right">Profit</th>}
@@ -1103,6 +1123,7 @@ export default function SubconTrips() {
                           <td style={{ fontSize: 12 }}>{t.client}</td>
                           <td style={{ fontSize: 11, color: 'var(--muted)', fontFamily: 'var(--mono)' }}>{inv?.invoice_no || '—'}</td>
                           <td style={{ fontSize: 11, color: 'var(--muted)' }}>{t._type === 'dump' ? (t.route || '—') : `${t.trip_code || '—'} · ${t.container_size || ''}`}</td>
+                          <td style={{ fontSize: 11, color: 'var(--muted)' }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                           <td className="text-right mono" style={{ fontSize: 12 }}>₱{fmt(billingAmount(t))}</td>
                           {subconTab === 'regular' && <td className="text-right mono" style={{ fontSize: 12, color: hasCost ? 'var(--danger)' : 'var(--hint)' }}>{hasCost ? `₱${fmt(t.subcon_cost)}` : '—'}</td>}
                           {subconTab === 'regular' && <td className="text-right mono" style={{ fontSize: 12, fontWeight: hasCost ? 500 : 400, color: hasCost ? (profit >= 0 ? 'var(--success)' : 'var(--danger)') : 'var(--hint)' }}>{hasCost ? `₱${fmt(profit)}` : '—'}</td>}
@@ -1261,7 +1282,7 @@ export default function SubconTrips() {
         profile={profile}
         docType="Sub-con Report"
       />
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }

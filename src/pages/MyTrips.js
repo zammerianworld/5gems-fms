@@ -25,6 +25,7 @@ export default function MyTrips() {
   const { profile, viewerPlates } = useAuth()
   const [view, setView] = useState('trips')
   const [dumpTrips, setDumpTrips] = useState([])
+  const [drivers, setDrivers] = useState([])
   const [pmTrips, setPmTrips] = useState([])
   const [expenses, setExpenses] = useState([])
   const [myInvoices, setMyInvoices] = useState([])
@@ -45,7 +46,7 @@ export default function MyTrips() {
     // Invoices never come from the shared invoices table directly (one
     // invoice can cover multiple trucks) — get_my_invoices() returns only
     // this account's own trip totals per invoice.
-    const [dt, pt, ex, inv, shares, st, cred] = await Promise.all([
+    const [dt, pt, ex, inv, shares, st, cred, drv] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('expenses').select('*').order('expense_date', { ascending: false })),
@@ -53,6 +54,7 @@ export default function MyTrips() {
       supabase.rpc('viewer_shares_overhead'),
       supabase.from('company_settings').select('company_name').eq('id', 1).maybeSingle(),
       supabase.rpc('get_my_credited_amounts'),
+      supabase.rpc('get_my_trip_drivers'),
     ])
     if (dt.data) setDumpTrips(dt.data)
     if (pt.data) setPmTrips(pt.data)
@@ -65,6 +67,7 @@ export default function MyTrips() {
       cred.data.forEach(r => { map[`${r.trip_type}-${r.trip_id}`] = parseFloat(r.credited_amount) || 0 })
       setCreditedMap(map)
     }
+    if (drv.data) setDrivers(drv.data)
     setLoading(false)
   }, [])
 
@@ -384,13 +387,14 @@ export default function MyTrips() {
                             <div className="table-wrap">
                               <table className="table">
                                 <thead>
-                                  <tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th><th>Settled to You</th></tr>
+                                  <tr><th>Date</th><th>Truck</th><th>Driver</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th><th>Settled to You</th></tr>
                                 </thead>
                                 <tbody>
                                   {trips.map(t => (
                                     <tr key={t._kind + t.id}>
                                       <td>{fmtDate(t.trip_date)}</td>
                                       <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                                       <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
                                       <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
                                       <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
@@ -410,7 +414,7 @@ export default function MyTrips() {
                       <div className="muted" style={{ fontSize: 11, marginBottom: 8 }}>{uninvoicedDump.length + uninvoicedPm.length} trip(s) not yet on an invoice</div>
                       <div className="table-wrap">
                         <table className="table">
-                          <thead><tr><th>Date</th><th>Truck</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th></tr></thead>
+                          <thead><tr><th>Date</th><th>Truck</th><th>Driver</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th></tr></thead>
                           <tbody>
                             {[...uninvoicedDump.map(t => ({ ...t, _kind: 'dump' })), ...uninvoicedPm.map(t => ({ ...t, _kind: 'pm' }))]
                               .sort((a, b) => (b.trip_date || '').localeCompare(a.trip_date || ''))
@@ -418,6 +422,7 @@ export default function MyTrips() {
                                 <tr key={t._kind + t.id}>
                                   <td>{fmtDate(t.trip_date)}</td>
                                   <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                                  <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                                   <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
                                   <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
                                 </tr>
@@ -459,18 +464,19 @@ export default function MyTrips() {
                   <>
                     <thead>
                       <tr>
-                        <th>Date</th><th>Truck</th><th>Route</th><th>Commodity</th>
+                        <th>Date</th><th>Truck</th><th>Driver</th><th>Route</th><th>Commodity</th>
                         <th className="text-right">Weight (t)</th><th className="text-right">Rate/t</th>
                         <th className="text-right">Credited Amount</th><th>Client Paid</th><th>Settled</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDump.length === 0 ? (
-                        <tr><td colSpan={9} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
+                        <tr><td colSpan={10} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
                       ) : filteredDump.map(t => (
                         <tr key={t.id}>
                           <td>{fmtDate(t.trip_date)}</td>
                           <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                          <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                           <td>{t.route}</td>
                           <td>{t.commodity}</td>
                           <td className="text-right mono">{fmt(t.weight_tons)}</td>
@@ -486,17 +492,18 @@ export default function MyTrips() {
                   <>
                     <thead>
                       <tr>
-                        <th>Date</th><th>Truck</th><th>Trip Code</th><th>Size</th>
+                        <th>Date</th><th>Truck</th><th>Driver</th><th>Trip Code</th><th>Size</th>
                         <th className="text-right">Credited Amount</th><th>Client Paid</th><th>Settled</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPm.length === 0 ? (
-                        <tr><td colSpan={7} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
+                        <tr><td colSpan={8} className="muted" style={{ textAlign: 'center', padding: 24 }}>No trips found for this period.</td></tr>
                       ) : filteredPm.map(t => (
                         <tr key={t.id}>
                           <td>{fmtDate(t.trip_date)}</td>
                           <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                          <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
                           <td>{t.trip_code}</td>
                           <td>{t.container_size || '—'}</td>
                           <td className="text-right mono" style={{ fontWeight: 600 }}>₱{fmt(credited(t, 'pm'))}</td>

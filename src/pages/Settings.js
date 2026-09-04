@@ -23,7 +23,7 @@ function F({ label, value, onChange, placeholder, type = 'text', span }) {
 }
 const EMPTY_NEW_TRUCK = { plate: '', truck_code: '', truck_type: 'Dump Truck', make: '', model: '', year: '', notes: '', ownership: 'company', subcon_name: '', start_date: '2024-01-01', end_date: '' }
 export default function Settings() {
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const { isSuperuser } = useAuth()
   const [appVersion, setAppVersion] = useState('1.0')
   const [appBeta, setAppBeta] = useState(true)
@@ -771,7 +771,7 @@ export default function Settings() {
         </div>
       )}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
       <ConfirmDialog state={confirmState} onClose={() => setConfirmState(null)} />
     </div>
   )

@@ -16,7 +16,7 @@ const EMPTY = {
 
 export default function Loans() {
   const { profile, isAdmin } = useAuth()
-  const { toast, showToast } = useToast()
+  const { toast, showToast, dismissToast } = useToast()
   const [activeTab, setActiveTab] = useState('loans') // 'loans' | 'lending'
 
   // ── COMPANY LENDING STATE ────────────────────────────────────────────────
@@ -863,7 +863,7 @@ export default function Loans() {
         </div>
       )}
 
-      <Toast toast={toast} />
+      <Toast toast={toast} onDismiss={dismissToast} />
     </div>
   )
 }
