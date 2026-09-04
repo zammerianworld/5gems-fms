@@ -4,6 +4,7 @@ import SignatoryDialog from './SignatoryDialog'
 import ConfirmDialog from './ConfirmDialog'
 import { supabase, fmt, fmtDate, logAudit, PM_TRIP_CODES } from '../lib/supabase'
 import { buildPayslipDoc } from '../lib/payslipTemplate'
+import * as XLSX from 'xlsx'
 
 const p = (v) => parseFloat(v) || 0
 
@@ -126,6 +127,23 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
   const [loanForm, setLoanForm] = useState(EMPTY_LOAN)
 
   const [computeModal, setComputeModal] = useState(null) // driver being computed for this cutoff
+
+  // ── TRIP PAYROLL TAB ──
+  const [tripLogSearch, setTripLogSearch] = useState('')
+  const [tripLogDriver, setTripLogDriver] = useState('')
+  const [tripLogStatus, setTripLogStatus] = useState('')
+  const [tripLogFrom, setTripLogFrom] = useState('')
+  const [tripLogTo, setTripLogTo] = useState('')
+  const [tripLogShowNoDriver, setTripLogShowNoDriver] = useState(false)
+  const [tripLogSelected, setTripLogSelected] = useState([]) // [{id, _type}] — only 'unpaid' rows are ever selectable
+  // Clicking a Paid/Pending status needs to switch the Payroll Register to
+  // that entry's own cutoff, then open it — but setPeriodStart/setPeriodEnd
+  // are async (React state), and the code that opens an entry closes over
+  // `selectedCutoff`, which is derived from that same state. Calling both
+  // in the same tick would use the OLD cutoff — this holds the intent
+  // until a render has actually landed with the new period, confirmed by
+  // watching selectedCutoff itself change to match, not just assumed.
+  const [pendingNav, setPendingNav] = useState(null) // { driverId, cutoff }
   const [computeDraft, setComputeDraft] = useState(null) // the editable computed entry before saving
 
   const fetchAll = useCallback(async () => {
@@ -151,7 +169,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
     setHdmfBrackets(hb.data || [])
     setEntries(en.data || [])
     setLoading(false)
-    return { drivers: dr.data || [], rates: rt.data || [], loans: ln.data || [] }
+    return { drivers: dr.data || [], rates: rt.data || [], loans: ln.data || [], entries: en.data || [] }
   }, [selectedCutoff])
 
   useEffect(() => { fetchAll() }, [fetchAll])
@@ -273,6 +291,22 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
   }, [])
   useEffect(() => { fetchTrips() }, [fetchTrips])
 
+  // Trip Payroll needs every trip regardless of whether it has a driver —
+  // fetchTrips above deliberately excludes driverless trips (they're not
+  // relevant to the actual payroll sweep), but Trip Payroll's whole point
+  // is surfacing exactly those as "No Driver" so they don't go unnoticed.
+  const [tripLogDump, setTripLogDump] = useState([])
+  const [tripLogPm, setTripLogPm] = useState([])
+  const fetchTripLog = useCallback(async () => {
+    const [dt, pt] = await Promise.all([
+      supabase.from('trips_dump').select('id,trip_date,truck_plate,route,weight_tons,rate_per_ton,driver_id,payroll_settled_external').is('deleted_at', null),
+      supabase.from('trips_pm').select('id,trip_date,truck_plate,trip_code,supplier_amount,stripping_fee,driver_id,payroll_settled_external').is('deleted_at', null),
+    ])
+    setTripLogDump(dt.data || [])
+    setTripLogPm(pt.data || [])
+  }, [])
+  useEffect(() => { if (subTab === 'triplog') fetchTripLog() }, [subTab, fetchTripLog])
+
   const alreadySweptTripIds = useCallback(() => {
     // Every trip_id that appears in ANY driver_payroll_entries.trip_breakdown,
     // regardless of cutoff — a trip is swept exactly once, ever.
@@ -282,12 +316,22 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
   }, [entries])
 
   const [allEntriesEverTripIds, setAllEntriesEverTripIds] = useState(new Set())
+  // Richer than allEntriesEverTripIds above — maps each swept trip to which
+  // entry it landed in and whether that entry is locked, so Trip Payroll
+  // can show Paid vs Pending (not just "swept or not") and jump straight
+  // to the right entry.
+  const [tripEntryMap, setTripEntryMap] = useState({}) // { [trip_id]: { entryId, driverId, cutoffDate, locked } }
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from('driver_payroll_entries').select('trip_breakdown')
+      const { data } = await supabase.from('driver_payroll_entries').select('id,driver_id,cutoff_date,locked,trip_breakdown')
       const ids = new Set()
-      ;(data || []).forEach(e => (e.trip_breakdown || []).forEach(t => ids.add(t.trip_id)))
+      const map = {}
+      ;(data || []).forEach(e => (e.trip_breakdown || []).forEach(t => {
+        ids.add(t.trip_id)
+        map[t.trip_id] = { entryId: e.id, driverId: e.driver_id, cutoffDate: e.cutoff_date, locked: e.locked }
+      }))
       setAllEntriesEverTripIds(ids)
+      setTripEntryMap(map)
     })()
   }, [entries])
 
@@ -354,10 +398,27 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
     return [...dump, ...pm].sort((a, b) => (a.trip_date || '').localeCompare(b.trip_date || ''))
   }
 
+  // Resolves the pending cross-tab navigation set up above — only fires
+  // once selectedCutoff has actually caught up to the target, confirming
+  // the period-change render has genuinely landed rather than assuming a
+  // fixed delay would be enough.
+  useEffect(() => {
+    if (!pendingNav) return
+    if (selectedCutoff !== pendingNav.cutoff) return
+    const driver = drivers.find(d => d.id === pendingNav.driverId)
+    setPendingNav(null)
+    if (driver) { setSubTab('payroll'); openCompute(driver) }
+  }, [pendingNav, selectedCutoff, drivers])
+
   const openCompute = async (driver) => {
-    await fetchAll()
+    // Use fetchAll's own fresh return value, not the `entries` closure —
+    // that closure can still hold data for whatever cutoff was selected
+    // when this function was defined, not the current one, if the period
+    // just changed in the same tick (e.g. cross-tab navigation from Trip
+    // Payroll). Reading fetchAll's return directly sidesteps that entirely.
+    const fresh = await fetchAll()
     const { dumpTrips, pmTrips } = await fetchTrips()
-    const existing = entries.find(e => e.driver_id === driver.id)
+    const existing = fresh.entries.find(e => e.driver_id === driver.id)
     const freshPending = pendingTripsFor(driver.id, dumpTrips, pmTrips).map(t => ({ ...t, isNew: true }))
 
     let trips
@@ -376,14 +437,14 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
     }
 
     const gross = trips.filter(t => t.included !== false).reduce((s, t) => s + p(t.amount), 0)
-    const driverLoans = loans.filter(l => l.driver_id === driver.id && l.active && l.balance > 0)
+    const driverLoans = fresh.loans.filter(l => l.driver_id === driver.id && l.active && l.balance > 0)
     const driverCa = caRecords.filter(r => r.driver_id === driver.id)
     const caAdvance = driverCa.filter(r => r.type === 'advance').reduce((s, r) => s + p(r.amount), 0)
     const caPaid = driverCa.filter(r => r.type === 'payment').reduce((s, r) => s + p(r.amount), 0)
     // If we're editing an entry that already deducted CA, don't double-count
     // that deduction as "already paid" while also showing it as this entry's
     // own ca_deduction below.
-    const caPaidViaOtherPayroll = entries.filter(e => e.driver_id === driver.id && e.id !== existing?.id).reduce((s, e) => s + p(e.ca_deduction), 0)
+    const caPaidViaOtherPayroll = fresh.entries.filter(e => e.driver_id === driver.id && e.id !== existing?.id).reduce((s, e) => s + p(e.ca_deduction), 0)
     const caBalance = Math.max(0, caAdvance - caPaid - caPaidViaOtherPayroll)
 
     setComputeModal(driver)
@@ -693,6 +754,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
         <div style={{ display: 'flex', gap: 4 }}>
           {[
             { id: 'payroll', label: '📋 Payroll Register' },
+            { id: 'triplog', label: '🧾 Trip Payroll' },
             { id: 'roster', label: '🚛 Roster' },
             { id: 'rates', label: '💰 Rates' },
             { id: 'loans', label: '🏦 Loans' },
@@ -1016,6 +1078,142 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
           </div>
         </div>
       )}
+
+      {subTab === 'triplog' && (() => {
+        const getStatus = (t) => {
+          const info = tripEntryMap[t.id]
+          if (info) return { status: info.locked ? 'paid' : 'pending', entryInfo: info }
+          if (t.payroll_settled_external) return { status: 'settled', entryInfo: null }
+          if (!t.driver_id) return { status: 'no_driver', entryInfo: null }
+          return { status: 'unpaid', entryInfo: null }
+        }
+        const STATUS_LABEL = {
+          paid: ['✅ Paid', '#16a34a', '#f0fdf4'], pending: ['🟡 Pending', '#d97706', '#fffbeb'],
+          unpaid: ['⏳ Unpaid', '#6b7280', '#f3f4f6'], settled: ['📦 Settled (pre-system)', '#7c3aed', '#f5f3ff'],
+          no_driver: ['❔ No Driver', '#9ca3af', '#f9fafb'],
+        }
+        const rows = [
+          ...tripLogDump.map(t => ({ ...t, _type: 'dump', _amount: (t.weight_tons || 0) * (t.rate_per_ton || 0), _label: t.route || '—' })),
+          ...tripLogPm.map(t => ({ ...t, _type: 'pm', _amount: (t.supplier_amount || 0) + (t.stripping_fee || 0), _label: t.trip_code || '—' })),
+        ].map(t => ({ ...t, ...getStatus(t) }))
+        const filtered = rows.filter(t => {
+          if (!tripLogShowNoDriver && t.status === 'no_driver') return false
+          if (tripLogStatus && t.status !== tripLogStatus) return false
+          if (tripLogDriver && t.driver_id !== tripLogDriver) return false
+          if (tripLogFrom && t.trip_date < tripLogFrom) return false
+          if (tripLogTo && t.trip_date > tripLogTo) return false
+          if (tripLogSearch && ![t.truck_plate, t._label].some(v => v?.toLowerCase().includes(tripLogSearch.toLowerCase()))) return false
+          return true
+        }).sort((a, b) => (b.trip_date || '').localeCompare(a.trip_date || ''))
+        const eligibleForSettle = tripLogSelected.filter(s => rows.find(r => r.id === s.id && r._type === s._type)?.status === 'unpaid')
+
+        const exportExcel = () => {
+          const aoa = [['Date', 'Plate', 'Driver', 'Type', 'Route / Trip Code', 'Amount', 'Status']]
+          filtered.forEach(t => aoa.push([fmtDate(t.trip_date), t.truck_plate, drivers.find(d => d.id === t.driver_id)?.driver_name || '—', t._type === 'dump' ? 'Dump' : 'PM', t._label, Number(t._amount || 0), STATUS_LABEL[t.status][0]]))
+          const ws = XLSX.utils.aoa_to_sheet(aoa)
+          const wb = XLSX.utils.book_new()
+          XLSX.utils.book_append_sheet(wb, ws, 'Trip Payroll')
+          XLSX.writeFile(wb, `Trip-Payroll-${new Date().toISOString().slice(0, 10)}.xlsx`)
+        }
+        const printLog = () => {
+          const win = window.open('', '_blank')
+          const body = filtered.map(t => `<tr><td>${fmtDate(t.trip_date)}</td><td>${t.truck_plate}</td><td>${drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td><td>${t._type === 'dump' ? 'Dump' : 'PM'}</td><td>${t._label}</td><td style="text-align:right">₱${fmt(t._amount)}</td><td>${STATUS_LABEL[t.status][0]}</td></tr>`).join('')
+          win.document.write(`<html><head><title>Trip Payroll</title><style>
+            body{font-family:Arial,sans-serif;font-size:11px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:4px 8px;text-align:left} th{background:#f0f0f0}
+            @page{size:letter landscape;margin:10mm}
+          </style></head><body><h3>Trip Payroll — ${new Date().toLocaleDateString('en-PH')}</h3>
+          <table><thead><tr><th>Date</th><th>Plate</th><th>Driver</th><th>Type</th><th>Route/Code</th><th>Amount</th><th>Status</th></tr></thead>
+          <tbody>${body}</tbody></table></body></html>`)
+          win.document.close(); win.print()
+        }
+        const markSettledBulk = async () => {
+          const dumpIds = eligibleForSettle.filter(s => s._type === 'dump').map(s => s.id)
+          const pmIds = eligibleForSettle.filter(s => s._type === 'pm').map(s => s.id)
+          if (dumpIds.length) await supabase.from('trips_dump').update({ payroll_settled_external: true }).in('id', dumpIds)
+          if (pmIds.length) await supabase.from('trips_pm').update({ payroll_settled_external: true }).in('id', pmIds)
+          showToast(`Marked ${eligibleForSettle.length} trip(s) settled.`)
+          setTripLogSelected([]); fetchTripLog()
+        }
+
+        return (
+          <div>
+            <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>Who drove this trip, and were they paid — starting from the trip itself, not from payroll entries. "No Driver" trips are hidden by default.</p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10, alignItems: 'center' }}>
+              <input placeholder="Search plate / route / code…" value={tripLogSearch} onChange={e => setTripLogSearch(e.target.value)} style={{ ...INPUT, width: 200 }} />
+              <select value={tripLogDriver} onChange={e => setTripLogDriver(e.target.value)} style={{ ...INPUT, width: 160 }}>
+                <option value="">All drivers</option>
+                {drivers.map(d => <option key={d.id} value={d.id}>{d.driver_name}</option>)}
+              </select>
+              <select value={tripLogStatus} onChange={e => setTripLogStatus(e.target.value)} style={{ ...INPUT, width: 160 }}>
+                <option value="">All statuses</option>
+                <option value="paid">Paid</option>
+                <option value="pending">Pending</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="settled">Settled (pre-system)</option>
+                {tripLogShowNoDriver && <option value="no_driver">No Driver</option>}
+              </select>
+              <DateInput value={tripLogFrom} onChange={e => setTripLogFrom(e.target.value)} style={{ ...INPUT, width: 140 }} />
+              <DateInput value={tripLogTo} onChange={e => setTripLogTo(e.target.value)} style={{ ...INPUT, width: 140 }} />
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
+                <input type="checkbox" checked={tripLogShowNoDriver} onChange={e => setTripLogShowNoDriver(e.target.checked)} />
+                Show No Driver
+              </label>
+              <div style={{ flex: 1 }} />
+              {eligibleForSettle.length > 0 && (
+                <button onClick={markSettledBulk} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#7c3aed', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  📦 Mark Settled ({eligibleForSettle.length})
+                </button>
+              )}
+              <button onClick={exportExcel} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, cursor: 'pointer' }}>📊 Excel</button>
+              <button onClick={printLog} style={{ padding: '6px 12px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--bg)', fontSize: 12, cursor: 'pointer' }}>🖨️ Print</button>
+            </div>
+            <div style={{ overflowX: 'auto', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8 }}>
+              <table style={{ width: '100%', minWidth: 800, borderCollapse: 'collapse' }}>
+                <thead><tr style={{ background: 'var(--bg)', borderBottom: '2px solid var(--border)' }}>
+                  <th style={TH}></th>
+                  <th style={{ ...TH, textAlign: 'left' }}>Date</th>
+                  <th style={TH}>Plate</th>
+                  <th style={TH}>Driver</th>
+                  <th style={TH}>Type</th>
+                  <th style={TH}>Route / Trip Code</th>
+                  <th style={TH}>Amount</th>
+                  <th style={TH}>Status</th>
+                </tr></thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--muted)' }}>No trips match these filters.</td></tr>
+                  ) : filtered.map(t => {
+                    const [label, color, bg] = STATUS_LABEL[t.status]
+                    const clickable = t.status === 'paid' || t.status === 'pending'
+                    const checked = tripLogSelected.some(s => s.id === t.id && s._type === t._type)
+                    return (
+                      <tr key={t._type + t.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                        <td style={TD}>
+                          {t.status === 'unpaid' && (
+                            <input type="checkbox" checked={checked} onChange={e => setTripLogSelected(p => e.target.checked ? [...p, { id: t.id, _type: t._type }] : p.filter(s => !(s.id === t.id && s._type === t._type)))} />
+                          )}
+                        </td>
+                        <td style={{ ...TD, textAlign: 'left' }} className="mono">{fmtDate(t.trip_date)}</td>
+                        <td style={TD} className="mono">{t.truck_plate}</td>
+                        <td style={TD}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
+                        <td style={TD}>{t._type === 'dump' ? 'Dump' : 'PM'}</td>
+                        <td style={TD}>{t._label}</td>
+                        <td style={TD} className="mono">₱{fmt(t._amount)}</td>
+                        <td style={TD}>
+                          <span
+                            onClick={clickable ? () => { setPeriodEnd(t.entryInfo.cutoffDate); setPendingNav({ driverId: t.entryInfo.driverId, cutoff: t.entryInfo.cutoffDate }) } : undefined}
+                            style={{ fontSize: 11, background: bg, color, padding: '2px 8px', borderRadius: 10, fontWeight: 600, cursor: clickable ? 'pointer' : 'default' }}
+                          >{label}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── MODALS ── */}
       {showDriverForm && (

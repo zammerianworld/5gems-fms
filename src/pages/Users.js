@@ -123,8 +123,10 @@ export default function Users() {
     setSaving(true)
     try {
       await callEdgeFunction({ action: 'update_password', user_id: editingUser.id, full_name: editForm.full_name, role: editForm.role, new_password: editForm.new_password || undefined, viewer_plates: editForm.role === 'viewer' ? editForm.viewer_plates : undefined })
-      // Save override_pin directly to profiles
-      // Use real auth UID for superuser (fake session stores 'superuser' not a real UUID)
+      // Save override_pin via a SECURITY DEFINER RPC — a raw client-side
+      // update here would only ever succeed for your own row (profiles'
+      // RLS only allows self-updates), silently doing nothing for anyone
+      // else while still showing "User updated."
       if (editForm.override_pin !== undefined) {
         let targetId = editingUser.id
         if (targetId === 'superuser') {
@@ -132,7 +134,8 @@ export default function Users() {
           targetId = user?.id
         }
         if (targetId) {
-          await supabase.from('profiles').update({ override_pin: editForm.override_pin.toUpperCase() || null }).eq('id', targetId)
+          const { error: pinError } = await supabase.rpc('set_user_override_pin', { p_user_id: targetId, p_pin: editForm.override_pin.toUpperCase() || null })
+          if (pinError) { showToast('Error setting PIN: ' + pinError.message, 'error'); setSaving(false); return }
         }
       }
       logAudit('destructive', 'Edited', 'User',

@@ -2240,3 +2240,38 @@ $$ language sql security definer stable;
 -- is_admin() checks to work) was already flagged separately — confirm
 -- 5 Gems' superuser has one rather than assuming.
 -- ============================================================
+
+-- ============================================================
+-- TRIP PAYROLL TAB support (September 2026)
+-- Lets a trip that was paid before Driver Payroll existed in the
+-- system be marked as settled externally, so it does not show as a
+-- false "Unpaid" forever.
+-- ============================================================
+alter table public.trips_dump add column if not exists payroll_settled_external boolean default false;
+alter table public.trips_pm add column if not exists payroll_settled_external boolean default false;
+
+-- ============================================================
+-- RLS silent-success bug fix (September 2026) — broader sweep beyond
+-- the driver payroll unlock/delete example. Found via the sweep: Manage
+-- Users' Override PIN field used a raw client-side update on
+-- public.profiles, which only allows self-updates (auth.uid() = id).
+-- An admin/superuser setting ANOTHER user's PIN was always silently
+-- blocked by RLS — the UI showed "User updated." regardless, so this
+-- wasn't just a misleading message, the PIN genuinely never got set
+-- for anyone but yourself. Fixed with the same SECURITY DEFINER RPC
+-- pattern already used for update_user_permissions, rather than
+-- broadening the general profiles RLS policy.
+-- ============================================================
+CREATE OR REPLACE FUNCTION public.set_user_override_pin(p_user_id uuid, p_pin text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare v_role text;
+begin
+  select role into v_role from public.profiles where id = auth.uid();
+  if v_role not in ('admin', 'superuser') then raise exception 'Unauthorized'; end if;
+  update public.profiles set override_pin = p_pin where id = p_user_id;
+  return true;
+end; $function$;
