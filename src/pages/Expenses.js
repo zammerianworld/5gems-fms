@@ -485,6 +485,7 @@ export default function Expenses() {
     const required = ['expense_date', 'category', 'description', 'amount']
     if (required.some(k => !form[k])) { showToast('Please fill all required fields.', 'error'); return }
     if (form.expense_type === 'operation' && form.scope === 'individual' && !form.truck_id) { showToast('Please select a truck.', 'error'); return }
+    if (form.category === 'Driver Salary' && !window.confirm('Driver Payroll already posts Driver Salary automatically per truck per month when an entry is locked. This manual entry will add on top of that in reports.\n\nContinue anyway?')) return
     setSaving(true)
     // eslint-disable-next-line no-unused-vars
     const { truck_ids: _truck_ids, ...formData } = form
@@ -754,6 +755,11 @@ export default function Expenses() {
                     <option value="">Select category</option>
                     {(form.expense_type==='admin'?[...ADMIN_CATEGORIES,...customAdminCats]:[...OPERATION_CATEGORIES,...customOpCats]).map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
+                  {form.category==='Driver Salary' && (
+                    <p style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 6 }}>
+                      ⚠️ Driver Payroll already posts this automatically per truck per month when a payroll entry is locked. A manual entry here adds on top of that in reports — only continue if this is for a period Driver Payroll doesn't cover (e.g. before it was in use).
+                    </p>
+                  )}
                 </div>
                 <div className="form-group"><label className="label required">Amount (₱)</label><input type="number" step="0.01" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" /></div>
                 <div className="form-group"><label className="label">Reference No.</label><input value={form.reference_no} onChange={e=>setForm(f=>({...f,reference_no:e.target.value}))} placeholder="OR, receipt #" /></div>

@@ -383,25 +383,46 @@ export default function MyTrips() {
                           </div>
                         </div>
                         {isOpen && (
-                          <div style={{ padding: '0 16px 16px' }}>
-                            <div className="table-wrap">
-                              <table className="table">
-                                <thead>
-                                  <tr><th>Date</th><th>Truck</th><th>Driver</th><th>Route / Trip Code</th><th className="text-right">Credited Amount</th><th>Settled to You</th></tr>
-                                </thead>
-                                <tbody>
-                                  {trips.map(t => (
-                                    <tr key={t._kind + t.id}>
-                                      <td>{fmtDate(t.trip_date)}</td>
-                                      <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
-                                      <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
-                                      <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
-                                      <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
-                                      <td><PaidBadge paid={t.subcon_paid} label={t.subcon_paid ? (t.subcon_paid_date ? fmtDate(t.subcon_paid_date) : 'Settled') : 'Pending'} /></td>
+                          <div style={{ padding: '0 16px 20px' }}>
+                            <div style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 20, background: 'var(--surface)' }}>
+                              <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                                <div style={{ fontWeight: 700, fontSize: 15 }}>{companyName}</div>
+                                <div style={{ fontSize: 11, color: 'var(--muted)', letterSpacing: '0.05em', marginTop: 4 }}>SALES INVOICE</div>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14, fontSize: 12, flexWrap: 'wrap', gap: 8 }}>
+                                <div><span className="muted">Invoice No.: </span><strong>{inv.invoice_no || '—'}</strong></div>
+                                <div><span className="muted">Date: </span><strong>{fmtDate(inv.invoice_date)}</strong></div>
+                              </div>
+                              <div className="table-wrap">
+                                <table className="table" style={{ border: '1px solid var(--border)' }}>
+                                  <thead>
+                                    <tr>
+                                      <th>Date</th><th>Truck</th><th>Driver</th><th>Trip / Route</th>
+                                      <th className="text-right">Weight</th><th className="text-right">Rate</th>
+                                      <th>SMCSL WB</th><th className="text-right">Amount</th>
                                     </tr>
-                                  ))}
-                                </tbody>
-                              </table>
+                                  </thead>
+                                  <tbody>
+                                    {trips.map(t => (
+                                      <tr key={t._kind + t.id}>
+                                        <td>{fmtDate(t.trip_date)}</td>
+                                        <td style={{ fontWeight: 600 }}>{t.truck_plate}</td>
+                                        <td style={{ color: 'var(--muted)', fontSize: 12 }}>{drivers.find(d => d.id === t.driver_id)?.driver_name || '—'}</td>
+                                        <td>{t._kind === 'dump' ? t.route : t.trip_code}</td>
+                                        <td className="text-right mono">{t._kind === 'dump' ? fmt(t.weight_tons) : '—'}</td>
+                                        <td className="text-right mono">{t._kind === 'dump' ? `₱${fmt(t.rate_per_ton)}` : '—'}</td>
+                                        <td className="mono" style={{ fontSize: 11 }}>{t._kind === 'dump' ? (t.smcsl_wb || '—') : '—'}</td>
+                                        <td className="text-right mono">₱{fmt(credited(t, t._kind))}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 14, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+                                <span style={{ fontSize: 13 }}>Total Due:</span>
+                                <span className="mono" style={{ fontWeight: 700, fontSize: 16 }}>₱{fmt(inv.my_amount)}</span>
+                                <PaidBadge paid={inv.status === 'Paid'} label={inv.status === 'Paid' ? (inv.date_credited ? fmtDate(inv.date_credited) : 'Paid') : inv.status} />
+                              </div>
                             </div>
                           </div>
                         )}

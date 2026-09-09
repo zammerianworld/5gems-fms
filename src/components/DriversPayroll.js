@@ -517,6 +517,66 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
     setSaving(false)
   }
 
+  // Shared by lockEntry and the "Regen. Expenses" feature — one record per
+  // truck AND per trip month, since relief/rotation coverage means a
+  // driver can appear on more than one truck in the same period, and a
+  // cutoff can span a month boundary (e.g. Aug 31–Sep 6). Splitting by trip
+  // month, not just truck, means each expense lands dated within the
+  // month it actually covers instead of one lump sum dated by the
+  // cutoff's end — Reports/Midyear Report need no changes themselves,
+  // they already total by category/truck/date, this just gets the
+  // underlying dates right. Uses gross trip earnings, not net pay —
+  // deductions (SSS, cash advance, etc.) are personal to the driver, not
+  // an added cost to the truck. Returns the new expense record IDs.
+  const postTruckMonthExpenses = async (entry, driver) => {
+    const includedTrips = (entry.trip_breakdown || []).filter(t => t.included !== false)
+    const byTruckMonth = {} // `${plate}::${YYYY-MM}` -> { plate, amount, lastTripDate }
+    includedTrips.forEach(t => {
+      const plate = t.truckPlate || '— unknown truck —'
+      const month = (t.trip_date || entry.cutoff_date).slice(0, 7)
+      const key = `${plate}::${month}`
+      if (!byTruckMonth[key]) byTruckMonth[key] = { plate, amount: 0, lastTripDate: t.trip_date }
+      byTruckMonth[key].amount += p(t.amount)
+      if (t.trip_date > byTruckMonth[key].lastTripDate) byTruckMonth[key].lastTripDate = t.trip_date
+    })
+    const expenseIds = []
+    for (const { plate, amount, lastTripDate } of Object.values(byTruckMonth)) {
+      if (amount <= 0) continue
+      const truck = trucks.find(tr => tr.plate === plate)
+      const { data: expRow } = await supabase.from('expenses').insert({
+        expense_date: lastTripDate || entry.cutoff_date, expense_type: 'operation', category: 'Driver Salary',
+        description: `${driver?.driver_name || 'Driver'} — ${fmtDate(entry.period_start || periodStart)} to ${fmtDate(entry.period_end || periodEnd)}`,
+        amount, scope: 'individual', truck_id: truck?.id || null, created_by: profile?.id,
+      }).select().single()
+      if (expRow?.id) expenseIds.push(expRow.id)
+    }
+    return expenseIds
+  }
+
+  // Superuser-only. Deletes whatever expense record IDs are currently
+  // attached to a locked entry (cleanup, in case any still exist), then
+  // recreates them fresh using the same per-truck-per-month splitting as
+  // a normal lock. For backfilling entries locked before that split
+  // existed, or where the original records were manually deleted.
+  const regenExpenses = (entry) => {
+    setConfirmState({
+      title: 'Regenerate Expense Records', variant: 'warning', confirmLabel: 'Regenerate',
+      message: 'Delete this entry\'s currently attached expense records (if any) and recreate them fresh from its trip data, split by truck and month? Use this to backfill an entry locked before that split existed, or if the original records were manually deleted.',
+      onConfirm: async () => {
+        if (entry.expense_record_ids && entry.expense_record_ids.length > 0) {
+          await supabase.from('expenses').delete().in('id', entry.expense_record_ids)
+        }
+        const driver = drivers.find(d => d.id === entry.driver_id)
+        const expenseIds = await postTruckMonthExpenses(entry, driver)
+        const { data, error } = await supabase.from('driver_payroll_entries').update({ expense_record_ids: expenseIds }).eq('id', entry.id).select()
+        if (error) { showToast('Error: ' + error.message, 'error'); return }
+        if (!data || data.length === 0) { showToast('Regenerate did not apply — you may not have permission.', 'error'); return }
+        showToast(`Regenerated ${expenseIds.length} expense record(s).`)
+        fetchAll(); fetchAllHistory()
+      },
+    })
+  }
+
   const lockEntry = (entry) => {
     setConfirmState({
       title: 'Lock Entry', variant: 'warning', confirmLabel: 'Lock',
@@ -538,29 +598,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
           logAudit('destructive', 'Locked', 'Driver Payroll', `${driver?.driver_name} · ${selectedCutoff}`, entry.id, profile?.id, profile?.full_name)
         }
 
-        // Post trip earnings as a per-truck "Driver Salary" expense — one
-        // record per truck involved this cutoff, since relief/rotation
-        // coverage means a driver can appear on more than one truck in the
-        // same period. Uses gross trip earnings, not net pay — deductions
-        // (SSS, cash advance, etc.) are personal to the driver, not an
-        // added cost to the truck.
-        const includedTrips = (entry.trip_breakdown || []).filter(t => t.included !== false)
-        const byTruck = {}
-        includedTrips.forEach(t => {
-          const plate = t.truckPlate || '— unknown truck —'
-          byTruck[plate] = (byTruck[plate] || 0) + p(t.amount)
-        })
-        const expenseIds = []
-        for (const [plate, amount] of Object.entries(byTruck)) {
-          if (amount <= 0) continue
-          const truck = trucks.find(tr => tr.plate === plate)
-          const { data: expRow } = await supabase.from('expenses').insert({
-            expense_date: selectedCutoff, expense_type: 'operation', category: 'Driver Salary',
-            description: `${driver?.driver_name || 'Driver'} — ${fmtDate(periodStart)} to ${fmtDate(periodEnd)}`,
-            amount, scope: 'individual', truck_id: truck?.id || null, created_by: profile?.id,
-          }).select().single()
-          if (expRow?.id) expenseIds.push(expRow.id)
-        }
+        const expenseIds = await postTruckMonthExpenses({ ...entry, cutoff_date: selectedCutoff, period_start: periodStart, period_end: periodEnd }, driver)
 
         const { error } = await supabase.from('driver_payroll_entries').update({
           locked: true, locked_at: new Date().toISOString(), locked_by: profile?.id, ca_payment_record_id: caRecordId,
@@ -857,6 +895,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
                             <button onClick={() => printPayslip(d, entry)} style={ActionBtn('#334155')}>🖨️ Payslip</button>
                             {isSuperuser && <button onClick={() => unlockEntry(entry)} style={ActionBtn('#dc2626')}>🔓 Unlock</button>}
+                            {isSuperuser && <button onClick={() => regenExpenses(entry)} style={ActionBtn('#7c3aed')}>🔄 Regen. Expenses</button>}
                             {isAdmin && !isSuperuser && <span style={{ fontSize: 10, color: 'var(--muted)' }}>Superuser only</span>}
                           </div>
                         ) : (
@@ -1067,6 +1106,9 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                       <td style={TD}>
                         {(h.locked ? isSuperuser : isAdmin) && (
                           <button onClick={() => deleteEntry(h)} style={ActionBtn('#ef4444')}>🗑️ Delete</button>
+                        )}
+                        {h.locked && isSuperuser && (
+                          <button onClick={() => regenExpenses(h)} style={ActionBtn('#7c3aed')}>🔄 Regen. Expenses</button>
                         )}
                         {h.locked && isAdmin && !isSuperuser && <span style={{ fontSize: 10, color: 'var(--muted)' }}>Superuser only</span>}
                       </td>
@@ -1411,12 +1453,19 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                   </div>
                 )}
               </div>
+              {computeDraft.trip_breakdown.some(t => t.trip_date < periodStart || t.trip_date > periodEnd) && (
+                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#92400e' }}>
+                  ⚠️ One or more included trips fall outside the selected coverage period ({fmtDate(periodStart)} – {fmtDate(periodEnd)}) — highlighted below. This can happen when computing a late cutoff (e.g. processing last month's payroll a few days into this one) and forgetting to adjust the period dates first. This won't block saving, but double-check the dates are what you intend before locking.
+                </div>
+              )}
               <div style={{ maxHeight: 220, overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch', border: '1px solid var(--border)', borderRadius: 6 }}>
                 <table style={{ width: '100%', minWidth: 480, borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead><tr style={{ background: 'var(--bg)' }}><th style={TH}></th><th style={TH}>Date</th><th style={{ ...TH, textAlign: 'left' }}>Doc Ref</th><th style={{ ...TH, textAlign: 'left' }}>Route</th><th style={{ ...TH, textAlign: 'left' }}>Trip</th><th style={TH}>Rate</th></tr></thead>
                   <tbody>{computeDraft.trip_breakdown.length === 0 ? <tr><td colSpan={6} style={{ textAlign: 'center', padding: 16, color: 'var(--muted)' }}>No unpaid trips found for this driver.</td></tr>
-                    : computeDraft.trip_breakdown.map((t, idx) => (
-                      <tr key={`${t.trip_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)', opacity: t.included === false ? 0.5 : 1 }}>
+                    : computeDraft.trip_breakdown.map((t, idx) => {
+                      const outOfPeriod = t.trip_date < periodStart || t.trip_date > periodEnd
+                      return (
+                      <tr key={`${t.trip_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)', opacity: t.included === false ? 0.5 : 1, background: outOfPeriod ? '#fffbeb' : undefined }}>
                         <td style={TD}>
                           <input type="checkbox" checked={t.included !== false} onChange={e => {
                             const checked = e.target.checked
@@ -1427,7 +1476,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                             })
                           }} />
                         </td>
-                        <td style={TD}>{fmtDate(t.trip_date)}</td>
+                        <td style={{ ...TD, ...(outOfPeriod ? { color: '#b45309', fontWeight: 700 } : {}) }} title={outOfPeriod ? 'Outside the selected coverage period' : undefined}>{outOfPeriod && '⚠️ '}{fmtDate(t.trip_date)}</td>
                         <td style={{ ...TD, textAlign: 'left', color: 'var(--muted)', fontSize: 11 }}>{t.docRef || '—'}</td>
                         <td style={{ ...TD, textAlign: 'left', fontSize: 11 }}>{t.route || '—'}</td>
                         <td style={{ ...TD, textAlign: 'left' }}>{t.label}</td>
@@ -1491,7 +1540,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                           </div>
                         </td>
                       </tr>
-                    ))}</tbody>
+                    )})}</tbody>
                 </table>
               </div>
               <div style={{ textAlign: 'right', fontWeight: 700, marginTop: 6, fontSize: 14 }}>Gross: ₱{fmt(liveGross(computeDraft))}</div>
