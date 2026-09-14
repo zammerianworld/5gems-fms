@@ -89,6 +89,12 @@ export default function Reports() {
   }
   const months = getMonths()
   const inPeriod = (d) => d && months.includes(d.slice(0,7))
+  // Admin expenses can carry a coverage_month override (e.g. a contribution
+  // paid in September for August's coverage) — accrual-style reports like
+  // this one bucket by the coverage month when set, falling back to the
+  // real payment date otherwise. Cashflow deliberately does NOT do this
+  // (see Cashflow.js) — cash flow must always reflect the real payment date.
+  const effectiveDate = (e) => e.coverage_month ? e.coverage_month + '-01' : e.expense_date
   const tripInPeriod = (trip) => {
     if (mode === 'Management Report') return inPeriod(trip.trip_date)
     const inv = invoices.find(i => i.id === trip.invoice_id && i.date_credited && i.status === 'Paid')
@@ -156,9 +162,9 @@ export default function Reports() {
   }
   const getAdminShare = (truckId) => {
     if (activeTrucks.find(t => t.id === truckId)?.ownership === 'subcon') return { amount: 0, desc: '' }
-    const relevant = expenses.filter(e => e.expense_type === 'admin' && inPeriod(e.expense_date))
+    const relevant = expenses.filter(e => e.expense_type === 'admin' && inPeriod(effectiveDate(e)))
     // FIX: divide each admin expense by the number of trucks active on that expense's date
-    const total = relevant.reduce((s, e) => s + (e.amount||0) / getActiveTruckCount(e.expense_date), 0)
+    const total = relevant.reduce((s, e) => s + (e.amount||0) / getActiveTruckCount(effectiveDate(e)), 0)
     return { amount: total, desc: `Divided by active trucks per expense date` }
   }
   const liveHasData = dumpTrips.some(t => tripInPeriod(t)) || pmTrips.some(t => tripInPeriod(t))

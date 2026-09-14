@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES, ISLAND_ZONES,
   CONTAINER_SIZES, fmt, fmtDate, calcQtyDest, logAudit, fetchAllRows } from '../lib/supabase'
@@ -75,7 +75,7 @@ function SF({ label, value, onChange, req, type = 'text', placeholder }) {
     <div className="form-group">
       <label className={`label ${req ? 'required' : ''}`}>{label}</label>
       {type === 'date'
-        ? <DateInput value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder || 'MM/DD/YYYY'} />
+        ? <DatePickerSingle value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder || 'MM/DD/YYYY'} />
         : <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} placeholder={placeholder || ''} />
       }
     </div>
@@ -740,7 +740,7 @@ export default function Trips() {
       {/* Step 1 — Pick type */}
       {showForm && step === 'type' && (
         <div className="card" style={{ marginBottom: 24 }}>
-          <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>What type of truck for this trip?</h2>
+          <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 6, color: 'var(--text)' }}>What type of truck for this trip?</h2>
           <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>Select to load the correct form and defaults.</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, maxWidth: 480 }}>
             {[
@@ -755,7 +755,7 @@ export default function Trips() {
                 onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.background = 'var(--surface)' }}
               >
                 <div style={{ fontSize: 28, marginBottom: 8 }}>{opt.icon}</div>
-                <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>{opt.type}</div>
+                <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4, color: 'var(--text)' }}>{opt.type}</div>
                 <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 6 }}>{opt.desc}</div>
                 <div style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }}>{opt.note}</div>
               </button>
@@ -1138,7 +1138,7 @@ export default function Trips() {
                     </td>
                     <td>{t.client}</td>
                     <td>{t.commodity}</td>
-                    <td className="mono muted" style={{ fontSize: 12 }}>{t.smcsl_wb || '—'}{dupDumpWBs.has(t.smcsl_wb) && t.smcsl_wb ? <span style={{ display:'inline-block', marginLeft:6, background:'rgba(220,38,38,0.12)', color:'var(--danger)', fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:4, border:'1px solid rgba(220,38,38,0.3)' }}>⚠ DUPE</span> : null}</td>
+                    <td className="mono muted" style={{ fontSize: 12 }}>{t.smcsl_wb || '—'}{dupDumpWBs.has(t.smcsl_wb) && t.smcsl_wb ? <span style={{ display:'inline-block', marginLeft:6, background:'var(--danger-light)', color:'var(--danger)', fontSize:10, fontWeight:700, padding:'1px 6px', borderRadius:4, border:'1px solid rgba(220,38,38,0.3)' }}>⚠ DUPE</span> : null}</td>
                     <td className="text-right mono">{Number(t.weight_tons || 0).toFixed(3)}</td>
                     <td className="text-right mono muted" style={{ fontSize: 12 }}>₱{fmt(t.rate_per_ton)}</td>
                     <td className="text-right mono" style={{ fontWeight: 500 }}>₱{fmt((t.weight_tons || 0) * (t.rate_per_ton || 0))}</td>
@@ -1194,7 +1194,7 @@ export default function Trips() {
                     <td>
                       <span className="badge badge-prime" style={{ fontSize: 11 }}>{t.trip_code}</span>
                       {['Hustling PSACC', 'Hauling PSACC', 'SMC'].includes(t.trip_code) && !t.destination && (
-                        <span title="Destination not set — driver rate can't match until this is set" style={{ marginLeft: 5, fontSize: 10, color: '#dc2626', background: '#fef2f2', padding: '2px 5px', borderRadius: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>⚑ No dest.</span>
+                        <span title="Destination not set — driver rate can't match until this is set" style={{ marginLeft: 5, fontSize: 10, color: 'var(--danger)', background: 'var(--danger-light)', padding: '2px 5px', borderRadius: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>⚑ No dest.</span>
                       )}
                     </td>
                     <td style={{ fontWeight: 500 }}>{t.client || '—'}</td>

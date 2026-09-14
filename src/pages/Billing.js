@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { supabase, fmt, fmtDate, logAudit, numberToWords, calcQtyDest, DUMP_TRUCK_ROUTES, sortRows, fetchAllRows } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import jsPDF from 'jspdf'
@@ -13,8 +13,8 @@ const TABS = ['Generate', 'Invoice List', 'Manage Trips', 'Aging Report', 'Clien
 const STATUS_OPTIONS = ['Invoiced', 'Paid', 'Returned', 'On Hold']
 const STATUS_COLORS = {
   Invoiced: { bg: 'rgba(255,30,0,0.12)', color: '#cc1800' },
-  Paid: { bg: 'rgba(22,163,74,0.12)', color: '#15803d' },
-  Returned: { bg: 'rgba(220,38,38,0.12)', color: '#dc2626' },
+  Paid: { bg: 'var(--success-light)', color: '#15803d' },
+  Returned: { bg: 'var(--danger-light)', color: 'var(--danger)' },
   'On Hold': { bg: 'rgba(202,138,4,0.12)', color: '#a16207' },
 }
 export default function Billing() {
@@ -1836,15 +1836,15 @@ export default function Billing() {
       <div className="page-header">
         <div><h1 className="page-title">Billing &amp; SOA</h1><p className="page-sub">Generate invoices and statements of account</p></div>
       </div>
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 20, overflowX: 'auto' }}>
+      <div className="tab-bar">
         {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '10px 16px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', color: tab === t ? 'var(--accent)' : 'var(--muted)', fontWeight: tab === t ? 600 : 400, cursor: 'pointer', fontSize: 13, whiteSpace: 'nowrap' }}>{t}</button>
+          <button key={t} onClick={() => setTab(t)} className={`tab-pill${tab === t ? ' active' : ''}`}>{t}</button>
         ))}
       </div>
 
       {/* ── GENERATE TAB ── */}
       {tab === 'Generate' && (
-        <div className="card">
+        <div className="card tab-content" key={tab}>
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.06em', marginBottom: 14 }}>DOCUMENT SETUP</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             {['Dump Truck', 'Prime Mover'].map(tt => (
@@ -1869,7 +1869,7 @@ export default function Billing() {
             </div>
             <div className="form-group">
               <label className="label required">Invoice Date</label>
-              <DateInput value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+              <DatePickerSingle value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
             </div>
           </div>
           {truckType === 'Prime Mover' && (
@@ -1981,7 +1981,7 @@ export default function Billing() {
 
       {/* ── INVOICE LIST TAB ── */}
       {tab === 'Invoice List' && (
-        <div>
+        <div className="tab-content" key={tab}>
           <div className="filter-bar" style={{ marginBottom: 8, flexWrap: 'wrap' }}>
             <input placeholder="Search invoice no., client…" value={invSearch} onChange={e => setInvSearch(e.target.value)} style={{ flex: 2, minWidth: 140 }} />
             <input type="month" value={invFilterMonth} onChange={e => setInvFilterMonth(e.target.value)} style={{ width: 'auto' }} />
@@ -2032,9 +2032,10 @@ export default function Billing() {
             <div style={{ padding: '10px 14px', background: 'var(--accent-light)', border: '1px solid var(--accent)', borderRadius: 8, marginBottom: 12 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{bulkInvoices.length} invoice{bulkInvoices.length>1?'s':''} selected</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Total: ₱{fmt(bulkInvoices.reduce((s, inv) => s + (inv.total_sales_net||0) * (inv.is_vat ? 1.10 : 0.98), 0))}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ fontSize: 12 }}>Apply one date to all:</label>
-                  <DateInput value={bulkOneDate} onChange={e => setBulkOneDate(e.target.value)} style={{ width: 'auto', fontSize: 12, padding: '3px 8px' }} />
+                  <DatePickerSingle value={bulkOneDate} onChange={e => setBulkOneDate(e.target.value)} style={{ width: 'auto', fontSize: 12, padding: '3px 8px' }} />
                 </div>
                 <button className="btn-primary btn-sm" onClick={handleBulkPaid} disabled={bulkSaving}>{bulkSaving?'Saving…':'✅ Mark All Paid'}</button>
                 <button className="btn-ghost btn-sm" onClick={() => { setBulkInvoices([]); setBulkDates({}); setBulkOneDate('') }}>Clear</button>
@@ -2045,7 +2046,8 @@ export default function Billing() {
                     <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
                       <span style={{ fontFamily: 'var(--mono)', minWidth: 80 }}>{inv.invoice_no}</span>
                       <span style={{ color: 'var(--muted)', flex: 1 }}>{inv.client}</span>
-                      <DateInput value={bulkDates[inv.id]||''} onChange={e => setBulkDates(d => ({...d,[inv.id]:e.target.value}))} style={{ width: 'auto', fontSize: 11, padding: '2px 6px' }} />
+                      <span className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>₱{fmt((inv.total_sales_net||0) * (inv.is_vat ? 1.10 : 0.98))}</span>
+                      <DatePickerSingle value={bulkDates[inv.id]||''} onChange={e => setBulkDates(d => ({...d,[inv.id]:e.target.value}))} style={{ width: 'auto', fontSize: 11, padding: '2px 6px' }} />
                     </div>
                   ))}
                 </div>
@@ -2059,14 +2061,14 @@ export default function Billing() {
                 <div style={{ fontSize:12 }}>Try adjusting filters or generate a new invoice from the Generate tab.</div>
               </div>
             : filteredInvoices.map(inv => {
-              const sc = inv.status==='Paid'?{bg:'rgba(22,163,74,0.1)',color:'var(--success)'}:inv.status==='On Hold'?{bg:'#FEF9C3',color:'#92400E'}:inv.status==='Returned'?{bg:'rgba(220,38,38,0.1)',color:'var(--danger)'}:{bg:'rgba(59,130,246,0.1)',color:'#1d4ed8'}
+              const sc = inv.status==='Paid'?{bg:'var(--success-light)',color:'var(--success)'}:inv.status==='On Hold'?{bg:'#FEF9C3',color:'var(--warning)'}:inv.status==='Returned'?{bg:'var(--danger-light)',color:'var(--danger)'}:{bg:'rgba(59,130,246,0.1)',color:'#1d4ed8'}
               const net = inv.total_sales_net || 0
               const isEditing = editingInvoice?.id === inv.id
               return (
                 <div key={inv.id} className="card" style={{ marginBottom: 10, border: isEditing ? '1.5px solid var(--accent)' : '0.5px solid var(--border)' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
                     {inv.status !== 'Paid' && (
-                      <label onClick={e => e.stopPropagation()} title="Select for Mark Paid" style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer', padding:'2px 6px', borderRadius:5, background: bulkInvoices.some(b=>b.id===inv.id) ? 'rgba(22,163,74,0.12)' : 'var(--bg)', border:'1px solid var(--border)' }}>
+                      <label onClick={e => e.stopPropagation()} title="Select for Mark Paid" style={{ display:'flex', alignItems:'center', gap:3, cursor:'pointer', padding:'2px 6px', borderRadius:5, background: bulkInvoices.some(b=>b.id===inv.id) ? 'var(--success-light)' : 'var(--bg)', border:'1px solid var(--border)' }}>
                         <input type="checkbox" checked={bulkInvoices.some(b => b.id===inv.id)} onChange={e => { setBulkInvoices(p => e.target.checked?[...p,inv]:p.filter(b=>b.id!==inv.id)) }} style={{ width: 'auto', margin: 0 }} />
                         <span style={{ fontSize: 10, color: 'var(--muted)' }}>✅ Paid</span>
                       </label>
@@ -2095,7 +2097,7 @@ export default function Billing() {
                     )}
                   </div>
                   {inv.locked_at && (
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: '#fef2f2', color: '#dc2626', padding: '2px 8px', borderRadius: 10, marginBottom: 6, fontWeight: 600 }}>
+                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, background: 'var(--danger-light)', color: 'var(--danger)', padding: '2px 8px', borderRadius: 10, marginBottom: 6, fontWeight: 600 }}>
                       🔒 Locked — unlock to edit
                     </div>
                   )}
@@ -2138,7 +2140,7 @@ export default function Billing() {
                     <div style={{ marginTop: 14, paddingTop: 14, borderTop: '0.5px solid var(--border)' }}>
                       <div className="form-grid" style={{ marginBottom: 12 }}>
                         <div className="form-group"><label className="label">Invoice No.</label><input value={editingInvoice.invoice_no||''} onChange={e => setEditingInvoice(i => ({...i,invoice_no:e.target.value}))} /></div>
-                        <div className="form-group"><label className="label">Invoice Date</label><DateInput value={editingInvoice.invoice_date||''} onChange={e => setEditingInvoice(i => ({...i,invoice_date:e.target.value}))} /></div>
+                        <div className="form-group"><label className="label">Invoice Date</label><DatePickerSingle value={editingInvoice.invoice_date||''} onChange={e => setEditingInvoice(i => ({...i,invoice_date:e.target.value}))} /></div>
                         <div className="form-group">
                           <label className="label">Status</label>
                           <select value={editingInvoice.status} onChange={e => {
@@ -2150,7 +2152,7 @@ export default function Billing() {
                         </div>
                         {(editingInvoice.status==='Paid'||editingInvoice.actual_amount_credited||editingInvoice.date_credited) && <>
                           <div className="form-group"><label className="label">Actual Amount Credited (₱)</label><input type="number" value={editingInvoice.actual_amount_credited||''} onChange={e => setEditingInvoice(i => ({...i,actual_amount_credited:e.target.value}))} placeholder="0.00" /></div>
-                          <div className="form-group"><label className="label">Date Credited to Bank</label><DateInput value={editingInvoice.date_credited||''} onChange={e => setEditingInvoice(i => ({...i,date_credited:e.target.value}))} /></div>
+                          <div className="form-group"><label className="label">Date Credited to Bank</label><DatePickerSingle value={editingInvoice.date_credited||''} onChange={e => setEditingInvoice(i => ({...i,date_credited:e.target.value}))} /></div>
                         </>}
                         <div className="form-group" style={{ gridColumn: 'span 2' }}>
                           <label className="label">Remarks</label>
@@ -2231,7 +2233,7 @@ export default function Billing() {
 
       {/* ── MANAGE TRIPS TAB ── */}
       {tab === 'Manage Trips' && (
-        <div>
+        <div className="tab-content" key={tab}>
           <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
             {['Dump Truck', 'Prime Mover'].map(t => (<button key={t} onClick={() => { setManageTab(t); setManageSelected([]); setManageClient(''); setManageRoute(''); setManageCommodity(''); setManageTripCode(''); setManageContainerSize('') }} className={manageTab===t?'btn-primary btn-sm':'btn-ghost btn-sm'}>{t}</button>))}
           </div>
@@ -2364,7 +2366,7 @@ export default function Billing() {
         })
         const grandTotal = displayed.reduce((s,i) => s+(i.total_sales_net||0), 0)
         return (
-          <div>
+          <div className="tab-content" key={tab}>
             <div className="filter-bar" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
               <select value={agingTruckType} onChange={e => setAgingTruckType(e.target.value)} style={{ width: 'auto' }}><option value="">All types</option><option value="Dump Truck">Dump Truck</option><option value="Prime Mover">Prime Mover</option></select>
               <select value={agingClient} onChange={e => setAgingClient(e.target.value)} style={{ width: 'auto' }}><option value="">All clients</option>{allInvClients.map(c => <option key={c} value={c}>{c}</option>)}</select>
@@ -2410,7 +2412,7 @@ export default function Billing() {
         const nowAR = new Date()
         const getARDays = (inv) => Math.floor((nowAR - new Date(inv.invoice_date)) / 86400000)
         return (
-          <div>
+          <div className="tab-content" key={tab}>
             <div style={{ display:'flex', gap:12, marginBottom:16, flexWrap:'wrap', alignItems:'flex-end' }}>
               <div className="form-group" style={{ maxWidth: 320, margin:0 }}>
                 <label className="label">Select Client</label>
@@ -2458,7 +2460,7 @@ export default function Billing() {
                       {clientInvoices.sort((a,b) => new Date(b.invoice_date)-new Date(a.invoice_date)).map(inv => {
                         const vatInc=(inv.total_sales_net||0)*(inv.is_vat?1.12:1); const received=inv.actual_amount_credited||(inv.status==='Paid'?(inv.total_sales_net||0)*(inv.is_vat?1.10:0.98):0)
                         const days = getARDays(inv)
-                        return (<tr key={inv.id}><td className="mono" style={{ fontWeight:600 }}>{inv.invoice_no}</td><td>{fmtDate(inv.invoice_date)}</td><td style={{ fontSize:11 }}>{inv.truck_type}</td><td className="text-right mono">₱{fmt(vatInc)}</td><td className="text-right mono">{received>0?`₱${fmt(received)}`:'—'}</td><td style={{ fontSize:11 }}>{inv.date_credited?fmtDate(inv.date_credited):'—'}</td><td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background:inv.status==='Paid'?'rgba(22,163,74,0.1)':'rgba(234,179,8,0.1)', color:inv.status==='Paid'?'var(--success)':'var(--warning)' }}>{inv.status}</span></td>{balanceStatusFilter==='unpaid' && <td className="text-right" style={{ fontSize:12, fontWeight:600, color: days>=60?'var(--danger)':days>=30?'#CC5500':'var(--muted)' }}>{days}d</td>}</tr>)
+                        return (<tr key={inv.id}><td className="mono" style={{ fontWeight:600 }}>{inv.invoice_no}</td><td>{fmtDate(inv.invoice_date)}</td><td style={{ fontSize:11 }}>{inv.truck_type}</td><td className="text-right mono">₱{fmt(vatInc)}</td><td className="text-right mono">{received>0?`₱${fmt(received)}`:'—'}</td><td style={{ fontSize:11 }}>{inv.date_credited?fmtDate(inv.date_credited):'—'}</td><td><span style={{ fontSize:11, padding:'2px 8px', borderRadius:10, background:inv.status==='Paid'?'var(--success-light)':'rgba(234,179,8,0.1)', color:inv.status==='Paid'?'var(--success)':'var(--warning)' }}>{inv.status}</span></td>{balanceStatusFilter==='unpaid' && <td className="text-right" style={{ fontSize:12, fontWeight:600, color: days>=60?'var(--danger)':days>=30?'#CC5500':'var(--muted)' }}>{days}d</td>}</tr>)
                       })}
                     </tbody>
                   </table>
@@ -2484,7 +2486,7 @@ export default function Billing() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <div className="form-group">
                 <label className="label">Date</label>
-                <DateInput value={quickEditTrip.trip_date||''} onChange={e => setQuickEditTrip(t => ({...t, trip_date: e.target.value}))} />
+                <DatePickerSingle value={quickEditTrip.trip_date||''} onChange={e => setQuickEditTrip(t => ({...t, trip_date: e.target.value}))} />
               </div>
               <div className="form-group">
                 <label className="label">Truck Plate</label>
@@ -2709,7 +2711,7 @@ export default function Billing() {
             <h3 style={{ marginBottom: 4 }}>✅ Mark as Paid</h3>
             <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Total Sales: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · Expected (after {markPaidModal.inv.is_vat ? '12% VAT, ' : ''}2% W/Tax): <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))}</strong></p>
             <div className="form-grid">
-              <div className="form-group"><label className="label required">Date Credited</label><DateInput value={markPaidDate} onChange={e => setMarkPaidDate(e.target.value)} max={new Date().toISOString().slice(0,10)} /></div>
+              <div className="form-group"><label className="label required">Date Credited</label><DatePickerSingle value={markPaidDate} onChange={e => setMarkPaidDate(e.target.value)} max={new Date().toISOString().slice(0,10)} /></div>
               <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))} /></div>
             </div>
             <div className="modal-actions" style={{ marginTop: 14 }}>

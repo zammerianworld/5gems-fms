@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
+import DatePickerRange from '../components/DatePickerRange'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { supabase, fmt, fmtDate, logAudit } from '../lib/supabase'
@@ -241,7 +242,7 @@ export default function Employees() {
     setThirteenthLoading(true)
     try {
       const [entriesRes, manualRes, empsRes] = await Promise.all([
-        supabase.from('payroll_entries').select('employee_id, cutoff_date, basic_rate, basic_days').order('cutoff_date'),
+        supabase.from('payroll_entries').select('employee_id, cutoff_date, basic_salary').order('cutoff_date'),
         supabase.from('payroll_13th_manual').select('*').eq('year', year).then(r => r.error ? { data: [] } : r),
         supabase.from('payroll_employees').select('id, full_name, position').eq('category', 'admin').order('full_name')
       ])
@@ -314,7 +315,7 @@ export default function Employees() {
     thirteenthEntries.filter(en => (en.cutoff_date||'').slice(0,4) === String(thirteenthYear)).forEach(en => {
       const k = String(en.employee_id); if (!empMap[k]) return
       const mo = months[parseInt((en.cutoff_date||'').slice(5,7),10)-1]
-      const earned = (parseFloat(String(en.basic_rate||'0').replace(/,/g,''))||0) * (parseFloat(String(en.basic_days||'0').replace(/,/g,''))||0)
+      const earned = parseFloat(String(en.basic_salary||'0').replace(/,/g,''))||0
       if (!empMap[k].earned[mo]) empMap[k].earned[mo] = 0
       empMap[k].earned[mo] += earned
     })
@@ -360,7 +361,7 @@ export default function Employees() {
     thirteenthEntries.filter(en => (en.cutoff_date||'').slice(0,4) === String(thirteenthYear)).forEach(en => {
       const k = String(en.employee_id); if (!empMap[k]) return
       const mo = months[parseInt((en.cutoff_date||'').slice(5,7),10)-1]
-      const earned = (parseFloat(String(en.basic_rate||'0').replace(/,/g,''))||0) * (parseFloat(String(en.basic_days||'0').replace(/,/g,''))||0)
+      const earned = parseFloat(String(en.basic_salary||'0').replace(/,/g,''))||0
       if (!empMap[k].earned[mo]) empMap[k].earned[mo] = 0
       empMap[k].earned[mo] += earned
     })
@@ -1056,7 +1057,7 @@ export default function Employees() {
       </div>
 
       {/* ── TABS ── */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+      <div className="tab-bar">
         {[
           { id: 'payroll', label: '📋 Payroll' },
           { id: 'drivers', label: '🚛 Drivers' },
@@ -1064,21 +1065,14 @@ export default function Employees() {
           { id: '13th-month', label: '🎁 13th Month' },
           { id: 'payslip', label: '🧾 Payslip' },
         ].map(tab => (
-          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-            style={{
-              padding: '8px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
-              fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 400,
-              color: activeTab === tab.id ? 'var(--accent)' : 'var(--muted)',
-              borderBottom: activeTab === tab.id ? '2px solid var(--accent)' : '2px solid transparent',
-              marginBottom: -1,
-            }}>
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`tab-pill${activeTab === tab.id ? ' active' : ''}`}>
             {tab.label}
           </button>
         ))}
       </div>
 
       {activeTab === 'payroll' && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
+        <div className="tab-content" key={activeTab} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 4, background: 'var(--bg)', padding: 3, borderRadius: 8 }}>
               {[{ key: 'admin', label: 'Admin' }, { key: 'support', label: 'Support Staff' }].map(o => (
@@ -1129,7 +1123,7 @@ export default function Employees() {
                   </button>
                   {isAdmin && (
                     <button onClick={handleToggleLock}
-                      style={{ padding: '7px 14px', background: cutoffLocked ? '#16a34a' : '#dc2626', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
+                      style={{ padding: '7px 14px', background: cutoffLocked ? 'var(--success)' : 'var(--danger)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>
                       {cutoffLocked ? '🔓 Unlock' : '🔒 Lock'}
                     </button>
                   )}
@@ -1149,7 +1143,7 @@ export default function Employees() {
 
       {/* ══ TAB: PAYROLL REGISTER ══ */}
       {activeTab === 'payroll' && payrollView === 'register' && (
-        <>
+        <div className="tab-content" key={payrollView}>
           {entriesLoading ? (
             <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)', fontSize: 13 }}>Loading entries…</div>
           ) : entries.length === 0 ? (
@@ -1162,7 +1156,7 @@ export default function Employees() {
             <>
               {/* Lock status banner */}
               {cutoffLocked && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 12, fontSize: 13, color: '#dc2626' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--danger-light)', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 12, fontSize: 13, color: 'var(--danger)' }}>
                   🔒 <strong>This cutoff is locked.</strong> Entries cannot be edited. Only superuser can unlock.
                 </div>
               )}
@@ -1170,8 +1164,8 @@ export default function Employees() {
               {/* Summary cards */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 16 }}>
                 {[
-                  { label: 'Total Earnings', value: fmt(grandEarnings), color: '#16a34a' },
-                  { label: 'Total Deductions', value: fmt(grandDeductions), color: '#dc2626' },
+                  { label: 'Total Earnings', value: fmt(grandEarnings), color: 'var(--success)' },
+                  { label: 'Total Deductions', value: fmt(grandDeductions), color: 'var(--danger)' },
                   { label: 'Total Net Pay', value: fmt(grandNet), color: 'var(--accent)' },
                   { label: 'Employees', value: entries.length, color: 'var(--text)' },
                 ].map(c => (
@@ -1220,7 +1214,7 @@ export default function Employees() {
                                 })
                                 setEntryAutoCalc(false); setShowEntryForm(true)
                               }} style={{ padding: '6px 12px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>✏️ Edit</button>
-                              <button onClick={() => handleDeleteEntry(e.id, empName)} style={{ padding: '6px 10px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
+                              <button onClick={() => handleDeleteEntry(e.id, empName)} style={{ padding: '6px 10px', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🗑️</button>
                               </>
                             )}
                           </div>
@@ -1230,14 +1224,14 @@ export default function Employees() {
                           <div><span style={{ color: 'var(--muted)' }}>Basic: </span><strong>₱{fmt(e.basic_salary)}</strong></div>
                           {p(e.overtime_pay) > 0 && <div><span style={{ color: 'var(--muted)' }}>OT: </span><strong>₱{fmt(e.overtime_pay)}</strong></div>}
                           {p(e.allowance) > 0 && <div><span style={{ color: 'var(--muted)' }}>Allowance: </span><strong>₱{fmt(e.allowance)}</strong></div>}
-                          {p(e.cash_advance_deduction) > 0 && <div><span style={{ color: 'var(--muted)' }}>CA Ded.: </span><strong style={{ color: '#dc2626' }}>₱{fmt(e.cash_advance_deduction)}</strong></div>}
-                          {p(e.sss_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>SSS: </span><strong style={{ color: '#dc2626' }}>₱{fmt(e.sss_premium)}</strong></div>}
-                          {p(e.philhealth_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>PhilHealth: </span><strong style={{ color: '#dc2626' }}>₱{fmt(e.philhealth_premium)}</strong></div>}
-                          {p(e.hdmf_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>HDMF: </span><strong style={{ color: '#dc2626' }}>₱{fmt(e.hdmf_premium)}</strong></div>}
+                          {p(e.cash_advance_deduction) > 0 && <div><span style={{ color: 'var(--muted)' }}>CA Ded.: </span><strong style={{ color: 'var(--danger)' }}>₱{fmt(e.cash_advance_deduction)}</strong></div>}
+                          {p(e.sss_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>SSS: </span><strong style={{ color: 'var(--danger)' }}>₱{fmt(e.sss_premium)}</strong></div>}
+                          {p(e.philhealth_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>PhilHealth: </span><strong style={{ color: 'var(--danger)' }}>₱{fmt(e.philhealth_premium)}</strong></div>}
+                          {p(e.hdmf_premium) > 0 && <div><span style={{ color: 'var(--muted)' }}>HDMF: </span><strong style={{ color: 'var(--danger)' }}>₱{fmt(e.hdmf_premium)}</strong></div>}
                         </div>
                         <div style={{ display: 'flex', gap: 12, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)', fontSize: 12, flexWrap: 'wrap' }}>
-                          <span>Earnings: <strong style={{ color: '#16a34a' }}>₱{fmt(earn)}</strong></span>
-                          <span>Deductions: <strong style={{ color: '#dc2626' }}>₱{fmt(ded)}</strong></span>
+                          <span>Earnings: <strong style={{ color: 'var(--success)' }}>₱{fmt(earn)}</strong></span>
+                          <span>Deductions: <strong style={{ color: 'var(--danger)' }}>₱{fmt(ded)}</strong></span>
                           <span style={{ marginLeft: 'auto' }}>Net Pay: <strong style={{ color: '#2563eb', fontSize: 15 }}>₱{fmt(net)}</strong></span>
                         </div>
                       </div>
@@ -1258,14 +1252,14 @@ export default function Employees() {
                         <th style={TH}>Rest Day</th>
                         <th style={TH}>Adj.</th>
                         <th style={TH}>Allowance</th>
-                        <th style={{ ...TH, background: '#f0fdf4', color: '#16a34a' }}>Earnings</th>
+                        <th style={{ ...TH, background: 'var(--success-light)', color: 'var(--success)' }}>Earnings</th>
                         <th style={TH}>Cash Adv.</th>
                         <th style={TH}>HDMF Loan</th>
                         <th style={TH}>HDMF Prem.</th>
                         <th style={TH}>PhilHealth</th>
                         <th style={TH}>SSS Loan</th>
                         <th style={TH}>SSS Prem.</th>
-                        <th style={{ ...TH, background: '#fef2f2', color: '#dc2626' }}>Deductions</th>
+                        <th style={{ ...TH, background: 'var(--danger-light)', color: 'var(--danger)' }}>Deductions</th>
                         <th style={{ ...TH, background: '#eff6ff', color: '#2563eb', fontWeight: 700 }}>Net Pay</th>
                         {isAdmin && <th style={TH}>Actions</th>}
                       </tr>
@@ -1289,14 +1283,14 @@ export default function Employees() {
                             <td style={TD}>{p(e.rest_day_duty) > 0 ? `₱${fmt(e.rest_day_duty)}` : '—'}</td>
                             <td style={TD}>{p(e.salary_adjustment) !== 0 ? `₱${fmt(e.salary_adjustment)}` : '—'}</td>
                             <td style={TD}>{p(e.allowance) > 0 ? `₱${fmt(e.allowance)}` : '—'}</td>
-                            <td style={{ ...TD, background: '#f0fdf4', fontWeight: 600, color: '#16a34a' }}>₱{fmt(earn)}</td>
+                            <td style={{ ...TD, background: 'var(--success-light)', fontWeight: 600, color: 'var(--success)' }}>₱{fmt(earn)}</td>
                             <td style={TD}>{p(e.cash_advance_deduction) > 0 ? `₱${fmt(e.cash_advance_deduction)}` : '—'}</td>
                             <td style={TD}>{p(e.hdmf_loan) > 0 ? `₱${fmt(e.hdmf_loan)}` : '—'}</td>
                             <td style={TD}>{p(e.hdmf_premium) > 0 ? `₱${fmt(e.hdmf_premium)}` : '—'}</td>
                             <td style={TD}>{p(e.philhealth_premium) > 0 ? `₱${fmt(e.philhealth_premium)}` : '—'}</td>
                             <td style={TD}>{p(e.sss_loan) > 0 ? `₱${fmt(e.sss_loan)}` : '—'}</td>
                             <td style={TD}>{p(e.sss_premium) > 0 ? `₱${fmt(e.sss_premium)}` : '—'}</td>
-                            <td style={{ ...TD, background: '#fef2f2', color: '#dc2626' }}>₱{fmt(ded)}</td>
+                            <td style={{ ...TD, background: 'var(--danger-light)', color: 'var(--danger)' }}>₱{fmt(ded)}</td>
                             <td style={{ ...TD, background: '#eff6ff', color: '#2563eb', fontWeight: 700 }}>₱{fmt(net)}</td>
                             {isAdmin && (
                               <td style={TD}>
@@ -1321,7 +1315,7 @@ export default function Employees() {
                                       })
                                       setEntryAutoCalc(false); setShowEntryForm(true)
                                     }} style={ActionBtn('#3b82f6')}>✏️</button>
-                                    <button onClick={() => handleDeleteEntry(e.id, empName)} style={ActionBtn('#ef4444')}>🗑️</button>
+                                    <button onClick={() => handleDeleteEntry(e.id, empName)} style={ActionBtn('var(--danger)')}>🗑️</button>
                                     </>
                                   )}
                                 </div>
@@ -1356,12 +1350,12 @@ export default function Employees() {
               settings={settings} caRecords={caRecords} allPayrollEntries={allPayrollEntries} />
           </div>
           <style>{PRINT_STYLE}</style>
-        </>
+        </div>
       )}
 
       {/* ══ SUB-VIEW: ROSTER ══ */}
       {activeTab === 'payroll' && payrollView === 'roster' && (
-        <div style={{ display: 'grid', gap: 10 }}>
+        <div className="tab-content" key={payrollView} style={{ display: 'grid', gap: 10 }}>
           {employees.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)' }}>No employees yet. Add one above.</div>
           ) : employees.map(emp => (
@@ -1369,7 +1363,7 @@ export default function Employees() {
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontWeight: 700, fontSize: 15 }}>{emp.full_name}</span>
-                  {!emp.is_active && <span style={{ fontSize: 10, background: '#fef2f2', color: '#dc2626', padding: '2px 6px', borderRadius: 4 }}>INACTIVE</span>}
+                  {!emp.is_active && <span style={{ fontSize: 10, background: 'var(--danger-light)', color: 'var(--danger)', padding: '2px 6px', borderRadius: 4 }}>INACTIVE</span>}
                 </div>
                 {emp.position && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{emp.position}</div>}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, marginTop: 8, fontSize: 12 }}>
@@ -1378,7 +1372,7 @@ export default function Employees() {
                   <span>SSS: <strong>₱{fmt(emp.sss_employee)}</strong></span>
                   <span>PhilHealth: <strong>₱{fmt(emp.philhealth_employee)}</strong></span>
                   <span>HDMF: <strong>₱{fmt(emp.hdmf_employee)}</strong></span>
-                  <span style={{ color: getCaBalance(emp.id) > 0 ? '#dc2626' : 'var(--muted)' }}>
+                  <span style={{ color: getCaBalance(emp.id) > 0 ? 'var(--danger)' : 'var(--muted)' }}>
                     CA Balance: <strong>₱{fmt(getCaBalance(emp.id))}</strong>
                   </span>
                 </div>
@@ -1397,7 +1391,7 @@ export default function Employees() {
 
       {/* ══ TAB: CASH ADVANCES ══ */}
       {activeTab === 'cash-advance' && (
-        <>
+        <div className="tab-content" key={activeTab}>
           <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <select value={caFilterEmp} onChange={e => setCaFilterEmp(e.target.value)}
               style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)', fontSize: 13 }}>
@@ -1429,19 +1423,19 @@ export default function Employees() {
                   <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', fontSize: 13 }}>
                     <div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Total Advances</div>
-                      <div style={{ fontWeight: 700, color: '#dc2626', fontSize: 15 }}>₱{fmt(totalAdv)}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 15 }}>₱{fmt(totalAdv)}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Ledger Payments</div>
-                      <div style={{ fontWeight: 700, color: '#16a34a', fontSize: 15 }}>₱{fmt(totalLedgerPay)}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>₱{fmt(totalLedgerPay)}</div>
                     </div>
                     <div>
                       <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Payroll Deductions</div>
-                      <div style={{ fontWeight: 700, color: '#16a34a', fontSize: 15 }}>₱{fmt(totalPayrollDed)}</div>
+                      <div style={{ fontWeight: 700, color: 'var(--success)', fontSize: 15 }}>₱{fmt(totalPayrollDed)}</div>
                     </div>
                     <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 24 }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.05em' }}>Outstanding Balance</div>
-                      <div style={{ fontWeight: 700, color: balance > 0 ? '#dc2626' : '#16a34a', fontSize: 18 }}>₱{fmt(balance)}</div>
+                      <div style={{ fontWeight: 700, color: balance > 0 ? 'var(--danger)' : 'var(--success)', fontSize: 18 }}>₱{fmt(balance)}</div>
                     </div>
                   </div>
                 </div>
@@ -1458,7 +1452,7 @@ export default function Employees() {
                   <th style={TH}>Date</th>
                   <th style={TH}>Type</th>
                   <th style={TH}>Amount</th>
-                  <th style={{ ...TH, color: '#dc2626' }}>Running Balance</th>
+                  <th style={{ ...TH, color: 'var(--danger)' }}>Running Balance</th>
                   <th style={{ ...TH, textAlign: 'left' }}>Description</th>
                   {isAdmin && <th style={TH}>Actions</th>}
                 </tr>
@@ -1493,21 +1487,21 @@ export default function Employees() {
                         <td style={{ ...TD, textAlign: 'left' }}>{r.empName}</td>
                         <td style={TD}>{fmtDate(r.date)}</td>
                         <td style={TD}>
-                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'advance' ? '#fef2f2' : isPayroll ? '#f0f9ff' : '#f0fdf4', color: r.type === 'advance' ? '#dc2626' : isPayroll ? '#0369a1' : '#16a34a' }}>
+                          <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: r.type === 'advance' ? 'var(--danger-light)' : isPayroll ? '#f0f9ff' : 'var(--success-light)', color: r.type === 'advance' ? 'var(--danger)' : isPayroll ? '#0369a1' : 'var(--success)' }}>
                             {r.type === 'advance' ? '↑ ADVANCE' : isPayroll ? '⊖ PAYROLL DED.' : '↓ PAYMENT'}
                           </span>
                         </td>
-                        <td style={{ ...TD, color: r.type === 'advance' ? '#dc2626' : isPayroll ? '#0369a1' : '#16a34a', fontWeight: 600 }}>
+                        <td style={{ ...TD, color: r.type === 'advance' ? 'var(--danger)' : isPayroll ? '#0369a1' : 'var(--success)', fontWeight: 600 }}>
                           {r.type === 'advance' ? '+' : '-'}₱{fmt(r.amount)}
                         </td>
-                        <td style={{ ...TD, fontWeight: 700, color: runBal > 0 ? '#dc2626' : '#16a34a' }}>₱{fmt(runBal)}</td>
+                        <td style={{ ...TD, fontWeight: 700, color: runBal > 0 ? 'var(--danger)' : 'var(--success)' }}>₱{fmt(runBal)}</td>
                         <td style={{ ...TD, textAlign: 'left', color: 'var(--muted)', fontSize: 11 }}>{r.description || '—'}</td>
                         {isAdmin && (
                           <td style={TD}>
                             {!isPayroll ? (
                               <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                                 <button onClick={() => { setEditingCaId(r.originalRow.id); setCaForm({ employee_id: r.originalRow.employee_id || '', driver_id: r.originalRow.driver_id || '', date: r.originalRow.date, amount: String(r.originalRow.amount), type: r.originalRow.type, description: r.originalRow.description || '' }); setShowCaForm(true) }} style={ActionBtn('#3b82f6')}>✏️</button>
-                                <button onClick={() => handleDeleteCa(r.originalRow.id, r.empName, r.originalRow.amount)} style={ActionBtn('#ef4444')}>🗑️</button>
+                                <button onClick={() => handleDeleteCa(r.originalRow.id, r.empName, r.originalRow.amount)} style={ActionBtn('var(--danger)')}>🗑️</button>
                               </div>
                             ) : (
                               <span style={{ fontSize: 10, color: 'var(--muted)' }}>payroll</span>
@@ -1521,7 +1515,7 @@ export default function Employees() {
               </tbody>
             </table>
           </div>
-        </>
+        </div>
       )}
 
       {/* ══ MODALS ══ */}
@@ -1541,10 +1535,10 @@ export default function Employees() {
                 <input value={empForm.employee_no} onChange={e => setEmpForm(f => ({ ...f, employee_no: e.target.value }))} placeholder="e.g. 23-001" style={INPUT} />
               </FormRow>
               <FormRow label="Hire Date">
-                <DateInput value={empForm.hire_date} onChange={e => setEmpForm(f => ({ ...f, hire_date: e.target.value }))} style={INPUT} />
+                <DatePickerSingle value={empForm.hire_date} onChange={e => setEmpForm(f => ({ ...f, hire_date: e.target.value }))} style={INPUT} />
               </FormRow>
               <FormRow label="Termination Date">
-                <DateInput value={empForm.termination_date} onChange={e => setEmpForm(f => ({ ...f, termination_date: e.target.value }))} style={INPUT} />
+                <DatePickerSingle value={empForm.termination_date} onChange={e => setEmpForm(f => ({ ...f, termination_date: e.target.value }))} style={INPUT} />
               </FormRow>
             </div>
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12 }}>
@@ -1595,7 +1589,7 @@ export default function Employees() {
                 </select>
               </FormRow>
               <FormRow label="Cutoff Date *">
-                <DateInput value={entryForm.cutoff_date} onChange={e => setEntryForm(f => ({ ...f, cutoff_date: e.target.value }))} style={INPUT} />
+                <DatePickerSingle value={entryForm.cutoff_date} onChange={e => setEntryForm(f => ({ ...f, cutoff_date: e.target.value }))} style={INPUT} />
               </FormRow>
             </div>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
@@ -1629,7 +1623,7 @@ export default function Employees() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
                 <FormRow label="Cash Advance Deduction">
                   <input type="number" value={entryForm.cash_advance_deduction} onChange={e => setEntryForm(f => ({ ...f, cash_advance_deduction: e.target.value }))} placeholder="0" style={INPUT} />
-                  {entryForm.employee_id && <div style={{ fontSize: 10, color: '#dc2626', marginTop: 2 }}>CA Balance: ₱{fmt(getCaBalance(entryForm.employee_id))}</div>}
+                  {entryForm.employee_id && <div style={{ fontSize: 10, color: 'var(--danger)', marginTop: 2 }}>CA Balance: ₱{fmt(getCaBalance(entryForm.employee_id))}</div>}
                 </FormRow>
                 <FormRow label="HDMF Loan"><input type="number" value={entryForm.hdmf_loan} onChange={e => setEntryForm(f => ({ ...f, hdmf_loan: e.target.value }))} placeholder="0" style={INPUT} /></FormRow>
                 <FormRow label="HDMF Premium"><input type="number" value={entryForm.hdmf_premium} onChange={e => setEntryForm(f => ({ ...f, hdmf_premium: e.target.value }))} style={INPUT} /></FormRow>
@@ -1640,8 +1634,8 @@ export default function Employees() {
             </div>
             {entryForm.employee_id && (
               <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '10px 14px', display: 'flex', gap: 20, fontSize: 13 }}>
-                <span>Earnings: <strong style={{ color: '#16a34a' }}>₱{fmt(calcEarnings(entryForm))}</strong></span>
-                <span>Deductions: <strong style={{ color: '#dc2626' }}>₱{fmt(calcDeductions(entryForm))}</strong></span>
+                <span>Earnings: <strong style={{ color: 'var(--success)' }}>₱{fmt(calcEarnings(entryForm))}</strong></span>
+                <span>Deductions: <strong style={{ color: 'var(--danger)' }}>₱{fmt(calcDeductions(entryForm))}</strong></span>
                 <span>Net Pay: <strong style={{ color: 'var(--accent)' }}>₱{fmt(calcNet(entryForm))}</strong></span>
               </div>
             )}
@@ -1671,7 +1665,7 @@ export default function Employees() {
               </select>
             </FormRow>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
-              <FormRow label="Date *"><DateInput value={caForm.date} onChange={e => setCaForm(f => ({ ...f, date: e.target.value }))} style={INPUT} /></FormRow>
+              <FormRow label="Date *"><DatePickerSingle value={caForm.date} onChange={e => setCaForm(f => ({ ...f, date: e.target.value }))} style={INPUT} /></FormRow>
               <FormRow label="Type">
                 <select value={caForm.type} onChange={e => setCaForm(f => ({ ...f, type: e.target.value }))} style={INPUT}>
                   <option value="advance">Cash Advance (↑ Balance)</option>
@@ -1704,10 +1698,10 @@ export default function Employees() {
               onKeyDown={e => e.key === 'Enter' && handlePinUnlockSubmit()}
               placeholder="Override PIN (e.g. A12345)"
               maxLength={6}
-              style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: `1px solid ${pinUnlockError ? '#ef4444' : 'var(--border)'}`, background: 'var(--bg)', color: 'var(--text)', fontSize: 14, fontFamily: 'monospace', letterSpacing: '0.15em', boxSizing: 'border-box', marginBottom: 6 }}
+              style={{ width: '100%', padding: '8px 12px', borderRadius: 6, border: `1px solid ${pinUnlockError ? 'var(--danger)' : 'var(--border)'}`, background: 'var(--bg)', color: 'var(--text)', fontSize: 14, fontFamily: 'monospace', letterSpacing: '0.15em', boxSizing: 'border-box', marginBottom: 6 }}
               autoFocus
             />
-            {pinUnlockError && <div style={{ fontSize: 12, color: '#ef4444', marginBottom: 10 }}>{pinUnlockError}</div>}
+            {pinUnlockError && <div style={{ fontSize: 12, color: 'var(--danger)', marginBottom: 10 }}>{pinUnlockError}</div>}
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
               <button onClick={() => setPinUnlockModal(null)} style={{ padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
               <button onClick={handlePinUnlockSubmit} disabled={pinUnlocking} style={{ padding: '8px 20px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
@@ -1732,14 +1726,14 @@ export default function Employees() {
           <p style={{ margin: '0 0 20px', fontSize: 14 }}>{confirmModal.message}</p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
             <button onClick={() => setConfirmModal(null)} style={{ padding: '8px 16px', border: '1px solid var(--border)', borderRadius: 6, background: 'transparent', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
-            <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null) }} style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Confirm</button>
+            <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null) }} style={{ padding: '8px 16px', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>Confirm</button>
           </div>
         </Modal>
       )}
 
       {/* ── 13TH MONTH TAB ── */}
       {activeTab === '13th-month' && (
-        <div>
+        <div className="tab-content" key={activeTab}>
           <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: 'var(--bg)', padding: 3, borderRadius: 8, width: 'fit-content' }}>
             {[{ key: 'admin', label: 'Admin' }, { key: 'tenure', label: 'Drivers & Support Staff' }].map(o => (
               <button key={o.key} onClick={() => setThirteenthGroup(o.key)} style={{
@@ -1817,7 +1811,7 @@ export default function Employees() {
                       <th style={{ padding:'8px 10px', textAlign:'left', color:'var(--muted)', fontWeight:600, fontSize:11, textTransform:'uppercase', position:'sticky', left:0, background:'var(--bg)', minWidth:140 }}>Employee</th>
                       {monthNames.map(m => <th key={m} style={{ padding:'8px 6px', textAlign:'right', color:'var(--muted)', fontWeight:600, fontSize:11, textTransform:'uppercase', minWidth:72 }}>{m}</th>)}
                       <th style={{ padding:'8px 10px', textAlign:'right', color:'var(--accent)', fontWeight:700, fontSize:11, textTransform:'uppercase', minWidth:110 }}>Total Earned</th>
-                      <th style={{ padding:'8px 10px', textAlign:'right', color:'#16a34a', fontWeight:700, fontSize:11, textTransform:'uppercase', minWidth:110 }}>13th Month</th>
+                      <th style={{ padding:'8px 10px', textAlign:'right', color:'var(--success)', fontWeight:700, fontSize:11, textTransform:'uppercase', minWidth:110 }}>13th Month</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1854,7 +1848,7 @@ export default function Employees() {
                             </td>
                           ))}
                           <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:600, color:'var(--accent)', fontSize:12 }}>₱{Number(totalEarned).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
-                          <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'#16a34a', fontSize:13 }}>₱{Number(thirteenth).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                          <td style={{ padding:'8px 10px', textAlign:'right', fontWeight:700, color:'var(--success)', fontSize:13 }}>₱{Number(thirteenth).toLocaleString('en-PH',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
                         </tr>
                       )
                     })}
@@ -1864,7 +1858,7 @@ export default function Employees() {
                       <td style={{ padding:'8px 10px', textAlign:'right', color:'var(--accent)' }}>
                         ₱{Number(rows.reduce((s,emp) => { const manual=thirteenthManual[emp.id]||{}; return s+months.reduce((ms,mo)=>ms+(emp.earned[mo]||0)+(emp.earned[mo]>0?0:parseFloat(manual[mo]||0)||0),0) },0)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                       </td>
-                      <td style={{ padding:'8px 10px', textAlign:'right', color:'#16a34a' }}>
+                      <td style={{ padding:'8px 10px', textAlign:'right', color:'var(--success)' }}>
                         ₱{Number(rows.reduce((s,emp) => { const manual=thirteenthManual[emp.id]||{}; const t=months.reduce((ms,mo)=>ms+(emp.earned[mo]||0)+(emp.earned[mo]>0?0:parseFloat(manual[mo]||0)||0),0); return s+t/12 },0)).toLocaleString('en-PH',{minimumFractionDigits:2})}
                       </td>
                     </tr>
@@ -1883,7 +1877,7 @@ export default function Employees() {
 
       {/* ══ TAB: PAYSLIP GENERATOR ══ */}
       {activeTab === 'payslip' && (
-        <div>
+        <div className="tab-content" key={activeTab}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:8 }}>
             <div>
               <h2 style={{ margin:0, fontSize:16, fontWeight:600 }}>Payslip Generator</h2>
@@ -1985,17 +1979,13 @@ export default function Employees() {
 
                     {/* Period pickers */}
                     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:10 }}>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="label" style={{ fontSize:10 }}>Period From</label>
-                        <DateInput value={c.period_from} onChange={e => updateCutoff(idx, 'period_from', e.target.value)} style={{ fontSize:12 }} />
-                      </div>
-                      <div className="form-group" style={{ margin:0 }}>
-                        <label className="label" style={{ fontSize:10 }}>Period To</label>
-                        <DateInput value={c.period_to} onChange={e => updateCutoff(idx, 'period_to', e.target.value)} style={{ fontSize:12 }} />
-                      </div>
+                      <div className="form-group" style={{ margin:0, gridColumn:'1 / -1' }}>
+                      <label className="label" style={{ fontSize:10 }}>Period</label>
+                      <DatePickerRange from={c.period_from} to={c.period_to} onChange={({ from, to }) => { updateCutoff(idx, 'period_from', from); updateCutoff(idx, 'period_to', to) }} />
+                    </div>
                       <div className="form-group" style={{ margin:0, gridColumn:'1 / -1' }}>
                         <label className="label" style={{ fontSize:10 }}>Pay Date</label>
-                        <DateInput value={c.pay_date} onChange={e => updateCutoff(idx, 'pay_date', e.target.value)} style={{ fontSize:12 }} />
+                        <DatePickerSingle value={c.pay_date} onChange={e => updateCutoff(idx, 'pay_date', e.target.value)} style={{ fontSize:12 }} />
                       </div>
                     </div>
 

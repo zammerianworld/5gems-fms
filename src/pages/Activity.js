@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, fmtDate } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
+import DatePickerSingle from '../components/DatePickerSingle'
 
 const MODULE_META = {
   'Trip':         { icon: '🚛', color: '#0ea5e9', bg: 'rgba(14,165,233,0.08)' },
@@ -8,7 +9,7 @@ const MODULE_META = {
   'Invoices':     { icon: '🧾', color: '#ff1e00', bg: 'rgba(255,30,0,0.08)' },
   'CheckVouchers':{ icon: '💳', color: '#8b5cf6', bg: 'rgba(139,92,246,0.08)' },
   'CashVouchers': { icon: '💵', color: '#10b981', bg: 'rgba(16,185,129,0.08)' },
-  'Expenses':     { icon: '📊', color: '#ef4444', bg: 'rgba(239,68,68,0.08)' },
+  'Expenses':     { icon: '📊', color: 'var(--danger)', bg: 'rgba(239,68,68,0.08)' },
   'Payroll':      { icon: '👥', color: '#6366f1', bg: 'rgba(99,102,241,0.08)' },
   'Payslip':      { icon: '🧾', color: '#6366f1', bg: 'rgba(99,102,241,0.08)' },
   'ORCR':         { icon: '🚗', color: '#f59e0b', bg: 'rgba(245,158,11,0.08)' },
@@ -18,7 +19,7 @@ const MODULE_META = {
 }
 
 const ACTION_COLORS = {
-  'destructive': { color: '#dc2626', label: 'Deleted / Updated' },
+  'destructive': { color: 'var(--danger)', label: 'Deleted / Updated' },
   'generate':    { color: '#ff1e00', label: 'Generated' },
   'default':     { color: 'var(--muted)', label: 'Action' },
 }
@@ -95,7 +96,7 @@ export default function Activity() {
       <div className="card" style={{ marginBottom: 20, padding: '12px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button className="btn-ghost btn-sm" onClick={() => navDay(-1)}>← Prev</button>
-          <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
+          <DatePickerSingle value={selectedDate} onChange={e => setSelectedDate(e.target.value)}
             style={{ width: 'auto', padding: '6px 10px', borderRadius: 7, border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)', fontSize: 14 }} />
           <button className="btn-ghost btn-sm" onClick={() => navDay(1)} disabled={isToday}>Next →</button>
           {!isToday && <button className="btn-ghost btn-sm" onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}>Today</button>}

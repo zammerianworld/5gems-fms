@@ -302,6 +302,19 @@ const GUIDES = [
         ],
       },
       {
+        heading: "Gov't Remittance",
+        content: [
+          { type: 'text', text: 'The Gov\'t Remittance tab brings together SSS, PhilHealth, and HDMF activity in one place — both employer contributions (which post as normal Admin expenses under their own categories) and employee loan payments (SSS/HDMF salary loans withheld from pay, tracked here for reference only — this money is never a company cost, since it was already deducted from the employee).' },
+          { type: 'steps', items: [
+            'To record a contribution: add a normal Admin expense with category SSS Contribution, PhilHealth Contribution, or HDMF Contribution — typing "sss", "philhealth", or "hdmf" in the description auto-suggests the right one. It then also appears here automatically.',
+            'An optional Coverage Month can be set on that expense if the month being paid for differs from the date paid (e.g. paying in September for August\'s contribution) — this only affects Reports and the Midyear Report, never Cashflow, which always reflects the real payment date.',
+            'To record a loan payment: click + Add Loan Payment here directly, choose SSS or HDMF, the date, amount, and payment method.',
+            'Editing or deleting an existing contribution or loan payment requires an admin override PIN, the same one used elsewhere in the app for sensitive corrections.',
+          ]},
+          { type: 'note', text: 'The summary cards at the top total contributions only — loan payments are tracking-only and are not company expenses, so they are not included in those totals.' },
+        ],
+      },
+      {
         heading: 'Recurring Expenses',
         content: [
           { type: 'steps', items: [
@@ -937,8 +950,8 @@ export default function HowTo() {
 
   const roleBadge = (roles) => {
     if (roles.includes('superuser') && roles.length === 1) return { label: 'Superuser only', color: '#7c3aed', bg: '#f5f3ff' }
-    if (roles.includes('admin') && !roles.includes('staff')) return { label: 'Admin+', color: '#d97706', bg: '#fffbeb' }
-    return { label: 'All users', color: '#16a34a', bg: '#f0fdf4' }
+    if (roles.includes('admin') && !roles.includes('staff')) return { label: 'Admin+', color: 'var(--warning)', bg: 'var(--warning-light)' }
+    return { label: 'All users', color: 'var(--success)', bg: 'var(--success-light)' }
   }
 
   return (

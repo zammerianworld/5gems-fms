@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, fmt, fmtDate, sortRows, logAudit, fetchAllRows } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
+import DatePickerSingle from '../components/DatePickerSingle'
 import SignatoryDialog from '../components/SignatoryDialog'
 import { useToast, Toast } from '../components/Toast'
 import jsPDF from 'jspdf'
@@ -13,10 +14,10 @@ const getPaymentStatus = (t, tab) => {
   const clientPaid = t.client_paid
   const subconPaid = t.subcon_paid
   if (tab === 'special') {
-    if (clientPaid) return { label: '✅ Client Paid', color: '#15803d', bg: 'rgba(22,163,74,0.1)' }
+    if (clientPaid) return { label: '✅ Client Paid', color: '#15803d', bg: 'var(--success-light)' }
     return { label: '⏳ Unpaid', color: '#a16207', bg: 'rgba(234,179,8,0.1)' }
   }
-  if (clientPaid && subconPaid) return { label: '✅ Fully Settled', color: '#15803d', bg: 'rgba(22,163,74,0.1)' }
+  if (clientPaid && subconPaid) return { label: '✅ Fully Settled', color: '#15803d', bg: 'var(--success-light)' }
   if (clientPaid && !subconPaid) return { label: '🔵 Client Paid', color: '#1d4ed8', bg: 'rgba(29,78,216,0.1)' }
   if (!clientPaid && subconPaid) return { label: '🟠 Advanced', color: '#c2410c', bg: 'rgba(194,65,12,0.1)' }
   return { label: '⏳ Unpaid', color: '#a16207', bg: 'rgba(234,179,8,0.1)' }
@@ -663,10 +664,10 @@ export default function SubconTrips() {
         {subconTab !== 'balance' && <button className="btn-ghost" onClick={() => setPrintMode('open')}>🖨️ Print / Export</button>}
       </div>
       {/* Tabs */}
-      <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+      <div className="tab-bar">
         {[{ key: 'regular', label: '🤝 Regular Sub-con', count: regularTrucks.length }, { key: 'special', label: '⭐ Special Sub-con', count: specialTrucks.length }, { key: 'balance', label: '💰 Running Balance', count: null }].map(tab => (
           <button key={tab.key} onClick={() => { setSubconTab(tab.key); setFilterStatus(''); setFilterTruck('') }}
-            style={{ padding: '10px 20px', background: 'none', border: 'none', borderBottom: subconTab === tab.key ? '2px solid var(--accent)' : '2px solid transparent', color: subconTab === tab.key ? 'var(--accent)' : 'var(--muted)', fontWeight: subconTab === tab.key ? 600 : 400, cursor: 'pointer', fontSize: 13 }}>
+            className={`tab-pill${subconTab === tab.key ? ' active' : ''}`}>
             {tab.label} {tab.count !== null && <span style={{ marginLeft: 6, fontSize: 10, background: 'var(--border)', borderRadius: 10, padding: '1px 6px' }}>{tab.count} trucks</span>}
           </button>
         ))}
@@ -674,7 +675,7 @@ export default function SubconTrips() {
 
       {/* FIX 3: Only show stats/filters/table when NOT on balance tab */}
       {subconTab !== 'balance' && (
-        <>
+        <div className="tab-content" key={subconTab}>
           {/* Summary cards */}
           <div className="stats-grid" style={{ marginBottom: 16 }}>
             <div className="stat-card">
@@ -718,13 +719,13 @@ export default function SubconTrips() {
               <span style={{ fontSize: 13, fontWeight: 500 }}>{bulkSelected.length} trip{bulkSelected.length > 1 ? 's' : ''} selected</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <label style={{ fontSize: 12, color: 'var(--muted)' }}>Date paid:</label>
-                <input type="date" value={bulkPaidDate} onChange={e => setBulkPaidDate(e.target.value)} style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }} />
+                <DatePickerSingle value={bulkPaidDate} onChange={e => setBulkPaidDate(e.target.value)} style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }} />
               </div>
               <button className="btn-primary btn-sm" onClick={handleBulkClientPaid} disabled={bulkSaving}>{bulkSaving ? 'Saving…' : '✅ Mark Client Paid'}</button>
               {subconTab === 'regular' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, borderLeft: '1px solid var(--border)', paddingLeft: 10 }}>
                   <label style={{ fontSize: 12, color: 'var(--muted)' }}>Sub-con paid:</label>
-                  <input type="date" value={bulkSubconDate} onChange={e => setBulkSubconDate(e.target.value)} style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }} />
+                  <DatePickerSingle value={bulkSubconDate} onChange={e => setBulkSubconDate(e.target.value)} style={{ width: 'auto', padding: '4px 8px', fontSize: 12 }} />
                   <input value={bulkSubconVoucher} onChange={e => setBulkSubconVoucher(e.target.value)} placeholder="CV/Check No." style={{ width: 120, padding: '4px 8px', fontSize: 12 }} />
                   <button className="btn-ghost btn-sm" onClick={handleBulkSubconPaid} disabled={bulkSubconSaving}>{bulkSubconSaving ? 'Saving…' : '💸 Mark Sub-con Paid'}</button>
                 </div>
@@ -800,7 +801,7 @@ export default function SubconTrips() {
                   {editingTrip.client_paid && (
                     <div className="form-group" style={{ margin: 0 }}>
                       <label className="label">Date Paid by Client</label>
-                      <input type="date" value={editingTrip.client_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, client_paid_date: e.target.value }))} />
+                      <DatePickerSingle value={editingTrip.client_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, client_paid_date: e.target.value }))} />
                     </div>
                   )}
                 </div>
@@ -820,7 +821,7 @@ export default function SubconTrips() {
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         <div className="form-group" style={{ flex: 1, minWidth: 110, margin: 0 }}>
                           <label className="label">Date Paid</label>
-                          <input type="date" value={editingTrip.subcon_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, subcon_paid_date: e.target.value }))} />
+                          <DatePickerSingle value={editingTrip.subcon_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, subcon_paid_date: e.target.value }))} />
                         </div>
                         <div className="form-group" style={{ flex: 1, minWidth: 130, margin: 0 }}>
                           <label className="label">Check / Voucher No.</label>
@@ -869,7 +870,7 @@ export default function SubconTrips() {
                     {editingTrip.subcon_paid && (
                       <div className="form-group" style={{ marginBottom: 10 }}>
                         <label className="label">Date Paid</label>
-                        <input type="date" value={editingTrip.subcon_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, subcon_paid_date: e.target.value }))} />
+                        <DatePickerSingle value={editingTrip.subcon_paid_date || today()} onChange={e => setEditingTrip(t => ({ ...t, subcon_paid_date: e.target.value }))} />
                       </div>
                     )}
                     <div className="form-group" style={{ margin: 0 }}>
@@ -1040,7 +1041,7 @@ export default function SubconTrips() {
                           <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)' }}>{invNo}</span>
                           <span style={{ fontSize: 12, color: 'var(--muted)' }}>{group.client}</span>
                           <span style={{ fontSize: 11, background: 'var(--bg)', borderRadius: 10, padding: '1px 8px', color: 'var(--muted)' }}>{group.trips.length} trip{group.trips.length>1?'s':''}</span>
-                          {allClientPaid && <span style={{ fontSize: 10, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', borderRadius: 10, padding: '1px 8px' }}>✅ Client Paid</span>}
+                          {allClientPaid && <span style={{ fontSize: 10, background: 'var(--success-light)', color: 'var(--success)', borderRadius: 10, padding: '1px 8px' }}>✅ Client Paid</span>}
                           <span style={{ marginLeft: 'auto', fontSize: 13, fontFamily: 'var(--mono)', fontWeight: 600 }}>₱{fmt(groupTotal)}</span>
                           {subconTab === 'regular' && groupCost > 0 && <span style={{ fontSize: 12, color: groupProfit>=0?'var(--success)':'var(--danger)' }}>Profit: ₱{fmt(groupProfit)}</span>}
                           <span style={{ fontSize: 12 }}>{isExpanded ? '▲' : '▼'}</span>
@@ -1166,7 +1167,7 @@ export default function SubconTrips() {
               </div>
             )
           }
-        </>
+        </div>
       )}
 
       {/* ── RUNNING BALANCE TAB ── */}
@@ -1175,7 +1176,7 @@ export default function SubconTrips() {
         // FIX 1: renamed to rawTrips to avoid shadowing outer enrichedTrips
         const rawTrips = [...dumpTrips, ...pmTrips]
         return (
-          <div>
+          <div className="tab-content" key={subconTab}>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>All sub-contractor trucks — total earned vs total paid out</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {allSubconTrucks.map(truck => {

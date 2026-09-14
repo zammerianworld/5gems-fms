@@ -3,6 +3,7 @@ import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES } from '../lib/supabase'
 import { EULA_SECTIONS, DMCA_SECTIONS, PRIVACY_SECTIONS, LEGAL_LAST_UPDATED } from '../lib/legalDocs'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
+import DatePickerSingle from '../components/DatePickerSingle'
 import ConfirmDialog from '../components/ConfirmDialog'
 const SIG_SECTIONS = [
   { key: 'soa', label: 'SOA / Billing', prepKey: 'prepared_by_name', prepTitleKey: 'prepared_by_title', notedKey: 'noted_by_name', notedTitleKey: 'noted_by_title' },
@@ -199,7 +200,7 @@ export default function Settings() {
     <>
       <div className="form-group">
         <label className="label required">Fleet Start Date</label>
-        <input type="date" value={form.start_date || '2024-01-01'}
+        <DatePickerSingle value={form.start_date || '2024-01-01'}
           onChange={e => setForm(t => ({ ...t, start_date: e.target.value }))}
           max={new Date().toISOString().slice(0, 10)} />
         <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3, display: 'block' }}>
@@ -208,7 +209,7 @@ export default function Settings() {
       </div>
       <div className="form-group">
         <label className="label">Fleet End Date <span style={{ fontWeight: 400, color: 'var(--hint)', textTransform: 'none', letterSpacing: 0 }}>(blank = still active)</span></label>
-        <input type="date" value={form.end_date || ''}
+        <DatePickerSingle value={form.end_date || ''}
           onChange={e => setForm(t => ({ ...t, end_date: e.target.value || '' }))}
           min={form.start_date || '2024-01-01'} />
         {form.end_date && (
@@ -325,7 +326,7 @@ export default function Settings() {
                         <div style={{ fontSize: 11, color: 'var(--accent)' }}>{sig.title}</div>
                         <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
                           {sig.is_default_prepared && <span style={{ fontSize: 10, background: 'rgba(255,30,0,0.1)', color: 'var(--accent)', padding: '1px 6px', borderRadius: 4 }}>Default Prepared</span>}
-                          {sig.is_default_approved && <span style={{ fontSize: 10, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', padding: '1px 6px', borderRadius: 4 }}>Default Approved</span>}
+                          {sig.is_default_approved && <span style={{ fontSize: 10, background: 'var(--success-light)', color: 'var(--success)', padding: '1px 6px', borderRadius: 4 }}>Default Approved</span>}
                         </div>
                       </div>
                       <button className="btn-ghost btn-sm" onClick={() => setEditingSig({ ...sig })}>✏️</button>

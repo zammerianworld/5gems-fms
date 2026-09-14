@@ -527,7 +527,7 @@ export default function Cashflow() {
 
                 {monthLoans.map(l => (
                   <tr key={l.id}>
-                    <td><span className="badge" style={{ fontSize: 10, background: 'rgba(220,38,38,0.1)', color: 'var(--danger)' }}>🏦 Loan</span></td>
+                    <td><span className="badge" style={{ fontSize: 10, background: 'var(--danger-light)', color: 'var(--danger)' }}>🏦 Loan</span></td>
                     <td>{l.lender}{l.description ? ` — ${l.description}` : ''}</td>
                     <td className="text-right mono" style={{ color: 'var(--danger)' }}>₱{fmt(l.monthly_payment)}</td>
                   </tr>

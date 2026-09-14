@@ -13,25 +13,42 @@ const TABLES = [
   { key: 'expenses', label: 'Expenses' },
   { key: 'amortizations', label: 'Amortizations' },
   { key: 'insurances', label: 'Insurances' },
+  { key: 'expense_stocks', label: 'Expense Stocks' },
   // Finance
-  { key: 'vouchers', label: 'Check Vouchers' },
+  { key: 'check_vouchers', label: 'Check Vouchers' },
   { key: 'cash_vouchers', label: 'Cash Vouchers' },
+  { key: 'pdc_checks', label: 'PDC Checks' },
   { key: 'loans', label: 'Loans' },
+  { key: 'company_loans', label: 'Company Loans' },
+  { key: 'company_loan_payments', label: 'Company Loan Payments' },
+  { key: 'gov_loan_payments', label: "Gov't Loan Payments" },
   { key: 'extra_income', label: 'Extra Income' },
   { key: 'finances', label: 'Finances' },
   { key: 'historical_data', label: 'Historical Data' },
-  // Payroll
+  // Payroll — Admin/Support
   { key: 'payroll_employees', label: 'Payroll Employees' },
   { key: 'payroll_entries', label: 'Payroll Entries' },
   { key: 'payroll_cash_advances', label: 'Payroll Cash Advances' },
+  { key: 'payroll_13th_manual', label: '13th Month — Manual Entries' },
+  { key: 'tenure_13th_month', label: '13th Month — Tenure Records' },
+  { key: 'tenure_13th_tiers', label: '13th Month — Tenure Tiers' },
+  { key: 'payslip_drafts', label: 'Payslip Drafts' },
+  // Payroll — Drivers
+  { key: 'drivers', label: 'Drivers' },
+  { key: 'driver_rates', label: 'Driver Rates' },
+  { key: 'driver_loans', label: 'Driver Loans' },
+  { key: 'driver_payroll_entries', label: 'Driver Payroll Entries' },
+  { key: 'sss_brackets', label: 'SSS Contribution Brackets' },
+  { key: 'philhealth_brackets', label: 'PhilHealth Contribution Brackets' },
+  { key: 'hdmf_brackets', label: 'HDMF Contribution Brackets' },
   // Settings & Reference
   { key: 'trucks', label: 'Trucks' },
   { key: 'clients', label: 'Clients' },
-  { key: 'drivers', label: 'Drivers' },
   { key: 'commodities', label: 'Commodities' },
   { key: 'signatories', label: 'Signatories' },
   { key: 'saved_routes', label: 'Saved Routes' },
   { key: 'saved_rates', label: 'Saved Rates' },
+  { key: 'saved_pm_trip_codes', label: 'Saved PM Trip Codes' },
   { key: 'print_templates', label: 'Print Templates' },
   { key: 'orcr_records', label: 'OR/CR Records' },
   { key: 'company_settings', label: 'Company Settings' },
@@ -379,7 +396,7 @@ export default function Backup() {
           <div style={{ textAlign:'center', padding:24, color:'var(--muted)', fontSize:13 }}>
             <div style={{ fontSize:28, marginBottom:8 }}>📭</div>
             <div>No backups yet. Click "Save Backup Now" to create the first one.</div>
-            <div style={{ marginTop:8, fontSize:11, color:'#d97706' }}>⚠️ First: create a "backups" bucket in Supabase Storage (Storage → New bucket → name: backups → public: off).</div>
+            <div style={{ marginTop:8, fontSize:11, color:'var(--warning)' }}>⚠️ First: create a "backups" bucket in Supabase Storage (Storage → New bucket → name: backups → public: off).</div>
           </div>
         ) : (
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
@@ -393,7 +410,7 @@ export default function Backup() {
               {autoBackups.map((f, i) => (
                 <tr key={f.name} style={{ borderBottom:'1px solid var(--border)', background:i===0?'rgba(22,163,74,0.04)':'transparent' }}>
                   <td style={{ padding:'8px 12px' }}>
-                    {i===0 && <span style={{ fontSize:10, background:'#dcfce7', color:'#16a34a', padding:'1px 6px', borderRadius:10, fontWeight:600, marginRight:6 }}>Latest</span>}
+                    {i===0 && <span style={{ fontSize:10, background:'#dcfce7', color:'var(--success)', padding:'1px 6px', borderRadius:10, fontWeight:600, marginRight:6 }}>Latest</span>}
                     {f.name}
                   </td>
                   <td style={{ padding:'8px 12px', textAlign:'right', color:'var(--muted)' }}>{f.metadata?.size ? (f.metadata.size/1024/1024).toFixed(2)+' MB' : '—'}</td>

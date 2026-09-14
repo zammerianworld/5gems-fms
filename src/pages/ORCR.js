@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { useAuth } from '../components/AuthContext'
 import jsPDF from 'jspdf'
 import SignatoryDialog from '../components/SignatoryDialog'
@@ -23,10 +23,10 @@ const getDaysUntil = (dateStr) => {
 const expiryBadge = (dateStr, threshold = 30) => {
   const days = getDaysUntil(dateStr)
   if (days === null) return null
-  if (days < 0) return { label: `Expired ${Math.abs(days)}d ago`, color: '#dc2626', bg: 'rgba(220,38,38,0.1)', icon: '🔴' }
-  if (days <= threshold) return { label: `Expires in ${days}d`, color: '#d97706', bg: 'rgba(217,119,6,0.1)', icon: '🟡' }
+  if (days < 0) return { label: `Expired ${Math.abs(days)}d ago`, color: 'var(--danger)', bg: 'var(--danger-light)', icon: '🔴' }
+  if (days <= threshold) return { label: `Expires in ${days}d`, color: 'var(--warning)', bg: 'rgba(217,119,6,0.1)', icon: '🟡' }
   if (days <= threshold * 2) return { label: `Expires in ${days}d`, color: '#2563eb', bg: 'rgba(37,99,235,0.1)', icon: '🔵' }
-  return { label: `Valid — ${days}d left`, color: '#15803d', bg: 'rgba(22,163,74,0.1)', icon: '🟢' }
+  return { label: `Valid — ${days}d left`, color: '#15803d', bg: 'var(--success-light)', icon: '🟢' }
 }
 
 export default function ORCR() {
@@ -298,12 +298,12 @@ export default function ORCR() {
       {(expiredCount > 0 || expiringSoonCount > 0) && (
         <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap' }}>
           {expiredCount > 0 && (
-            <div style={{ padding: '10px 14px', background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, fontSize: 13, color: '#dc2626', fontWeight: 500 }}>
+            <div style={{ padding: '10px 14px', background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 8, fontSize: 13, color: 'var(--danger)', fontWeight: 500 }}>
               🔴 {expiredCount} vehicle{expiredCount > 1 ? 's' : ''} with expired OR
             </div>
           )}
           {expiringSoonCount > 0 && (
-            <div style={{ padding: '10px 14px', background: 'rgba(217,119,6,0.07)', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 8, fontSize: 13, color: '#d97706', fontWeight: 500 }}>
+            <div style={{ padding: '10px 14px', background: 'rgba(217,119,6,0.07)', border: '1px solid rgba(217,119,6,0.2)', borderRadius: 8, fontSize: 13, color: 'var(--warning)', fontWeight: 500 }}>
               🟡 {expiringSoonCount} vehicle{expiringSoonCount > 1 ? 's' : ''} expiring within 30 days
             </div>
           )}
@@ -343,7 +343,7 @@ export default function ORCR() {
             </div>
             <div className="form-group">
               <label className="label">OR Expiry Date</label>
-              <DateInput value={form.or_expiry} onChange={e => setForm(f => ({ ...f, or_expiry: e.target.value }))} />
+              <DatePickerSingle value={form.or_expiry} onChange={e => setForm(f => ({ ...f, or_expiry: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="label">CR Number</label>
@@ -351,7 +351,7 @@ export default function ORCR() {
             </div>
             <div className="form-group">
               <label className="label">CR Date (Issued / Processed)</label>
-              <DateInput value={form.cr_expiry} onChange={e => setForm(f => ({ ...f, cr_expiry: e.target.value }))} />
+              <DatePickerSingle value={form.cr_expiry} onChange={e => setForm(f => ({ ...f, cr_expiry: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="label">MV File No.</label>
@@ -432,7 +432,7 @@ export default function ORCR() {
                     <div style={{ fontSize: 11, fontWeight: isToday ? 700 : 400, color: isToday ? 'var(--accent)' : 'var(--text)', marginBottom: 2 }}>{day}</div>
                     {items.map((r, j) => {
                       const days = getDaysUntil(`${calMonth}-${String(day).padStart(2,'0')}`)
-                      const color = days < 0 ? '#dc2626' : days <= reminderDays ? '#d97706' : '#15803d'
+                      const color = days < 0 ? 'var(--danger)' : days <= reminderDays ? 'var(--warning)' : '#15803d'
                       return <div key={j} title={`${r.vehicle_name} — ${r._expField} expiry`} style={{ fontSize: 9, padding: '1px 4px', borderRadius: 3, background: color, color: '#fff', marginBottom: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r._expField}: {r.plate_no}</div>
                     })}
                   </div>
@@ -483,7 +483,7 @@ export default function ORCR() {
                       </td>
                       <td>
                         {isCritical
-                          ? <span className="badge" style={{ background: 'rgba(220,38,38,0.1)', color: '#dc2626', fontSize: 10 }}>🔴 Action needed</span>
+                          ? <span className="badge" style={{ background: 'var(--danger-light)', color: 'var(--danger)', fontSize: 10 }}>🔴 Action needed</span>
                           : <span className="badge badge-success" style={{ fontSize: 10 }}>✅ OK</span>
                         }
                       </td>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { supabase, fmt, fmtDate, logAudit } from '../lib/supabase'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -271,16 +271,15 @@ export default function Loans() {
   return (
     <div className="page">
       {/* Tab switcher */}
-      <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom:16, gap:2 }}>
+      <div className="tab-bar">
         {[['loans','🏦 Company Loans'],['lending','💸 Company Lending']].map(([key,label]) => (
-          <button key={key} onClick={() => setActiveTab(key)}
-            style={{ padding:'8px 18px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight: activeTab===key?600:400, color: activeTab===key?'var(--accent)':'var(--muted)', borderBottom: activeTab===key?'2px solid var(--accent)':'2px solid transparent', marginBottom:-1 }}>
+          <button key={key} onClick={() => setActiveTab(key)} className={`tab-pill${activeTab===key ? ' active' : ''}`}>
             {label}
           </button>
         ))}
       </div>
 
-      {activeTab === 'loans' && <>
+      {activeTab === 'loans' && <div className="tab-content" key={activeTab}>
       <div className="page-header">
         <div><h1 className="page-title">Loans</h1><p className="page-sub">Track company loans and monthly obligations</p></div>
         <button className="btn-primary" onClick={() => { setShowForm(!showForm); setEditingId(null); setForm(EMPTY) }}>
@@ -337,7 +336,7 @@ export default function Loans() {
             )}
             <div className="form-group">
               <label className="label required">Start Date</label>
-              <DateInput value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
+              <DatePickerSingle value={form.start_date} onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))} />
             </div>
             <div className="form-group">
               <label className="label">Status</label>
@@ -425,7 +424,7 @@ export default function Loans() {
                       )}
                       {loan.notes && <div style={{ fontSize: 11, color: 'var(--hint)', marginTop: 4 }}>{loan.notes}</div>}
                       {ms?.isOverpaid && (
-                        <div style={{ marginTop: 6, padding: '5px 10px', background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, fontSize: 11, color: '#dc2626', fontWeight: 500 }}>
+                        <div style={{ marginTop: 6, padding: '5px 10px', background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)', borderRadius: 6, fontSize: 11, color: 'var(--danger)', fontWeight: 500 }}>
                           ⚠️ Loan term completed — consider marking as <strong>Paid Off</strong>
                         </div>
                       )}
@@ -454,11 +453,11 @@ export default function Loans() {
           </div>
         </div>
       )}
-      </> /* end loans tab */}
+      </div>} {/* end loans tab */}
 
       {/* ── COMPANY LENDING TAB ── */}
       {activeTab === 'lending' && (
-        <div>
+        <div className="tab-content" key={activeTab}>
           {/* Header */}
           <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:16, flexWrap:'wrap' }}>
             <select value={clFilterStatus} onChange={e => setClFilterStatus(e.target.value)}
@@ -482,9 +481,9 @@ export default function Loans() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:10, marginBottom:16 }}>
                 {[
                   { label:'Active Loans', value: active.length, color:'var(--accent)', icon:'📋' },
-                  { label:'Total Lent Out', value:`₱${fmt(totalOut)}`, color:'#d97706', icon:'💵' },
-                  { label:'Outstanding Balance', value:`₱${fmt(totalBalance)}`, color:'#dc2626', icon:'⏳' },
-                  { label:'Fully Paid', value: companyLoans.filter(l=>l.status==='Fully Paid').length, color:'#16a34a', icon:'✅' },
+                  { label:'Total Lent Out', value:`₱${fmt(totalOut)}`, color:'var(--warning)', icon:'💵' },
+                  { label:'Outstanding Balance', value:`₱${fmt(totalBalance)}`, color:'var(--danger)', icon:'⏳' },
+                  { label:'Fully Paid', value: companyLoans.filter(l=>l.status==='Fully Paid').length, color:'var(--success)', icon:'✅' },
                 ].map(c => (
                   <div key={c.label} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 16px', position:'relative', overflow:'hidden' }}>
                     <div style={{ position:'absolute', top:8, right:10, fontSize:20, opacity:.15 }}>{c.icon}</div>
@@ -510,7 +509,7 @@ export default function Loans() {
                 const paidTotal = (payments[loan.id] || []).reduce((s,p) => s+(p.amount||0), 0)
                 const balance = loan.total_collectible - paidTotal
                 const pct = loan.total_collectible > 0 ? Math.min(100, (paidTotal / loan.total_collectible) * 100) : 0
-                const statusColor = loan.status === 'Fully Paid' ? '#16a34a' : loan.status === 'Written Off' ? '#6b7280' : '#d97706'
+                const statusColor = loan.status === 'Fully Paid' ? 'var(--success)' : loan.status === 'Written Off' ? '#6b7280' : 'var(--warning)'
                 return (
                   <div key={loan.id} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden' }}>
                     {/* Loan header */}
@@ -524,14 +523,14 @@ export default function Loans() {
                         </div>
                         {loan.purpose && <div style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>{loan.purpose}</div>}
                         <div style={{ marginTop:6, height:4, background:'var(--border)', borderRadius:4, overflow:'hidden', maxWidth:200 }}>
-                          <div style={{ height:'100%', width:`${pct}%`, background: pct>=100?'#16a34a':'var(--accent)', borderRadius:4, transition:'width .3s' }} />
+                          <div style={{ height:'100%', width:`${pct}%`, background: pct>=100?'var(--success)':'var(--accent)', borderRadius:4, transition:'width .3s' }} />
                         </div>
                         <div style={{ fontSize:10, color:'var(--muted)', marginTop:2 }}>{pct.toFixed(1)}% collected</div>
                       </div>
                       <div style={{ textAlign:'right', flexShrink:0 }}>
                         <div style={{ fontSize:13, color:'var(--muted)' }}>Principal: <strong>₱{fmt(loan.principal)}</strong></div>
-                        <div style={{ fontSize:13, color:'var(--muted)' }}>Collected: <span style={{ color:'#16a34a', fontWeight:600 }}>₱{fmt(paidTotal)}</span></div>
-                        <div style={{ fontSize:14, fontWeight:700, color: balance<=0?'#16a34a':'#dc2626' }}>Balance: ₱{fmt(Math.max(0,balance))}</div>
+                        <div style={{ fontSize:13, color:'var(--muted)' }}>Collected: <span style={{ color:'var(--success)', fontWeight:600 }}>₱{fmt(paidTotal)}</span></div>
+                        <div style={{ fontSize:14, fontWeight:700, color: balance<=0?'var(--success)':'var(--danger)' }}>Balance: ₱{fmt(Math.max(0,balance))}</div>
                         <div style={{ fontSize:11, color:'var(--muted)' }}>₱{fmt(loan.monthly_payment)}/mo · {loan.term_months}mo · {fmtDate(loan.start_date)}</div>
                       </div>
                       <span style={{ color:'var(--muted)', fontSize:16 }}>{isExpanded ? '▲' : '▼'}</span>
@@ -650,11 +649,11 @@ export default function Loans() {
                                 {/* Summary */}
                                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:8, marginBottom:12 }}>
                                   {[
-                                    { label:'Revised Term', value:`${revisedMonths} months`, color: savedMonths>0?'#16a34a':'var(--text)' },
-                                    { label:'Months Saved', value: savedMonths > 0 ? `−${savedMonths} months` : 'No change', color: savedMonths>0?'#16a34a':'var(--muted)' },
+                                    { label:'Revised Term', value:`${revisedMonths} months`, color: savedMonths>0?'var(--success)':'var(--text)' },
+                                    { label:'Months Saved', value: savedMonths > 0 ? `−${savedMonths} months` : 'No change', color: savedMonths>0?'var(--success)':'var(--muted)' },
                                     { label:'Last Payment', value:`₱${fmt(lastRow?.amort||0)}`, color:'var(--accent)' },
                                     { label:'Last Payment Date', value: lastRow ? lastRow.date.toLocaleDateString('en-PH',{month:'short',year:'numeric'}) : '—', color:'var(--text)' },
-                                    { label:'Total Interest', value:`₱${fmt(totalRevisedInt)}`, color:'#d97706' },
+                                    { label:'Total Interest', value:`₱${fmt(totalRevisedInt)}`, color:'var(--warning)' },
                                   ].map(c => (
                                     <div key={c.label} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:8, padding:'10px 12px' }}>
                                       <div style={{ fontSize:10, color:'var(--muted)', textTransform:'uppercase', letterSpacing:'.06em' }}>{c.label}</div>
@@ -683,12 +682,12 @@ export default function Loans() {
                                           <td style={{ padding:'5px 8px', color:'var(--muted)' }}>{row.month}</td>
                                           <td style={{ padding:'5px 8px' }}>{row.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</td>
                                           <td style={{ padding:'5px 8px', textAlign:'right', fontWeight: row.isLastRevised?700:500, color: row.isLastRevised?'var(--accent)':'var(--text)' }}>₱{fmt(row.amort)}</td>
-                                          <td style={{ padding:'5px 8px', textAlign:'right', color:'#d97706' }}>₱{fmt(row.interest)}</td>
+                                          <td style={{ padding:'5px 8px', textAlign:'right', color:'var(--warning)' }}>₱{fmt(row.interest)}</td>
                                           <td style={{ padding:'5px 8px', textAlign:'right', color:'#7c3aed' }}>₱{fmt(row.principal)}</td>
-                                          <td style={{ padding:'5px 8px', textAlign:'right', color: row.outstanding<=0?'#16a34a':'var(--muted)' }}>₱{fmt(row.outstanding)}</td>
+                                          <td style={{ padding:'5px 8px', textAlign:'right', color: row.outstanding<=0?'var(--success)':'var(--muted)' }}>₱{fmt(row.outstanding)}</td>
                                           <td style={{ padding:'5px 8px', textAlign:'center' }}>
                                             {row.actual
-                                              ? <span style={{ fontSize:10, background:'#dcfce7', color:'#16a34a', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>✅ Paid</span>
+                                              ? <span style={{ fontSize:10, background:'#dcfce7', color:'var(--success)', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>✅ Paid</span>
                                               : row.isLastRevised
                                                 ? <span style={{ fontSize:10, background:'rgba(255,30,0,0.1)', color:'var(--accent)', padding:'1px 6px', borderRadius:10, fontWeight:600 }}>Final</span>
                                                 : <span style={{ fontSize:10, background:'var(--bg)', color:'var(--muted)', padding:'1px 6px', borderRadius:10 }}>Pending</span>
@@ -699,7 +698,7 @@ export default function Loans() {
                                       <tr style={{ borderTop:'2px solid var(--border)', background:'var(--bg)', fontWeight:700 }}>
                                         <td colSpan={2} style={{ padding:'6px 8px', fontSize:11 }}>TOTAL</td>
                                         <td style={{ padding:'6px 8px', textAlign:'right' }}>₱{fmt(totalRevisedAmort)}</td>
-                                        <td style={{ padding:'6px 8px', textAlign:'right', color:'#d97706' }}>₱{fmt(totalRevisedInt)}</td>
+                                        <td style={{ padding:'6px 8px', textAlign:'right', color:'var(--warning)' }}>₱{fmt(totalRevisedInt)}</td>
                                         <td style={{ padding:'6px 8px', textAlign:'right', color:'#7c3aed' }}>₱{fmt(loan.principal)}</td>
                                         <td colSpan={2} />
                                       </tr>
@@ -738,16 +737,16 @@ export default function Loans() {
                                         <td style={{ padding:'5px 8px', color:'var(--muted)' }}>{row.month}</td>
                                         <td style={{ padding:'5px 8px' }}>{row.date.toLocaleDateString('en-PH',{month:'short',day:'numeric',year:'numeric'})}</td>
                                         <td style={{ padding:'5px 8px', textAlign:'right', fontWeight:500 }}>₱{fmt(row.amort)}</td>
-                                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#d97706' }}>₱{fmt(row.interest)}</td>
+                                        <td style={{ padding:'5px 8px', textAlign:'right', color:'var(--warning)' }}>₱{fmt(row.interest)}</td>
                                         <td style={{ padding:'5px 8px', textAlign:'right', color:'#7c3aed' }}>₱{fmt(row.principal)}</td>
                                         <td style={{ padding:'5px 8px', textAlign:'right', color:'var(--muted)' }}>₱{fmt(row.outstanding)}</td>
-                                        <td style={{ padding:'5px 8px', borderLeft:'2px solid var(--border)', textAlign:'center', color: isPaid?'#16a34a':'var(--muted)' }}>
+                                        <td style={{ padding:'5px 8px', borderLeft:'2px solid var(--border)', textAlign:'center', color: isPaid?'var(--success)':'var(--muted)' }}>
                                           {isPaid ? `${idx+1}${['st','nd','rd'][idx]||'th'}` : '—'}
                                         </td>
-                                        <td style={{ padding:'5px 8px', textAlign:'right', color:'#16a34a', fontWeight: isPaid?600:400 }}>
+                                        <td style={{ padding:'5px 8px', textAlign:'right', color:'var(--success)', fontWeight: isPaid?600:400 }}>
                                           {isPaid ? `₱${fmt(pay.amount)}` : '—'}
                                         </td>
-                                        <td style={{ padding:'5px 8px', textAlign:'right', fontWeight: isPaid?700:400, color: isPaid?(runBal<=0?'#16a34a':'#dc2626'):'var(--muted)' }}>
+                                        <td style={{ padding:'5px 8px', textAlign:'right', fontWeight: isPaid?700:400, color: isPaid?(runBal<=0?'var(--success)':'var(--danger)'):'var(--muted)' }}>
                                           {isPaid ? `₱${fmt(Math.max(0,runBal))}` : '—'}
                                         </td>
                                         <td style={{ padding:'5px 8px', color:'var(--muted)', fontSize:11 }}>
@@ -755,7 +754,7 @@ export default function Loans() {
                                         </td>
                                         {isAdmin && <td style={{ padding:'5px 8px', textAlign:'right' }}>
                                           {isPaid
-                                            ? <button onClick={() => handleDeletePayment(pay.id, loan.id)} style={{ padding:'1px 5px', background:'#ef4444', color:'#fff', border:'none', borderRadius:3, cursor:'pointer', fontSize:10 }}>✕</button>
+                                            ? <button onClick={() => handleDeletePayment(pay.id, loan.id)} style={{ padding:'1px 5px', background:'var(--danger)', color:'#fff', border:'none', borderRadius:3, cursor:'pointer', fontSize:10 }}>✕</button>
                                             : <button onClick={() => { setShowPayForm(loan.id + '_' + idx); setPayForm({ payment_date: row.date.toISOString().slice(0,10), amount: String(row.amort), notes:'' }) }}
                                                 style={{ padding:'1px 5px', background:'var(--accent)', color:'#fff', border:'none', borderRadius:3, cursor:'pointer', fontSize:10 }}>+</button>
                                           }
@@ -767,11 +766,11 @@ export default function Loans() {
                                   <tr style={{ borderTop:'2px solid var(--border)', background:'var(--bg)', fontWeight:700 }}>
                                     <td colSpan={2} style={{ padding:'6px 8px', fontSize:11 }}>TOTAL</td>
                                     <td style={{ padding:'6px 8px', textAlign:'right' }}>₱{fmt(schedule.reduce((s,r)=>s+r.amort,0))}</td>
-                                    <td style={{ padding:'6px 8px', textAlign:'right', color:'#d97706' }}>₱{fmt(schedule.reduce((s,r)=>s+r.interest,0))}</td>
+                                    <td style={{ padding:'6px 8px', textAlign:'right', color:'var(--warning)' }}>₱{fmt(schedule.reduce((s,r)=>s+r.interest,0))}</td>
                                     <td style={{ padding:'6px 8px', textAlign:'right', color:'#7c3aed' }}>₱{fmt(loan.principal)}</td>
                                     <td />
                                     <td style={{ borderLeft:'2px solid var(--border)' }} />
-                                    <td style={{ padding:'6px 8px', textAlign:'right', color:'#16a34a' }}>₱{fmt(paidList.reduce((s,p)=>s+(p.amount||0),0))}</td>
+                                    <td style={{ padding:'6px 8px', textAlign:'right', color:'var(--success)' }}>₱{fmt(paidList.reduce((s,p)=>s+(p.amount||0),0))}</td>
                                     <td colSpan={3} />
                                   </tr>
                                 </tbody>
@@ -785,7 +784,7 @@ export default function Loans() {
                           <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'1fr 1fr auto auto', gap:8, alignItems:'end' }}>
                             <div>
                               <label style={{ fontSize:11, color:'var(--muted)', display:'block', marginBottom:3 }}>Date</label>
-                              <DateInput value={payForm.payment_date} onChange={e => setPayForm(f=>({...f,payment_date:e.target.value}))}
+                              <DatePickerSingle value={payForm.payment_date} onChange={e => setPayForm(f=>({...f,payment_date:e.target.value}))}
                                 style={{ width:'100%', padding:'6px 8px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} />
                             </div>
                             <div>
@@ -800,10 +799,10 @@ export default function Loans() {
 
                         {/* Mark fully paid */}
                         {isAdmin && loan.status === 'Active' && balance <= 0 && (
-                          <div style={{ marginTop:10, padding:'8px 12px', background:'#f0fdf4', border:'1px solid #86efac', borderRadius:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                            <span style={{ fontSize:13, color:'#16a34a', fontWeight:600 }}>✅ Fully collected! Mark as Fully Paid?</span>
+                          <div style={{ marginTop:10, padding:'8px 12px', background:'var(--success-light)', border:'1px solid #86efac', borderRadius:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                            <span style={{ fontSize:13, color:'var(--success)', fontWeight:600 }}>✅ Fully collected! Mark as Fully Paid?</span>
                             <button onClick={async () => { await supabase.from('company_loans').update({ status:'Fully Paid' }).eq('id', loan.id); fetchCompanyLoans() }}
-                              style={{ padding:'4px 12px', background:'#16a34a', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600 }}>Mark Paid</button>
+                              style={{ padding:'4px 12px', background:'var(--success)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:600 }}>Mark Paid</button>
                           </div>
                         )}
                       </div>
@@ -841,7 +840,7 @@ export default function Loans() {
                   </div>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     <div><label style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', display:'block', marginBottom:4 }}>Start Date</label>
-                      <DateInput value={clForm.start_date} onChange={e => setClForm(f=>({...f,start_date:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
+                      <DatePickerSingle value={clForm.start_date} onChange={e => setClForm(f=>({...f,start_date:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
                     <div><label style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', display:'block', marginBottom:4 }}>Monthly Collection *</label>
                       <input type="number" value={clForm.monthly_payment} onChange={e => setClForm(f=>({...f,monthly_payment:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
                   </div>

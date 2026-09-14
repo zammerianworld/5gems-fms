@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { supabase, fmt, fmtDate, numberToWords, logAudit } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
@@ -627,20 +627,15 @@ export default function CheckVouchers() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 2, marginBottom: 20, borderBottom: '0.5px solid var(--border)' }}>
+      <div className="tab-bar">
         {(isAdmin ? TABS : ['Vouchers']).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{
-            padding: '8px 18px', background: 'none', border: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: tab === t ? 500 : 400,
-            color: tab === t ? 'var(--accent)' : 'var(--muted)',
-            borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', marginBottom: -1,
-          }}>{t}</button>
+          <button key={t} onClick={() => setTab(t)} className={`tab-pill${tab === t ? ' active' : ''}`}>{t}</button>
         ))}
       </div>
 
       {/* ── VOUCHERS TAB ── */}
       {tab === 'Vouchers' && (
-        <>
+        <div className="tab-content" key={tab}>
           {showForm && (
             <div className="card" style={{ marginBottom: 24 }}>
               <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 16 }}>
@@ -666,7 +661,7 @@ export default function CheckVouchers() {
                 </div>
                 <div className="form-group">
                   <label className="label required">Date</label>
-                  <DateInput value={voucher_date} onChange={e => setVoucherDate(e.target.value)} />
+                  <DatePickerSingle value={voucher_date} onChange={e => setVoucherDate(e.target.value)} />
                 </div>
                 <div className="form-group span-2">
                   <label className="label required">Pay To</label>
@@ -714,7 +709,7 @@ export default function CheckVouchers() {
                   </div>
                   <div className="form-group">
                     <label className="label">Check Date</label>
-                    <DateInput value={check_date} onChange={e => setCheckDate(e.target.value)} />
+                    <DatePickerSingle value={check_date} onChange={e => setCheckDate(e.target.value)} />
                   </div>
                   <div className="form-group span-2">
                     <label className="label">Description</label>
@@ -743,7 +738,7 @@ export default function CheckVouchers() {
                       <tbody>
                         {checkRows.map((row, i) => (
                           <tr key={i}>
-                            <td><DateInput value={row.check_date} onChange={e => setCheckRows(rows => rows.map((r,j) => j===i ? {...r, check_date: e.target.value} : r))} style={{ padding: '4px 8px', fontSize: 12 }} /></td>
+                            <td><DatePickerSingle value={row.check_date} onChange={e => setCheckRows(rows => rows.map((r,j) => j===i ? {...r, check_date: e.target.value} : r))} style={{ padding: '4px 8px', fontSize: 12 }} /></td>
                             <td><input value={row.check_no} onChange={e => setCheckRows(rows => rows.map((r,j) => j===i ? {...r, check_no: e.target.value} : r))} placeholder="Check no." style={{ padding: '4px 8px', fontSize: 12 }} /></td>
                             <td><input value={row.description} onChange={e => setCheckRows(rows => rows.map((r,j) => j===i ? {...r, description: e.target.value} : r))} placeholder="Description" style={{ padding: '4px 8px', fontSize: 12 }} /></td>
                             <td><input type="number" step="0.01" value={row.amount} onChange={e => setCheckRows(rows => rows.map((r,j) => j===i ? {...r, amount: e.target.value} : r))} placeholder="0.00" style={{ padding: '4px 8px', fontSize: 12, textAlign: 'right' }} /></td>
@@ -837,7 +832,7 @@ export default function CheckVouchers() {
               </table>
             </div>
           )}
-        </>
+        </div>
       )}
 
 
@@ -937,7 +932,7 @@ export default function CheckVouchers() {
 
       {/* ── ISSUED BY MONTH TAB ── */}
       {tab === 'Issued by Month' && (
-        <div>
+        <div className="tab-content" key={tab}>
           {/* Month picker */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 20, flexWrap: 'wrap' }}>
             <button onClick={() => {
@@ -983,8 +978,8 @@ export default function CheckVouchers() {
                   {[
                     { label: 'Total Issued', value: monthVouchers.length, color: 'var(--text)' },
                     { label: 'Total Amount', value: `₱${fmt(totalAmount)}`, color: 'var(--accent)' },
-                    { label: 'Pending', value: monthVouchers.filter(v => v.status === 'Pending').length, color: '#d97706' },
-                    { label: 'Released', value: monthVouchers.filter(v => v.status === 'Released').length, color: '#16a34a' },
+                    { label: 'Pending', value: monthVouchers.filter(v => v.status === 'Pending').length, color: 'var(--warning)' },
+                    { label: 'Released', value: monthVouchers.filter(v => v.status === 'Released').length, color: 'var(--success)' },
                   ].map(c => (
                     <div key={c.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '12px 16px' }}>
                       <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '.06em' }}>{c.label}</div>
@@ -1015,8 +1010,8 @@ export default function CheckVouchers() {
                         const desc = v.mode === 'multiple'
                           ? (rows.map(r => r.description).filter(Boolean).join(', ') || '—')
                           : (v.description || '—')
-                        const statusColor = v.status === 'Released' ? '#16a34a' : v.status === 'Cancelled' ? '#dc2626' : '#d97706'
-                        const statusBg = v.status === 'Released' ? '#f0fdf4' : v.status === 'Cancelled' ? '#fef2f2' : '#fffbeb'
+                        const statusColor = v.status === 'Released' ? 'var(--success)' : v.status === 'Cancelled' ? 'var(--danger)' : 'var(--warning)'
+                        const statusBg = v.status === 'Released' ? 'var(--success-light)' : v.status === 'Cancelled' ? 'var(--danger-light)' : 'var(--warning-light)'
                         return (
                           <tr key={v.id} style={{ borderBottom: '1px solid var(--border)' }}>
                             <td style={{ padding: '8px 12px', fontFamily: 'var(--mono)', fontWeight: 600, fontSize: 13 }}>{v.voucher_no || '—'}</td>
@@ -1047,7 +1042,7 @@ export default function CheckVouchers() {
 
       {/* ── PDC TRACKER TAB ── */}
       {tab === 'PDC Tracker' && (
-        <div>
+        <div className="tab-content" key={tab}>
           {/* Header row */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -1122,10 +1117,10 @@ export default function CheckVouchers() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 20 }}>
                   {[
                     { label: 'Total Checks', value: totalChecks, sub: 'issued', icon: '🧾', color: 'var(--text)', accent: 'var(--border)' },
-                    { label: 'Remaining', value: upcoming.length, sub: 'checks pending', icon: '⏳', color: '#d97706', accent: '#fef3c7' },
+                    { label: 'Remaining', value: upcoming.length, sub: 'checks pending', icon: '⏳', color: 'var(--warning)', accent: '#fef3c7' },
                     { label: 'Months Left', value: monthsLeft, sub: 'months to go', icon: '📅', color: '#7c3aed', accent: '#ede9fe' },
                     { label: 'Total Remaining', value: `₱${fmt(totalUpcoming)}`, sub: 'outstanding', icon: '💰', color: 'var(--accent)', accent: 'rgba(255,30,0,0.1)' },
-                    { label: 'Cleared', value: cleared.length, sub: 'completed', icon: '✅', color: '#16a34a', accent: '#dcfce7' },
+                    { label: 'Cleared', value: cleared.length, sub: 'completed', icon: '✅', color: 'var(--success)', accent: '#dcfce7' },
                   ].map(s => (
                     <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '14px 16px', position: 'relative', overflow: 'hidden' }}>
                       <div style={{ position: 'absolute', top: 10, right: 12, fontSize: 22, opacity: 0.18 }}>{s.icon}</div>
@@ -1162,8 +1157,8 @@ export default function CheckVouchers() {
                   const hasDueToday = checks.some(c => c.effectiveStatus === 'Due Today')
                   const isCurrentMonth = monthKey === today.toISOString().slice(0,7)
 
-                  const monthBorderColor = hasOverdue ? '#dc2626' : hasDueToday ? '#d97706' : allCleared ? '#16a34a' : isCurrentMonth ? 'var(--accent)' : 'var(--border)'
-                  const monthBg = hasOverdue ? '#fff5f5' : hasDueToday ? '#fffbeb' : allCleared ? '#f0fdf4' : isCurrentMonth ? 'rgba(255,30,0,0.04)' : 'var(--surface)'
+                  const monthBorderColor = hasOverdue ? 'var(--danger)' : hasDueToday ? 'var(--warning)' : allCleared ? 'var(--success)' : isCurrentMonth ? 'var(--accent)' : 'var(--border)'
+                  const monthBg = hasOverdue ? '#fff5f5' : hasDueToday ? 'var(--warning-light)' : allCleared ? 'var(--success-light)' : isCurrentMonth ? 'rgba(255,30,0,0.04)' : 'var(--surface)'
 
                   const isCollapsed = collapsedMonths.has(monthKey)
                   return (
@@ -1173,9 +1168,9 @@ export default function CheckVouchers() {
                         <span style={{ fontSize: 12, color: 'var(--muted)', transform: isCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s', display: 'inline-block' }}>▾</span>
                         <div style={{ fontWeight: 700, fontSize: 14 }}>{monthLabel}</div>
                         {isCurrentMonth && <span style={{ fontSize: 11, background: 'var(--accent)', color: '#fff', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>THIS MONTH</span>}
-                        {hasOverdue && <span style={{ fontSize: 11, background: '#fef2f2', color: '#dc2626', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>⚠️ OVERDUE</span>}
-                        {hasDueToday && <span style={{ fontSize: 11, background: '#fffbeb', color: '#d97706', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>📅 DUE TODAY</span>}
-                        {allCleared && <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>✅ ALL CLEARED</span>}
+                        {hasOverdue && <span style={{ fontSize: 11, background: 'var(--danger-light)', color: 'var(--danger)', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>⚠️ OVERDUE</span>}
+                        {hasDueToday && <span style={{ fontSize: 11, background: 'var(--warning-light)', color: 'var(--warning)', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>📅 DUE TODAY</span>}
+                        {allCleared && <span style={{ fontSize: 11, background: 'var(--success-light)', color: 'var(--success)', padding: '1px 8px', borderRadius: 10, fontWeight: 600 }}>✅ ALL CLEARED</span>}
                         <div style={{ marginLeft: 'auto', fontSize: 13, fontWeight: 600 }}>{checks.length} check{checks.length > 1 ? 's' : ''} · ₱{fmt(monthTotal)}</div>
                       </div>
 
@@ -1183,11 +1178,11 @@ export default function CheckVouchers() {
                       {!isCollapsed && <div style={{ background: 'var(--surface)' }}>
                         {checks.map((c, i) => {
                           const statusStyles = {
-                            'Due':       { bg: '#fef2f2', color: '#dc2626', label: '⚠️ Overdue' },
-                            'Due Today': { bg: '#fffbeb', color: '#d97706', label: '📅 Due Today' },
+                            'Due':       { bg: 'var(--danger-light)', color: 'var(--danger)', label: '⚠️ Overdue' },
+                            'Due Today': { bg: 'var(--warning-light)', color: 'var(--warning)', label: '📅 Due Today' },
                             'Upcoming':  { bg: '#eff6ff', color: '#2563eb', label: '🔜 Upcoming' },
-                            'Cleared':   { bg: '#f0fdf4', color: '#16a34a', label: '✅ Cleared' },
-                            'Bounced':   { bg: '#fef2f2', color: '#dc2626', label: '❌ Bounced' },
+                            'Cleared':   { bg: 'var(--success-light)', color: 'var(--success)', label: '✅ Cleared' },
+                            'Bounced':   { bg: 'var(--danger-light)', color: 'var(--danger)', label: '❌ Bounced' },
                             'Cancelled': { bg: 'var(--bg)', color: 'var(--muted)', label: '— Cancelled' },
                           }
                           const ss = statusStyles[c.effectiveStatus] || statusStyles['Upcoming']
@@ -1218,7 +1213,7 @@ export default function CheckVouchers() {
                                   <button onClick={() => { setEditingPdc(c); setPdcGroupMode(false); setPdcForm({ payee: c.payee, purpose: c.purpose||'', bank: c.bank||'', check_no: c.check_no, check_date: c.check_date, amount: String(c.amount), status: c.status, group_label: c.group_label||'', notes: c.notes||'' }); setShowPdcForm(true) }}
                                     style={{ padding: '3px 7px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>✏️</button>
                                   <button onClick={() => handleDeletePdc(c)}
-                                    style={{ padding: '3px 7px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️</button>
+                                    style={{ padding: '3px 7px', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 11 }}>🗑️</button>
                                 </div>
                               )}
                             </div>
@@ -1259,7 +1254,7 @@ export default function CheckVouchers() {
                         <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>No. of Checks</label>
                           <input type="number" min="1" max="60" value={pdcSeriesCount} onChange={e => setPdcSeriesCount(parseInt(e.target.value)||1)} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                         <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>First Check Date</label>
-                          <DateInput value={pdcSeriesStartDate} onChange={e => setPdcSeriesStartDate(e.target.value)} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
+                          <DatePickerSingle value={pdcSeriesStartDate} onChange={e => setPdcSeriesStartDate(e.target.value)} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                         <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Amount Each</label>
                           <input type="number" value={pdcSeriesAmount} onChange={e => setPdcSeriesAmount(e.target.value)} placeholder="0.00" style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                       </div>
@@ -1271,7 +1266,7 @@ export default function CheckVouchers() {
                       <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Check No. *</label>
                         <input value={pdcForm.check_no} onChange={e => setPdcForm(f=>({...f,check_no:e.target.value}))} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                       <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Check Date *</label>
-                        <DateInput value={pdcForm.check_date} onChange={e => setPdcForm(f=>({...f,check_date:e.target.value}))} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
+                        <DatePickerSingle value={pdcForm.check_date} onChange={e => setPdcForm(f=>({...f,check_date:e.target.value}))} style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                       <div><label style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Amount *</label>
                         <input type="number" value={pdcForm.amount} onChange={e => setPdcForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" style={{ width:'100%',padding:'7px 10px',borderRadius:6,border:'1px solid var(--border)',background:'var(--bg)',color:'var(--text)',fontSize:13,boxSizing:'border-box' }} /></div>
                     </div>

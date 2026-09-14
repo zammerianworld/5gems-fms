@@ -109,10 +109,9 @@ export default function Trash() {
 
       {totalCount > 0 && (
         <>
-          <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: 16 }}>
+          <div className="tab-bar">
             {[['Trips', tripCount], ['Invoices', invoiceTrash.length], ['Expenses', expenseTrash.length]].map(([t, count]) => (
-              <button key={t} onClick={() => setTab(t)}
-                style={{ padding: '10px 18px', background: 'none', border: 'none', borderBottom: tab === t ? '2px solid var(--accent)' : '2px solid transparent', color: tab === t ? 'var(--accent)' : 'var(--muted)', fontWeight: tab === t ? 600 : 400, cursor: 'pointer', fontSize: 13 }}>
+              <button key={t} onClick={() => setTab(t)} className={`tab-pill${tab === t ? ' active' : ''}`}>
                 {t} {count > 0 && <span style={{ marginLeft: 4, fontSize: 10, background: 'var(--border)', borderRadius: 10, padding: '1px 6px' }}>{count}</span>}
               </button>
             ))}
@@ -121,7 +120,7 @@ export default function Trash() {
           {loading ? <div className="empty-state"><p>Loading…</p></div> : (
             <>
               {tab === 'Trips' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {[...dumpTrash.map(t => ({ ...t, _type: 'dump' })), ...pmTrash.map(t => ({ ...t, _type: 'pm' }))]
                     .sort((a, b) => new Date(b.deleted_at) - new Date(a.deleted_at))
                     .map(t => (
@@ -147,7 +146,7 @@ export default function Trash() {
               )}
 
               {tab === 'Invoices' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {invoiceTrash.map(inv => (
                     <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface)', borderRadius: 8, border: '0.5px solid var(--border)', flexWrap: 'wrap' }}>
                       <span style={{ fontFamily: 'var(--mono)', fontWeight: 600 }}>#{inv.invoice_no}</span>
@@ -168,7 +167,7 @@ export default function Trash() {
               )}
 
               {tab === 'Expenses' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {expenseTrash.map(e => (
                     <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--surface)', borderRadius: 8, border: '0.5px solid var(--border)', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: 12, fontWeight: 600 }}>{e.category}</span>
@@ -206,7 +205,7 @@ export default function Trash() {
                 Cancel
               </button>
               <button onClick={confirmDelete}
-                style={{ padding: '8px 16px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+                style={{ padding: '8px 16px', background: 'var(--danger)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
                 Delete Permanently
               </button>
             </div>

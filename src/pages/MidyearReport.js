@@ -111,6 +111,11 @@ export default function MidyearReport() {
   const dumpNet = (t) => (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0)
   const inH1 = (d) => d && d.startsWith(String(year)) && MONTH_KEYS.includes(d.slice(5, 7))
   const inMonth = (d, mk) => d && d.startsWith(`${year}-${mk}`)
+  // Admin expenses can carry a coverage_month override — this accrual-style
+  // report buckets by the coverage month when set, falling back to the real
+  // payment date otherwise. Cashflow deliberately does NOT do this — cash
+  // flow must always reflect the real payment date.
+  const effectiveDate = (e) => e.coverage_month ? e.coverage_month + '-01' : e.expense_date
 
   // Fleet-wide expenses are split across expense-sharing trucks active on that date
   const activeTruckCountOn = (date) => {
@@ -151,8 +156,8 @@ export default function MidyearReport() {
   }
   const adminShareForMonth = (mk) =>
     expenses
-      .filter(e => e.expense_type === 'admin' && inMonth(e.expense_date, mk))
-      .reduce((s, e) => s + (parseFloat(e.amount) || 0) / activeTruckCountOn(e.expense_date), 0)
+      .filter(e => e.expense_type === 'admin' && inMonth(effectiveDate(e), mk))
+      .reduce((s, e) => s + (parseFloat(e.amount) || 0) / activeTruckCountOn(effectiveDate(e)), 0)
 
   // ── PER-TRUCK, PER-MONTH ──────────────────────────────────────────────────
   const truckMonth = (truck, mk) => {
@@ -778,7 +783,7 @@ export default function MidyearReport() {
                     <tbody>
                       {outstanding.map(i => {
                         const age = ageDays(i.invoice_date)
-                        const col = age > 90 ? 'var(--danger)' : age > 60 ? '#d97706' : age > 30 ? '#b45309' : 'var(--muted)'
+                        const col = age > 90 ? 'var(--danger)' : age > 60 ? 'var(--warning)' : age > 30 ? '#b45309' : 'var(--muted)'
                         return (
                           <tr key={i.id}>
                             <td style={{ fontWeight: 600 }}>{i.invoice_no}</td>

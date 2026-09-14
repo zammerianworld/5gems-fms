@@ -49,7 +49,7 @@ function useConnectivity() {
   return { internetStatus, serverStatus }
 }
 
-const STATUS_COLOR = { good: '#22c55e', slow: '#eab308', down: '#ef4444', checking: '#9ca3af' }
+const STATUS_COLOR = { good: '#22c55e', slow: '#eab308', down: 'var(--danger)', checking: '#9ca3af' }
 const STATUS_LABEL = { good: 'Good', slow: 'Slow', down: 'Down', checking: 'Checking…' }
 
 function SignalDot({ status }) {

@@ -137,16 +137,16 @@ export default function Tenure13thMonth({ isAdmin, profile, showToast, settings 
                       placeholder={person.suggestedBase ? `e.g. monthly rate ₱${fmt(person.suggestedBase)}` : '0.00'} style={{ ...INPUT, width: 130, textAlign: 'right' }} />
                   </td>
                   <td style={TD}>{existing?.paid
-                    ? <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>✅ Paid {existing.paid_date ? fmtDate(existing.paid_date) : ''}</span>
+                    ? <span style={{ fontSize: 11, background: 'var(--success-light)', color: 'var(--success)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>✅ Paid {existing.paid_date ? fmtDate(existing.paid_date) : ''}</span>
                     : existing
-                      ? <span style={{ fontSize: 11, background: '#fffbeb', color: '#d97706', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Saved</span>
+                      ? <span style={{ fontSize: 11, background: 'var(--warning-light)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Saved</span>
                       : <span style={{ fontSize: 11, color: 'var(--muted)' }}>Not computed</span>}
                   </td>
                   <td style={TD}>
                     {isAdmin && (
                       <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                         <button onClick={() => saveOne(person)} disabled={saving} style={{ padding: '5px 9px', border: '1px solid #3b82f633', borderRadius: 5, background: '#3b82f611', color: '#3b82f6', cursor: 'pointer', fontSize: 12 }}>{existing ? 'Update' : 'Save'}</button>
-                        {existing && !existing.paid && <button onClick={() => markPaid(person)} style={{ padding: '5px 9px', border: '1px solid #16a34a33', borderRadius: 5, background: '#16a34a11', color: '#16a34a', cursor: 'pointer', fontSize: 12 }}>Mark Paid</button>}
+                        {existing && !existing.paid && <button onClick={() => markPaid(person)} style={{ padding: '5px 9px', border: '1px solid #16a34a33', borderRadius: 5, background: '#16a34a11', color: 'var(--success)', cursor: 'pointer', fontSize: 12 }}>Mark Paid</button>}
                       </div>
                     )}
                   </td>

@@ -503,7 +503,7 @@ export default function HistoricalData() {
                   <span style={{ fontSize:12, fontFamily:'var(--mono)', color:'var(--muted)' }}>{getTruckName(r.truck_id)}</span>
                   <span style={{ fontSize:10, background:'rgba(255,30,0,0.1)', color:'var(--accent)', borderRadius:10, padding:'1px 8px' }}>📅 Historical</span>
                   {liveMonths.has(`${r.period_year}-${r.period_month}`) && (
-                    <span title="Live trip data exists for this month — check for potential overlap" style={{ fontSize:10, background:'rgba(220,38,38,0.1)', color:'var(--danger)', borderRadius:10, padding:'1px 8px', cursor:'help' }}>⚠️ Live data exists</span>
+                    <span title="Live trip data exists for this month — check for potential overlap" style={{ fontSize:10, background:'var(--danger-light)', color:'var(--danger)', borderRadius:10, padding:'1px 8px', cursor:'help' }}>⚠️ Live data exists</span>
                   )}
                   <span style={{ fontSize:10, background:'var(--bg)', color:'var(--muted)', borderRadius:10, padding:'1px 8px' }}>{r.entry_type==='simple_bookkeeper'?'🏦 Bookkeeper':r.entry_type==='simple_management'?'📋 Simple':'📊 Detailed'}</span>
                   <span style={{ marginLeft:'auto', fontSize:12, fontFamily:'var(--mono)', color:'var(--accent)', fontWeight:600 }}>Sales: ₱{fmt(tSales)}</span>

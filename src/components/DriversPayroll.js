@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from './DateInput'
+import DatePickerSingle from './DatePickerSingle'
+import DatePickerRange from './DatePickerRange'
 import SignatoryDialog from './SignatoryDialog'
 import ConfirmDialog from './ConfirmDialog'
 import { supabase, fmt, fmtDate, logAudit, PM_TRIP_CODES } from '../lib/supabase'
@@ -327,6 +328,10 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
       const ids = new Set()
       const map = {}
       ;(data || []).forEach(e => (e.trip_breakdown || []).forEach(t => {
+        // An unchecked trip (included: false) was never actually claimed by
+        // this entry — it must stay eligible for another driver's payroll,
+        // not get wrongly locked out here forever.
+        if (t.included === false) return
         ids.add(t.trip_id)
         map[t.trip_id] = { entryId: e.id, driverId: e.driver_id, cutoffDate: e.cutoff_date, locked: e.locked }
       }))
@@ -826,10 +831,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
               style={{ padding: '6px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>This Week</button>
             <button onClick={() => { const { start, end } = lastWeekRange(); setPeriodStart(start); setPeriodEnd(end) }}
               style={{ padding: '6px 10px', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>Last Week</button>
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>From</span>
-            <DateInput value={periodStart} onChange={e => setPeriodStart(e.target.value)} style={{ ...INPUT, width: 150 }} />
-            <span style={{ fontSize: 12, color: 'var(--muted)' }}>To</span>
-            <DateInput value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} style={{ ...INPUT, width: 150 }} />
+            <DatePickerRange from={periodStart} to={periodEnd} onChange={({ from, to }) => { setPeriodStart(from); setPeriodEnd(to) }} />
             <button onClick={printRegister} style={{ padding: '7px 14px', background: '#334155', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13 }}>🖨️ Print Register</button>
           </div>
         )}
@@ -885,16 +887,16 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                       <td style={TD} className="mono">₱{fmt(entry ? entry.gross_trip_earnings : pending.reduce((s, t) => s + t.amount, 0))}</td>
                       <td style={TD} className="mono">{entry ? `₱${fmt(entry.net_pay)}` : '—'}</td>
                       <td style={TD}>{entry?.locked
-                        ? <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔒 Locked</span>
+                        ? <span style={{ fontSize: 11, background: 'var(--success-light)', color: 'var(--success)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔒 Locked</span>
                         : entry
-                          ? <span style={{ fontSize: 11, background: '#fffbeb', color: '#d97706', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Draft</span>
+                          ? <span style={{ fontSize: 11, background: 'var(--warning-light)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Draft</span>
                           : <span style={{ fontSize: 11, color: 'var(--muted)' }}>Not computed</span>}
                       </td>
                       <td style={TD}>
                         {entry?.locked ? (
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'center', alignItems: 'center' }}>
                             <button onClick={() => printPayslip(d, entry)} style={ActionBtn('#334155')}>🖨️ Payslip</button>
-                            {isSuperuser && <button onClick={() => unlockEntry(entry)} style={ActionBtn('#dc2626')}>🔓 Unlock</button>}
+                            {isSuperuser && <button onClick={() => unlockEntry(entry)} style={ActionBtn('var(--danger)')}>🔓 Unlock</button>}
                             {isSuperuser && <button onClick={() => regenExpenses(entry)} style={ActionBtn('#7c3aed')}>🔄 Regen. Expenses</button>}
                             {isAdmin && !isSuperuser && <span style={{ fontSize: 10, color: 'var(--muted)' }}>Superuser only</span>}
                           </div>
@@ -902,7 +904,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                             <button onClick={() => openCompute(d)} style={ActionBtn('#3b82f6')}>{entry ? 'Edit' : 'Compute'}</button>
                             {entry && <button onClick={() => printPayslip(d, entry)} style={ActionBtn('#334155')}>🖨️ Preview</button>}
-                            {entry && isAdmin && <button onClick={() => lockEntry(entry)} style={ActionBtn('#16a34a')}>🔒 Lock</button>}
+                            {entry && isAdmin && <button onClick={() => lockEntry(entry)} style={ActionBtn('var(--success)')}>🔒 Lock</button>}
                           </div>
                         )}
                       </td>
@@ -949,7 +951,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                     <span style={{ fontWeight: 700, fontSize: 15 }}>{d.driver_name}</span>
                     {d.employee_no && <span style={{ fontSize: 10, color: 'var(--muted)' }}>#{d.employee_no}</span>}
-                    {!d.active && <span style={{ fontSize: 10, background: '#fef2f2', color: '#dc2626', padding: '2px 6px', borderRadius: 4 }}>INACTIVE</span>}
+                    {!d.active && <span style={{ fontSize: 10, background: 'var(--danger-light)', color: 'var(--danger)', padding: '2px 6px', borderRadius: 4 }}>INACTIVE</span>}
                     {d.classification && d.classification !== 'company' && (
                       <span style={{ fontSize: 10, background: '#fff7ed', color: '#c2410c', padding: '2px 6px', borderRadius: 4 }}>{d.classification === 'special_subcon' ? 'SPECIAL SUBCON' : 'SUBCON'}</span>
                     )}
@@ -999,7 +1001,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                     <td style={TD} className="mono">{r.pay_type === 'percentage' ? `${r.percentage_rate}%` : `₱${fmt(r.rate_per_trip)}`}</td>
                     <td style={TD}>{isAdmin && <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                       <button onClick={() => { setEditingRateId(r.id); setRateForm({ ...r, rate_per_trip: String(r.rate_per_trip), percentage_rate: String(r.percentage_rate || ''), isGeneral: !r.route && !r.trip_code }); setShowRateForm(true) }} style={ActionBtn('#3b82f6')}>✏️</button>
-                      <button onClick={() => deleteRate(r.id)} style={ActionBtn('#ef4444')}>🗑️</button>
+                      <button onClick={() => deleteRate(r.id)} style={ActionBtn('var(--danger)')}>🗑️</button>
                     </div>}</td>
                   </tr>
                 ))}
@@ -1028,7 +1030,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                     <td style={TD}>{l.loan_type.toUpperCase()}</td>
                     <td style={TD} className="mono">₱{fmt(l.principal)}</td>
                     <td style={TD} className="mono">₱{fmt(l.amortization_per_cutoff)}</td>
-                    <td style={{ ...TD, color: l.balance > 0 ? '#dc2626' : '#16a34a', fontWeight: 600 }} className="mono">₱{fmt(l.balance)}</td>
+                    <td style={{ ...TD, color: l.balance > 0 ? 'var(--danger)' : 'var(--success)', fontWeight: 600 }} className="mono">₱{fmt(l.balance)}</td>
                     <td style={TD}>{isAdmin && <button onClick={() => { setEditingLoanId(l.id); setLoanForm({ ...l, principal: String(l.principal), amortization_per_cutoff: String(l.amortization_per_cutoff), balance: String(l.balance) }); setShowLoanForm(true) }} style={ActionBtn('#3b82f6')}>✏️</button>}</td>
                   </tr>
                 ))}
@@ -1061,7 +1063,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                         {section.cols.map(c => <td key={c} style={TD}>{c.includes('rate') ? `${(r[c] * 100).toFixed(2)}%` : (r[c] != null ? `₱${fmt(r[c])}` : '—')}</td>)}
                         {isAdmin && <td style={TD}><div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
                           <button onClick={() => openBracketForm(section.table, section.cols, r)} style={ActionBtn('#3b82f6')}>✏️</button>
-                          <button onClick={() => deleteBracket(section.table, r.id)} style={ActionBtn('#ef4444')}>🗑️</button>
+                          <button onClick={() => deleteBracket(section.table, r.id)} style={ActionBtn('var(--danger)')}>🗑️</button>
                         </div></td>}
                       </tr>)}
                   </tbody>
@@ -1098,14 +1100,14 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                       <td style={TD}>{fmtDate(h.period_start)} – {fmtDate(h.period_end)}</td>
                       <td style={TD}>{fmtDate(h.cutoff_date)}</td>
                       <td style={TD} className="mono">₱{fmt(h.gross_trip_earnings)}</td>
-                      <td style={{ ...TD, color: h.net_pay < 0 ? '#dc2626' : undefined }} className="mono">₱{fmt(h.net_pay)}</td>
+                      <td style={{ ...TD, color: h.net_pay < 0 ? 'var(--danger)' : undefined }} className="mono">₱{fmt(h.net_pay)}</td>
                       <td style={TD}>{h.locked
-                        ? <span style={{ fontSize: 11, background: '#f0fdf4', color: '#16a34a', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔒 Locked</span>
-                        : <span style={{ fontSize: 11, background: '#fffbeb', color: '#d97706', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Draft</span>}
+                        ? <span style={{ fontSize: 11, background: 'var(--success-light)', color: 'var(--success)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>🔒 Locked</span>
+                        : <span style={{ fontSize: 11, background: 'var(--warning-light)', color: 'var(--warning)', padding: '2px 8px', borderRadius: 10, fontWeight: 600 }}>Draft</span>}
                       </td>
                       <td style={TD}>
                         {(h.locked ? isSuperuser : isAdmin) && (
-                          <button onClick={() => deleteEntry(h)} style={ActionBtn('#ef4444')}>🗑️ Delete</button>
+                          <button onClick={() => deleteEntry(h)} style={ActionBtn('var(--danger)')}>🗑️ Delete</button>
                         )}
                         {h.locked && isSuperuser && (
                           <button onClick={() => regenExpenses(h)} style={ActionBtn('#7c3aed')}>🔄 Regen. Expenses</button>
@@ -1130,7 +1132,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
           return { status: 'unpaid', entryInfo: null }
         }
         const STATUS_LABEL = {
-          paid: ['✅ Paid', '#16a34a', '#f0fdf4'], pending: ['🟡 Pending', '#d97706', '#fffbeb'],
+          paid: ['✅ Paid', 'var(--success)', 'var(--success-light)'], pending: ['🟡 Pending', 'var(--warning)', 'var(--warning-light)'],
           unpaid: ['⏳ Unpaid', '#6b7280', '#f3f4f6'], settled: ['📦 Settled (pre-system)', '#7c3aed', '#f5f3ff'],
           no_driver: ['❔ No Driver', '#9ca3af', '#f9fafb'],
         }
@@ -1194,8 +1196,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                 <option value="settled">Settled (pre-system)</option>
                 {tripLogShowNoDriver && <option value="no_driver">No Driver</option>}
               </select>
-              <DateInput value={tripLogFrom} onChange={e => setTripLogFrom(e.target.value)} style={{ ...INPUT, width: 140 }} />
-              <DateInput value={tripLogTo} onChange={e => setTripLogTo(e.target.value)} style={{ ...INPUT, width: 140 }} />
+              <DatePickerRange from={tripLogFrom} to={tripLogTo} onChange={({ from, to }) => { setTripLogFrom(from); setTripLogTo(to) }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, cursor: 'pointer' }}>
                 <input type="checkbox" checked={tripLogShowNoDriver} onChange={e => setTripLogShowNoDriver(e.target.checked)} />
                 Show No Driver
@@ -1302,8 +1303,8 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
               )}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              <FormRow label="Hire Date"><DateInput value={driverForm.hire_date} onChange={e => setDriverForm(f => ({ ...f, hire_date: e.target.value }))} style={INPUT} /></FormRow>
-              <FormRow label="Termination Date"><DateInput value={driverForm.termination_date} onChange={e => setDriverForm(f => ({ ...f, termination_date: e.target.value }))} style={INPUT} /></FormRow>
+              <FormRow label="Hire Date"><DatePickerSingle value={driverForm.hire_date} onChange={e => setDriverForm(f => ({ ...f, hire_date: e.target.value }))} style={INPUT} /></FormRow>
+              <FormRow label="Termination Date"><DatePickerSingle value={driverForm.termination_date} onChange={e => setDriverForm(f => ({ ...f, termination_date: e.target.value }))} style={INPUT} /></FormRow>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
               <FormRow label="SSS No."><input value={driverForm.sss_no} onChange={e => setDriverForm(f => ({ ...f, sss_no: e.target.value }))} style={INPUT} /></FormRow>
@@ -1454,7 +1455,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                 )}
               </div>
               {computeDraft.trip_breakdown.some(t => t.trip_date < periodStart || t.trip_date > periodEnd) && (
-                <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: '#92400e' }}>
+                <div style={{ background: 'var(--warning-light)', border: '1px solid #fde68a', borderRadius: 6, padding: '8px 12px', marginBottom: 8, fontSize: 12, color: 'var(--warning)' }}>
                   ⚠️ One or more included trips fall outside the selected coverage period ({fmtDate(periodStart)} – {fmtDate(periodEnd)}) — highlighted below. This can happen when computing a late cutoff (e.g. processing last month's payroll a few days into this one) and forgetting to adjust the period dates first. This won't block saving, but double-check the dates are what you intend before locking.
                 </div>
               )}
@@ -1465,7 +1466,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                     : computeDraft.trip_breakdown.map((t, idx) => {
                       const outOfPeriod = t.trip_date < periodStart || t.trip_date > periodEnd
                       return (
-                      <tr key={`${t.trip_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)', opacity: t.included === false ? 0.5 : 1, background: outOfPeriod ? '#fffbeb' : undefined }}>
+                      <tr key={`${t.trip_id}-${idx}`} style={{ borderBottom: '1px solid var(--border)', opacity: t.included === false ? 0.5 : 1, background: outOfPeriod ? 'var(--warning-light)' : undefined }}>
                         <td style={TD}>
                           <input type="checkbox" checked={t.included !== false} onChange={e => {
                             const checked = e.target.checked
@@ -1483,7 +1484,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                         <td style={TD}>
                           <div style={{ display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'flex-end' }}>
                             {t.pendingDestination ? (
-                              <span style={{ fontSize: 11, color: '#dc2626', fontWeight: 600, background: '#fef2f2', padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>
+                              <span style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600, background: 'var(--danger-light)', padding: '3px 8px', borderRadius: 4, whiteSpace: 'nowrap' }}>
                                 ⚑ Destination pending — set it in Trips, then add a rate
                               </span>
                             ) : (() => {

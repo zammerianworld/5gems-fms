@@ -310,11 +310,11 @@ export default function Users() {
                   <button onClick={() => setEditPerms({})}
                     style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer' }}>None</button>
                   <button onClick={() => setEditPerms(null)}
-                    style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid #16a34a', background: '#f0fdf4', color: '#16a34a', cursor: 'pointer' }}>Defaults</button>
+                    style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, border: '1px solid #16a34a', background: 'var(--success-light)', color: 'var(--success)', cursor: 'pointer' }}>Defaults</button>
                 </div>
               </div>
               {editPerms === null && (
-                <div style={{ fontSize: 11, color: '#16a34a', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 5, padding: '4px 8px', marginBottom: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--success)', background: 'var(--success-light)', border: '1px solid #86efac', borderRadius: 5, padding: '4px 8px', marginBottom: 6 }}>
                   ✅ Using role defaults
                 </div>
               )}
@@ -357,7 +357,7 @@ export default function Users() {
                   </td>
                   <td>
                     {roleLabel(u.role)}
-                    {u.override_pin && <span style={{ marginLeft: 6, fontSize: 9, background: 'rgba(22,163,74,0.1)', color: 'var(--success)', padding: '1px 5px', borderRadius: 4 }}>🔑 PIN set</span>}
+                    {u.override_pin && <span style={{ marginLeft: 6, fontSize: 9, background: 'var(--success-light)', color: 'var(--success)', padding: '1px 5px', borderRadius: 4 }}>🔑 PIN set</span>}
                     {u.role === 'viewer' && <span className="mono" style={{ marginLeft: 6, fontSize: 10, color: 'var(--muted)' }}>{(u.viewer_plates || []).join(', ') || 'no truck assigned'}</span>}
                   </td>
                   <td className="muted mono" style={{ fontSize: 12 }}>{u.created_at ? new Date(u.created_at).toLocaleDateString('en-PH') : '—'}</td>

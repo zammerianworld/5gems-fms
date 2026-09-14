@@ -1036,7 +1036,7 @@ declare
     'payroll_employees','payroll_entries','company_loans','finances','vouchers',
     'company_loan_payments','payroll_13th_manual','payroll_cash_advances',
     'pdc_checks','expense_stocks','pin_attempts','historical_payments',
-    'driver_rates','driver_loans','driver_payroll_entries',
+    'driver_rates','driver_loans','driver_payroll_entries','gov_loan_payments',
     'sss_brackets','philhealth_brackets','hdmf_brackets',
     'tenure_13th_tiers','tenure_13th_month'
   ];
@@ -2275,3 +2275,42 @@ begin
   update public.profiles set override_pin = p_pin where id = p_user_id;
   return true;
 end; $function$;
+
+-- ============================================================
+-- GOVERNMENT REMITTANCE MONITORING (September 2026)
+-- Contributions post as normal admin-scope expenses (flow into existing
+-- reports automatically). Loan payments are tracking-only — that money
+-- was already withheld from the employee's own pay, never a company cost.
+-- ============================================================
+
+-- Accrual override for admin expenses — nullable, 'YYYY-MM'. When set,
+-- Reports/MidyearReport bucket the expense into this month instead of
+-- expense_date's month. Cashflow always uses expense_date (real payment
+-- date) regardless — cash flow should never be restated to a different
+-- month than the cash actually moved.
+alter table public.expenses add column if not exists coverage_month text;
+
+-- Government loan payments — tracking only, never a company cost.
+-- Deliberately NOT routed through the shared permanent_delete RPC (its
+-- table whitelist has untracked live drift already; safer to just use a
+-- direct delete for this one new table than risk touching that function).
+create table if not exists public.gov_loan_payments (
+  id uuid default gen_random_uuid() primary key,
+  agency text not null check (agency in ('SSS', 'HDMF')),
+  date_paid date not null,
+  amount numeric(12,2) not null default 0,
+  payment_method text not null default 'transfer' check (payment_method in ('check', 'cash', 'transfer', 'egov_bancnet')),
+  reference_no text default '',
+  notes text default '',
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+alter table public.gov_loan_payments enable row level security;
+drop policy if exists "gov_loan_payments_select" on public.gov_loan_payments;
+drop policy if exists "gov_loan_payments_write" on public.gov_loan_payments;
+create policy "gov_loan_payments_select" on public.gov_loan_payments for select using (auth.role() = 'authenticated');
+create policy "gov_loan_payments_write" on public.gov_loan_payments for all using (auth.role() = 'authenticated');
+
+grant select, insert, update, delete on public.gov_loan_payments to authenticated;
+grant all on public.gov_loan_payments to service_role;

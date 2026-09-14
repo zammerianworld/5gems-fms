@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import { supabase, fmt, fmtDate, numberToWords } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
@@ -7,7 +7,7 @@ import jsPDF from 'jspdf'
 import SignatoryDialog from '../components/SignatoryDialog'
 
 const EMPTY = { voucher_date: new Date().toISOString().slice(0,10), voucher_no: '', payee: '', amount: '', purpose: '', received_by: '', remarks: '', status: 'Pending' }
-const STATUS_COLORS = { Pending: { bg: '#FEF9C3', color: '#92400E' }, Approved: { bg: 'rgba(22,163,74,0.1)', color: '#15803d' }, Cancelled: { bg: 'rgba(220,38,38,0.1)', color: '#dc2626' } }
+const STATUS_COLORS = { Pending: { bg: '#FEF9C3', color: 'var(--warning)' }, Approved: { bg: 'var(--success-light)', color: '#15803d' }, Cancelled: { bg: 'var(--danger-light)', color: 'var(--danger)' } }
 
 export default function CashVouchers() {
   const { isAdmin, profile } = useAuth()
@@ -162,7 +162,7 @@ export default function CashVouchers() {
       {/* Stats */}
       <div className="stats-grid" style={{ marginBottom: 16 }}>
         <div className="stat-card"><div className="stat-label">Total {filterMonth}</div><div className="stat-value sm">₱{fmt(totalAmount)}</div><div style={{ fontSize:11,color:'var(--muted)',marginTop:2 }}>{filtered.length} vouchers</div></div>
-        <div className="stat-card"><div className="stat-label">Pending</div><div className="stat-value sm" style={{ color:'#92400E' }}>{filtered.filter(v=>v.status==='Pending').length}</div></div>
+        <div className="stat-card"><div className="stat-label">Pending</div><div className="stat-value sm" style={{ color:'var(--warning)' }}>{filtered.filter(v=>v.status==='Pending').length}</div></div>
         <div className="stat-card"><div className="stat-label">Approved</div><div className="stat-value sm" style={{ color:'var(--success)' }}>{filtered.filter(v=>v.status==='Approved').length}</div></div>
       </div>
 
@@ -171,7 +171,7 @@ export default function CashVouchers() {
         <div className="card" style={{ marginBottom: 16 }}>
           <h3 style={{ fontSize:14, fontWeight:500, marginBottom:14 }}>{editId?'Edit Voucher':'New Cash Voucher'}</h3>
           <div className="form-grid">
-            <div className="form-group"><label className="label required">Date</label><DateInput value={form.voucher_date} max={new Date().toISOString().slice(0,10)} onChange={e=>setForm(f=>({...f,voucher_date:e.target.value}))} /></div>
+            <div className="form-group"><label className="label required">Date</label><DatePickerSingle value={form.voucher_date} max={new Date().toISOString().slice(0,10)} onChange={e=>setForm(f=>({...f,voucher_date:e.target.value}))} /></div>
             <div className="form-group"><label className="label required">Voucher No.</label><input value={form.voucher_no} onChange={e=>setForm(f=>({...f,voucher_no:e.target.value}))} placeholder="CV-2024-001" /></div>
             <div className="form-group"><label className="label required">Payee</label><input value={form.payee} onChange={e=>setForm(f=>({...f,payee:e.target.value}))} placeholder="Name of payee" /></div>
             <div className="form-group"><label className="label required">Amount (₱)</label><input type="number" step="0.01" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" /></div>

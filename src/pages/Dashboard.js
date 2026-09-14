@@ -18,6 +18,26 @@ export default function Dashboard() {
   const [amortizations, setAmortizations] = useState([])
   const [logoUrl, setLogoUrl] = useState(() => localStorage.getItem('ds_logo') || '')
   const [loading, setLoading] = useState(true)
+  const [loadProgress, setLoadProgress] = useState(0)
+  const [showReady, setShowReady] = useState(false)
+  const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    if (!loading) return
+    setLoadProgress(0); setShowReady(false); setRevealed(false)
+    const interval = setInterval(() => {
+      setLoadProgress(p => p >= 85 ? 85 : p + (85 - p) * 0.12)
+    }, 100)
+    return () => clearInterval(interval)
+  }, [loading])
+
+  useEffect(() => {
+    if (loading) return
+    setLoadProgress(100)
+    setShowReady(true)
+    const t = setTimeout(() => setRevealed(true), 500)
+    return () => clearTimeout(t)
+  }, [loading])
   const [orcrRecords, setOrcrRecords] = useState([])
   const [pdcDue, setPdcDue] = useState([])
   const [lastRefreshed, setLastRefreshed] = useState(null)
@@ -176,7 +196,7 @@ export default function Dashboard() {
   })
   const expCategories = Object.entries(expByCategory).sort((a, b) => b[1] - a[1])
   const totalMonthExp = expCategories.reduce((s, [, v]) => s + v, 0)
-  const catColors = ['#ff1e00','#2563eb','#16a34a','#dc2626','#7c3aed','#0891b2','#d97706','#be185d']
+  const catColors = ['#ff1e00','#2563eb','var(--success)','var(--danger)','#7c3aed','#0891b2','var(--warning)','#be185d']
   const maxVal = Math.max(...truckData.map(d => Math.max(d.sales, d.totalExp)), 1)
 
   const prevMonth = () => {
@@ -193,8 +213,17 @@ export default function Dashboard() {
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 17 ? 'Good afternoon' : 'Good evening'
   const graphMonthLabel = new Date(graphMonth + '-01').toLocaleDateString('en-PH', { month: 'long', year: 'numeric' })
 
-  if (loading) return (
+  if (!revealed) return (
     <div className="page">
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 0 28px' }}>
+        <svg width="52" height="52" viewBox="0 0 52 52" style={{ transform: 'rotate(-90deg)' }}>
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--accent-light)" strokeWidth="4" />
+          <circle cx="26" cy="26" r="22" fill="none" stroke="var(--accent)" strokeWidth="4" strokeLinecap="round"
+            strokeDasharray="138.2" strokeDashoffset={138.2 * (1 - loadProgress / 100)}
+            style={{ transition: showReady ? 'stroke-dashoffset 0.3s ease-out' : 'none', filter: 'drop-shadow(0 2px 6px rgba(255,30,0,0.35))' }} />
+        </svg>
+        <p style={{ fontSize: 13, color: 'var(--muted)', marginTop: 14 }}>{showReady ? 'Ready!' : 'Loading your dashboard…'}</p>
+      </div>
       {[...Array(3)].map((_,i) => (
         <div key={i} style={{ height: 80, background: 'var(--surface)', borderRadius: 10, marginBottom: 12, overflow: 'hidden', position: 'relative' }}>
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.06) 50%, transparent 100%)', animation: 'shimmer 1.5s infinite', backgroundSize: '200% 100%' }} />
@@ -328,10 +357,10 @@ export default function Dashboard() {
       {overdueInvoices.filter(i => i.daysOverdue >= 60).length > 0 && (
         <div style={{ padding:'10px 14px', background:'#FEE2E2', border:'2px solid #DC2626', borderRadius:10, marginBottom:12, display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, flexWrap:'wrap' }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:700, color:'#DC2626' }}>🚨 {overdueInvoices.filter(i=>i.daysOverdue>=60).length} invoice(s) 60+ days overdue — urgent collection needed</div>
+            <div style={{ fontSize:13, fontWeight:700, color:'var(--danger)' }}>🚨 {overdueInvoices.filter(i=>i.daysOverdue>=60).length} invoice(s) 60+ days overdue — urgent collection needed</div>
             {overdueInvoices.filter(i=>i.daysOverdue>=60).slice(0,3).map(inv => (
               <div key={inv.id} style={{ fontSize:12, color:'var(--muted)', marginTop:2 }}>
-                <strong>INV #{inv.invoice_no}</strong> · {inv.client} · ₱{fmt((inv.total_sales_net||0)*(inv.is_vat?1.12:1))} · <span style={{ color:'#DC2626', fontWeight:600 }}>{inv.daysOverdue}d overdue</span>
+                <strong>INV #{inv.invoice_no}</strong> · {inv.client} · ₱{fmt((inv.total_sales_net||0)*(inv.is_vat?1.12:1))} · <span style={{ color:'var(--danger)', fontWeight:600 }}>{inv.daysOverdue}d overdue</span>
               </div>
             ))}
           </div>

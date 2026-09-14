@@ -4,6 +4,7 @@ import { useAuth } from '../components/AuthContext'
 import * as XLSX from 'xlsx'
 import { useToast, Toast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
+import DatePickerSingle from '../components/DatePickerSingle'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -21,10 +22,10 @@ const prevDay = (d) => { const [y,m,day] = d.split('-').map(Number); const dt = 
 const nextDay = (d) => { const [y,m,day] = d.split('-').map(Number); const dt = new Date(y, m-1, day+1); return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}` }
 
 const ACTION_COLORS = {
-  Deleted:        { bg: 'rgba(220,38,38,0.12)',  color: '#dc2626', icon: '🗑️' },
+  Deleted:        { bg: 'var(--danger-light)',  color: 'var(--danger)', icon: '🗑️' },
   Edited:         { bg: 'rgba(234,179,8,0.12)',  color: '#a16207', icon: '✏️' },
   Updated:        { bg: 'rgba(234,179,8,0.12)',  color: '#a16207', icon: '✏️' },
-  Created:        { bg: 'rgba(22,163,74,0.12)',  color: '#15803d', icon: '✅' },
+  Created:        { bg: 'var(--success-light)',  color: '#15803d', icon: '✅' },
   Generated:      { bg: 'rgba(37,99,235,0.12)',  color: '#1d4ed8', icon: '📄' },
   'Override PIN Used': { bg: 'rgba(239,68,68,0.15)', color: '#b91c1c', icon: '🔑' },
 }
@@ -214,18 +215,18 @@ export default function Logs() {
       {/* Date navigator */}
       <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
         <button className="btn-ghost btn-sm" onClick={() => setDate(prevDay(date))}>◀</button>
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} max={TODAY} style={{ width:'auto' }} />
+        <DatePickerSingle value={date} onChange={e => setDate(e.target.value)} max={TODAY} style={{ width:'auto' }} />
         <span style={{ fontSize:13, fontWeight:500 }}>{fmtDateLabel(date)}</span>
         <button className="btn-ghost btn-sm" onClick={() => setDate(nextDay(date))} disabled={date >= TODAY}>▶</button>
         <button className="btn-ghost btn-sm" onClick={() => setDate(TODAY)}>Today</button>
         {/* Day summary badges */}
-        <span style={{ marginLeft:8, fontSize:12, padding:'2px 10px', borderRadius:10, background:'rgba(22,163,74,0.1)', color:'var(--success)' }}>✅ {loginSuccess} login{loginSuccess!==1?'s':''}</span>
-        {loginFail > 0 && <span style={{ fontSize:12, padding:'2px 10px', borderRadius:10, background:'rgba(220,38,38,0.1)', color:'var(--danger)' }}>❌ {loginFail} failed</span>}
+        <span style={{ marginLeft:8, fontSize:12, padding:'2px 10px', borderRadius:10, background:'var(--success-light)', color:'var(--success)' }}>✅ {loginSuccess} login{loginSuccess!==1?'s':''}</span>
+        {loginFail > 0 && <span style={{ fontSize:12, padding:'2px 10px', borderRadius:10, background:'var(--danger-light)', color:'var(--danger)' }}>❌ {loginFail} failed</span>}
         <span style={{ fontSize:12, padding:'2px 10px', borderRadius:10, background:'rgba(99,102,241,0.1)', color:'#4338CA' }}>📋 {auditLogs.length} audit events</span>
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', borderBottom:'1px solid var(--border)', marginBottom:16 }}>
+      <div className="tab-bar">
         {[
           ['login', `🔐 Login Trail (${loginLogs.length})`],
           ['destructive', `⚠️ Destructive (${auditLogs.filter(l=>l.tab==='destructive').length})`],
@@ -233,7 +234,7 @@ export default function Logs() {
           ...(isSuperuser ? [['settings', '⚙️ Audit Settings']] : [])
         ].map(([k,l]) => (
           <button key={k} onClick={()=>{setTab(k);setPage(1);setFilterUser('');setFilterModule('')}}
-            style={{ padding:'10px 18px', background:'none', border:'none', borderBottom:tab===k?'2px solid var(--accent)':'2px solid transparent', color:tab===k?'var(--accent)':'var(--muted)', fontWeight:tab===k?600:400, cursor:'pointer', fontSize:13 }}>
+            className={`tab-pill${tab===k ? ' active' : ''}`}>
             {l}
           </button>
         ))}
@@ -241,7 +242,7 @@ export default function Logs() {
 
       {/* Audit Settings Tab */}
       {tab === 'settings' && isSuperuser && (
-        <div className="card" style={{ maxWidth: 560 }}>
+        <div className="card tab-content" style={{ maxWidth: 560 }}>
           <h3 style={{ fontSize:14, fontWeight:500, marginBottom:14 }}>Audit Log Settings</h3>
           <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -307,7 +308,7 @@ export default function Logs() {
       {tab !== 'settings' && (
         loading ? <div className="empty-state"><p>Loading…</p></div> :
         paginated.length === 0 ? <div className="empty-state"><p>No {tab === 'login' ? 'login' : 'audit'} logs for {fmtDateLabel(date)}.</p></div> : (
-        <>
+        <div className="tab-content" key={tab}>
           {tab === 'login' ? (
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {paginated.map(l => {
@@ -331,7 +332,7 @@ export default function Logs() {
                       </div>
                     </div>
                     <span style={{ padding:'3px 12px', borderRadius:10, fontSize:11, fontWeight:600,
-                      background: isSuccess ? 'rgba(22,163,74,0.12)' : isFail ? 'rgba(220,38,38,0.12)' : 'var(--bg)',
+                      background: isSuccess ? 'var(--success-light)' : isFail ? 'var(--danger-light)' : 'var(--bg)',
                       color: isSuccess ? 'var(--success)' : isFail ? 'var(--danger)' : 'var(--muted)' }}>
                       {isSuccess ? '✅ Login Success' : isFail ? '❌ Login Failed' : l.action || l.status || '—'}
                     </span>
@@ -369,7 +370,7 @@ export default function Logs() {
               <button className="btn-ghost btn-sm" onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>▶</button>
             </div>
           )}
-        </>
+        </div>
       ))}
 
       <Toast toast={toast} onDismiss={dismissToast} />

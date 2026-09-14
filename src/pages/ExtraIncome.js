@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase, fmt, fmtDate, logAudit } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
+import DatePickerSingle from '../components/DatePickerSingle'
 
 const EMPTY = { income_date: new Date().toISOString().slice(0,10), amount: '', source_type: 'Side Trip', truck_id: '', description: '', payment_method: 'cash', notes: '' }
 const SOURCE_TYPES = ['Side Trip', 'Sale of Asset', 'Rental', 'Other']
@@ -104,7 +105,7 @@ export default function ExtraIncome() {
           <div className="form-grid">
             <div className="form-group">
               <label className="label required">Date</label>
-              <input type="date" value={form.income_date} max={new Date().toISOString().slice(0,10)} onChange={e => setForm(f=>({...f,income_date:e.target.value}))} />
+              <DatePickerSingle value={form.income_date} max={new Date().toISOString().slice(0,10)} onChange={e => setForm(f=>({...f,income_date:e.target.value}))} />
             </div>
             <div className="form-group">
               <label className="label required">Source Type</label>
@@ -175,11 +176,11 @@ export default function ExtraIncome() {
               {filtered.map(i => (
                 <tr key={i.id}>
                   <td className="mono" style={{ fontSize:12 }}>{fmtDate(i.income_date)}</td>
-                  <td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'rgba(22,163,74,0.1)', color:'var(--success)', fontWeight:500 }}>{i.source_type}</span></td>
+                  <td><span style={{ padding:'2px 8px', borderRadius:6, fontSize:11, background:'var(--success-light)', color:'var(--success)', fontWeight:500 }}>{i.source_type}</span></td>
                   <td style={{ fontSize:12, fontFamily:'var(--mono)' }}>{i.truck_id ? getTruckName(i.truck_id) : <span style={{ color:'var(--muted)' }}>Fleet</span>}</td>
                   <td style={{ fontSize:12 }}>{i.description||'—'}</td>
                   <td style={{ fontSize:11 }}>
-                    <span style={{ padding:'1px 6px', borderRadius:4, background:i.payment_method==='cash'?'rgba(59,130,246,0.1)':i.payment_method==='check'?'rgba(100,100,100,0.1)':'rgba(22,163,74,0.1)', color:i.payment_method==='cash'?'#3B82F6':i.payment_method==='check'?'var(--muted)':'var(--success)' }}>
+                    <span style={{ padding:'1px 6px', borderRadius:4, background:i.payment_method==='cash'?'rgba(59,130,246,0.1)':i.payment_method==='check'?'rgba(100,100,100,0.1)':'var(--success-light)', color:i.payment_method==='cash'?'#3B82F6':i.payment_method==='check'?'var(--muted)':'var(--success)' }}>
                       {i.payment_method==='cash'?'💵 Cash':i.payment_method==='check'?'🖊️ Check':'🏦 Transfer'}
                     </span>
                   </td>

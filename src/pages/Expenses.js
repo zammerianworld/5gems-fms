@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import DateInput from '../components/DateInput'
+import DatePickerSingle from '../components/DatePickerSingle'
 import * as XLSX from 'xlsx'
 import ExcelJS from 'exceljs'
 import jsPDF from 'jspdf'
@@ -11,6 +11,7 @@ import { useToast, Toast } from '../components/Toast'
 const ADMIN_CATEGORIES = [
   'Office Supplies', 'Utilities', 'Internet / Phone', 'Rent',
   'Salaries — Admin', 'Government Fees', 'Insurance — Company',
+  'SSS Contribution', 'PhilHealth Contribution', 'HDMF Contribution',
   'Representation', 'Miscellaneous Admin', 'Others',
 ]
 const OPERATION_CATEGORIES = [
@@ -30,7 +31,10 @@ const ADMIN_CATEGORY_KEYWORDS = {
   'Internet / Phone': ['internet', 'phone', 'mobile', 'load', 'globe', 'smart', 'pldt', 'telco', 'wifi', 'data plan', 'broadband'],
   'Rent': ['rent', 'rental', 'lease', 'space rent'],
   'Salaries — Admin': ['salary', 'salaries', 'payroll', 'wage', 'allowance', 'bonus', '13th month', 'compensation', 'overtime pay'],
-  'Government Fees': ['bir', 'lto', 'ltfrb', 'philhealth', 'sss', 'pagibig', 'hdmf', 'government', 'permit', 'license', 'registration fee', 'tax', 'municipal', 'barangay', 'fees'],
+  'Government Fees': ['bir', 'lto', 'ltfrb', 'government', 'permit', 'license', 'registration fee', 'tax', 'municipal', 'barangay', 'fees'],
+  'SSS Contribution': ['sss', 'social security'],
+  'PhilHealth Contribution': ['philhealth', 'phic'],
+  'HDMF Contribution': ['hdmf', 'pagibig', 'pag-ibig'],
   'Insurance — Company': ['insurance', 'insur', 'premium', 'coverage'],
   'Representation': ['representation', 'entertainment', 'meals', 'food', 'dining', 'meeting', 'client visit', 'snack', 'lunch', 'dinner'],
   'Miscellaneous Admin': ['miscellaneous', 'misc', 'other admin'],
@@ -88,8 +92,8 @@ const MonthPicker = ({ value, onChange, style = {} }) => {
   )
 }
 
-const ALL_TABS = ['All Expenses', 'Per Truck View', 'Amortization', 'Insurance', 'Stocks']
-const STAFF_TABS = ['All Expenses', 'Per Truck View', 'Stocks']
+const ALL_TABS = ['All Expenses', "Gov't Remittance", 'Per Truck View', 'Amortization', 'Insurance', 'Stocks']
+const STAFF_TABS = ['All Expenses', "Gov't Remittance", 'Per Truck View', 'Stocks']
 const EMPTY = {
   expense_date: new Date().toISOString().slice(0, 10),
   expense_type: 'operation',
@@ -114,6 +118,12 @@ export default function Expenses() {
   const { profile, isAdmin } = useAuth()
   const { toast, showToast, dismissToast } = useToast()
   const [expenses, setExpenses] = useState([])
+  const [govLoanPayments, setGovLoanPayments] = useState([])
+  const [govFilterAgency, setGovFilterAgency] = useState('')
+  const [govFilterType, setGovFilterType] = useState('')
+  const [showGovLoanForm, setShowGovLoanForm] = useState(false)
+  const [govLoanForm, setGovLoanForm] = useState({ agency: 'SSS', date_paid: new Date().toISOString().slice(0,10), amount: '', payment_method: 'transfer', reference_no: '', notes: '' })
+  const [savingGovLoan, setSavingGovLoan] = useState(false)
   const [trucks, setTrucks] = useState([])
   const [amortizations, setAmortizations] = useState([])
   const [insurances, setInsurances] = useState([])
@@ -177,16 +187,18 @@ export default function Expenses() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [exp, tr, am, ins] = await Promise.all([
+    const [exp, tr, am, ins, glp] = await Promise.all([
       fetchAllRows(() => supabase.from('expenses').select('*').is('deleted_at', null).order('expense_date', { ascending: false })),
       supabase.from('trucks').select('*').order('truck_type').order('plate'),
       supabase.from('amortizations').select('*').order('start_date', { ascending: false }),
       supabase.from('insurances').select('*').order('start_date', { ascending: false }),
+      supabase.from('gov_loan_payments').select('*').order('date_paid', { ascending: false }),
     ])
     if (exp.data) setExpenses(exp.data)
     if (tr.data) setTrucks(tr.data)
     if (am.data) setAmortizations(am.data)
     if (ins.data) setInsurances(ins.data)
+    if (glp.data) setGovLoanPayments(glp.data)
     setLoading(false)
   }, [])
 
@@ -516,6 +528,57 @@ export default function Expenses() {
 
   const handleEdit = (exp) => { setForm({...exp, amount:String(exp.amount)}); setEditId(exp.id); setShowForm(true); window.scrollTo({top:0,behavior:'smooth'}) }
 
+  const saveGovLoanPayment = async () => {
+    if (!govLoanForm.date_paid || !govLoanForm.amount) { showToast('Date and amount are required.', 'error'); return }
+    setSavingGovLoan(true)
+    const { error } = await supabase.from('gov_loan_payments').insert({
+      agency: govLoanForm.agency, date_paid: govLoanForm.date_paid, amount: parseFloat(govLoanForm.amount) || 0,
+      payment_method: govLoanForm.payment_method, reference_no: govLoanForm.reference_no, notes: govLoanForm.notes,
+      created_by: profile?.id,
+    })
+    setSavingGovLoan(false)
+    if (error) { showToast('Error: ' + error.message, 'error'); return }
+    logAudit('generate', 'Added', 'Gov Loan Payment', `${govLoanForm.agency} loan payment — ₱${govLoanForm.amount}`, '', profile?.id, profile?.full_name)
+    showToast('Loan payment recorded.')
+    setShowGovLoanForm(false)
+    setGovLoanForm({ agency: 'SSS', date_paid: new Date().toISOString().slice(0,10), amount: '', payment_method: 'transfer', reference_no: '', notes: '' })
+    fetchAll()
+  }
+  const deleteGovLoanPayment = async (id) => {
+    const { error } = await supabase.from('gov_loan_payments').delete().eq('id', id)
+    if (error) { showToast('Error: ' + error.message, 'error'); return }
+    showToast('Deleted.')
+    fetchAll()
+  }
+
+  // Edit/Delete on government contribution entries requires an admin
+  // override PIN — reuses the same verify_override_pin RPC + pin_attempts
+  // lockout Trips.js already uses for invoiced-trip edits, not a parallel
+  // PIN system.
+  const GOV_CATEGORIES = ['SSS Contribution', 'PhilHealth Contribution', 'HDMF Contribution']
+  const [pinGateModal, setPinGateModal] = useState(null) // { action: () => void }
+  const [pinGatePin, setPinGatePin] = useState('')
+  const [pinGateError, setPinGateError] = useState('')
+  const [pinGateChecking, setPinGateChecking] = useState(false)
+  const guardedEdit = (exp) => {
+    if (GOV_CATEGORIES.includes(exp.category)) { setPinGateModal({ action: () => handleEdit(exp) }); return }
+    handleEdit(exp)
+  }
+  const guardedDeleteTarget = (target, exp) => {
+    if (GOV_CATEGORIES.includes(exp?.category)) { setPinGateModal({ action: () => setDeleteTarget(target) }); return }
+    setDeleteTarget(target)
+  }
+  const handlePinGateCheck = async () => {
+    if (!pinGatePin) { setPinGateError('Enter your override PIN.'); return }
+    setPinGateChecking(true)
+    const { data: match, error: pinErr } = await supabase.rpc('verify_override_pin', { p_pin: pinGatePin.toUpperCase() })
+    if (pinErr || !match) { setPinGateError('Invalid PIN. Access denied.'); setPinGateChecking(false); return }
+    logAudit('destructive', 'Override PIN Used', 'Expenses', `Override by ${match.full_name} on a government contribution entry`, '', profile?.id, profile?.full_name)
+    const action = pinGateModal.action
+    setPinGateModal(null); setPinGatePin(''); setPinGateError(''); setPinGateChecking(false)
+    action()
+  }
+
   const handleAmortSubmit = async () => {
     if (!amortForm.truck_id||!amortForm.monthly_amount||!amortForm.start_date) { showToast('Please fill all required fields.','error'); return }
     setSaving(true)
@@ -640,9 +703,9 @@ export default function Expenses() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:2, marginBottom:20, borderBottom:'0.5px solid var(--border)' }}>
+      <div className="tab-bar">
         {(isAdmin ? ALL_TABS : STAFF_TABS).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ background:'none', border:'none', padding:'7px 16px', fontSize:13, fontWeight:tab===t?500:400, cursor:'pointer', color:tab===t?'var(--text)':'var(--muted)', borderBottom:`2px solid ${tab===t?'var(--accent)':'transparent'}`, marginBottom:-1 }}>{t}</button>
+          <button key={t} onClick={() => setTab(t)} className={`tab-pill${tab===t ? ' active' : ''}`}>{t}</button>
         ))}
       </div>
 
@@ -749,23 +812,30 @@ export default function Expenses() {
               )}
               <p className="section-label">Details</p>
               <div className="form-grid" style={{ marginBottom:16 }}>
-                <div className="form-group"><label className="label required">Date</label><DateInput value={form.expense_date} onChange={e=>setForm(f=>({...f,expense_date:e.target.value}))} max={new Date().toISOString().slice(0,10)} /></div>
+                <div className="form-group"><label className="label required">Date</label><DatePickerSingle value={form.expense_date} onChange={e=>setForm(f=>({...f,expense_date:e.target.value}))} max={new Date().toISOString().slice(0,10)} /></div>
                 <div className="form-group"><label className="label required">Category</label>
                   <select value={form.category} onChange={e=>setForm(f=>({...f,category:e.target.value}))}>
                     <option value="">Select category</option>
                     {(form.expense_type==='admin'?[...ADMIN_CATEGORIES,...customAdminCats]:[...OPERATION_CATEGORIES,...customOpCats]).map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                   {form.category==='Driver Salary' && (
-                    <p style={{ fontSize: 11, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 6 }}>
+                    <p style={{ fontSize: 11, color: 'var(--warning)', background: 'var(--warning-light)', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px', marginTop: 6 }}>
                       ⚠️ Driver Payroll already posts this automatically per truck per month when a payroll entry is locked. A manual entry here adds on top of that in reports — only continue if this is for a period Driver Payroll doesn't cover (e.g. before it was in use).
                     </p>
                   )}
                 </div>
+                {['SSS Contribution','PhilHealth Contribution','HDMF Contribution'].includes(form.category) && (
+                  <div className="form-group">
+                    <label className="label">Coverage Month</label>
+                    <input type="month" value={form.coverage_month || ''} onChange={e=>setForm(f=>({...f,coverage_month:e.target.value}))} />
+                    <p style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>Optional — blank uses the date paid. Only affects Reports/Midyear Report; Cashflow always uses the real payment date.</p>
+                  </div>
+                )}
                 <div className="form-group"><label className="label required">Amount (₱)</label><input type="number" step="0.01" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="0.00" /></div>
                 <div className="form-group"><label className="label">Reference No.</label><input value={form.reference_no} onChange={e=>setForm(f=>({...f,reference_no:e.target.value}))} placeholder="OR, receipt #" /></div>
                 <div className="form-group"><label className="label">Payment Method</label>
                   <div style={{ display:'flex', gap:8 }}>
-                    {[['cash','💵 Cash'],['check','🖊️ Check'],['transfer','🏦 Transfer']].map(([val,label])=>(
+                    {[['cash','💵 Cash'],['check','🖊️ Check'],['transfer','🏦 Transfer'],['egov_bancnet','🏛️ eGov (BancNet)']].map(([val,label])=>(
                       <button type="button" key={val} onClick={()=>setForm(f=>({...f,payment_method:val}))} style={{ flex:1, padding:'7px 4px', borderRadius:8, border:`1.5px solid ${form.payment_method===val?'var(--accent)':'var(--border)'}`, background:form.payment_method===val?'var(--accent-light)':'var(--surface)', color:form.payment_method===val?'var(--accent)':'var(--muted)', fontWeight:form.payment_method===val?600:400, cursor:'pointer', fontSize:12 }}>{label}</button>
                     ))}
                   </div>
@@ -917,11 +987,11 @@ export default function Expenses() {
                         <td>
                           {e.description}
                           {e.is_recurring&&(()=>{const d=new Date(e.expense_date+'T00:00:00');d.setMonth(d.getMonth()+1);const daysUntil=Math.ceil((d-new Date())/86400000);return <span style={{fontSize:9,background:'rgba(99,102,241,0.1)',color:'#4338ca',padding:'1px 5px',borderRadius:4,marginLeft:5}}>🔄 Next: {d.toISOString().slice(0,10)} {daysUntil>=0?`(${daysUntil}d)`:'(overdue)'}</span>})()}
-                          <span style={{fontSize:9,padding:'1px 5px',borderRadius:4,marginLeft:4,background:e.payment_method==='check'?'rgba(100,100,100,0.1)':e.payment_method==='transfer'?'rgba(22,163,74,0.1)':'rgba(59,130,246,0.1)',color:e.payment_method==='check'?'var(--muted)':e.payment_method==='transfer'?'var(--success)':'#3B82F6'}}>{e.payment_method==='check'?'🖊️ Check':e.payment_method==='transfer'?'🏦 Transfer':'💵 Cash'}</span>
+                          <span style={{fontSize:9,padding:'1px 5px',borderRadius:4,marginLeft:4,background:e.payment_method==='check'?'rgba(100,100,100,0.1)':e.payment_method==='transfer'?'var(--success-light)':e.payment_method==='egov_bancnet'?'var(--accent-light)':'rgba(59,130,246,0.1)',color:e.payment_method==='check'?'var(--muted)':e.payment_method==='transfer'?'var(--success)':e.payment_method==='egov_bancnet'?'var(--accent)':'#3B82F6'}}>{e.payment_method==='check'?'🖊️ Check':e.payment_method==='transfer'?'🏦 Transfer':e.payment_method==='egov_bancnet'?'🏛️ eGov (BancNet)':'💵 Cash'}</span>
                         </td>
                         <td className="mono muted" style={{ fontSize:12 }}>{e.reference_no||'—'}</td>
                         <td className="text-right mono" style={{ fontWeight:500 }}>{fmt(e.amount)}</td>
-                        <td><div style={{ display:'flex', gap:4 }}><button className="btn-ghost btn-sm" onClick={()=>handleEdit(e)}>Edit</button><button className="btn-danger btn-sm" onClick={()=>setDeleteTarget({table:'expenses',id:e.id})}>Delete</button></div></td>
+                        <td><div style={{ display:'flex', gap:4 }}><button className="btn-ghost btn-sm" onClick={()=>guardedEdit(e)}>Edit</button><button className="btn-danger btn-sm" onClick={()=>guardedDeleteTarget({table:'expenses',id:e.id}, e)}>Delete</button></div></td>
                       </tr>
                     ))}
                   </tbody>
@@ -931,6 +1001,118 @@ export default function Expenses() {
             )}
         </>
       )}
+
+      {/* ── GOV'T REMITTANCE ── */}
+      {tab === "Gov't Remittance" && (() => {
+        const contributions = expenses.filter(e => GOV_CATEGORIES.includes(e.category))
+        const totalFor = (cat) => contributions.filter(e => e.category === cat).reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+        const combined = [
+          ...contributions.map(e => ({ _kind: 'contribution', id: e.id, agency: e.category.replace(' Contribution', ''), date: e.expense_date, amount: e.amount, payment_method: e.payment_method, notes: e.description, reference_no: '', coverage_month: e.coverage_month })),
+          ...govLoanPayments.map(p => ({ _kind: 'loan', id: p.id, agency: p.agency, date: p.date_paid, amount: p.amount, payment_method: p.payment_method, notes: p.notes, reference_no: p.reference_no })),
+        ].filter(r => (!govFilterAgency || r.agency === govFilterAgency) && (!govFilterType || (govFilterType === 'contribution' ? r._kind === 'contribution' : r._kind === 'loan')))
+          .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        const PM_LABEL = { cash: '💵 Cash', check: '🖊️ Check', transfer: '🏦 Transfer', egov_bancnet: '🏛️ eGov (BancNet)' }
+
+        const printRemittance = () => {
+          const win = window.open('', '_blank')
+          const rows = combined.map(r => `<tr><td>${fmtDate(r.date)}</td><td>${r.agency}</td><td>${r._kind === 'contribution' ? 'Contribution' : 'Loan Payment'}</td><td>${PM_LABEL[r.payment_method] || r.payment_method}</td><td>${r.reference_no || '—'}</td><td style="text-align:right">₱${fmt(r.amount)}</td><td>${r.notes || ''}</td></tr>`).join('')
+          win.document.write(`<html><head><title>Government Remittance</title><style>
+            body{font-family:Arial,sans-serif;font-size:11px} table{width:100%;border-collapse:collapse} th,td{border:1px solid #ccc;padding:4px 8px;text-align:left} th{background:#f0f0f0}
+            @page{size:letter landscape;margin:10mm}
+          </style></head><body><h3>Government Remittance${govFilterAgency ? ' — ' + govFilterAgency : ''} — ${new Date().toLocaleDateString('en-PH')}</h3>
+          <table><thead><tr><th>Date</th><th>Agency</th><th>Type</th><th>Method</th><th>Reference</th><th>Amount</th><th>Notes</th></tr></thead>
+          <tbody>${rows}</tbody></table></body></html>`)
+          win.document.close(); win.print()
+        }
+
+        return (
+          <>
+            <div className="stats-grid" style={{ marginBottom: 16 }}>
+              <div className="stat-card"><div className="stat-label">SSS Contributions</div><div className="stat-value">₱{fmt(totalFor('SSS Contribution'))}</div></div>
+              <div className="stat-card"><div className="stat-label">PhilHealth Contributions</div><div className="stat-value">₱{fmt(totalFor('PhilHealth Contribution'))}</div></div>
+              <div className="stat-card"><div className="stat-label">HDMF Contributions</div><div className="stat-value">₱{fmt(totalFor('HDMF Contribution'))}</div></div>
+            </div>
+            <div className="filter-bar" style={{ marginBottom: 12 }}>
+              <select value={govFilterAgency} onChange={e => setGovFilterAgency(e.target.value)} style={{ width: 'auto' }}>
+                <option value="">All agencies</option>
+                <option value="SSS">SSS</option>
+                <option value="PhilHealth">PhilHealth</option>
+                <option value="HDMF">HDMF</option>
+              </select>
+              <select value={govFilterType} onChange={e => setGovFilterType(e.target.value)} style={{ width: 'auto' }}>
+                <option value="">All types</option>
+                <option value="contribution">Contribution</option>
+                <option value="loan">Loan Payment</option>
+              </select>
+              <div style={{ flex: 1 }} />
+              <button className="btn-ghost" onClick={printRemittance}>🖨️ Print</button>
+              {isAdmin && <button className="btn-primary" onClick={() => setShowGovLoanForm(true)}>+ Add Loan Payment</button>}
+            </div>
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Date</th><th>Agency</th><th>Type</th><th>Method</th><th>Reference</th><th className="text-right">Amount</th><th>Notes</th><th></th></tr></thead>
+                <tbody>
+                  {combined.length === 0 ? (
+                    <tr><td colSpan={8} className="muted" style={{ textAlign: 'center', padding: 24 }}>No remittance records found.</td></tr>
+                  ) : combined.map(r => (
+                    <tr key={r._kind + r.id}>
+                      <td className="mono" style={{ fontSize: 12 }}>{fmtDate(r.date)}{r.coverage_month && <div style={{ fontSize: 10, color: 'var(--muted)' }}>Coverage: {r.coverage_month}</div>}</td>
+                      <td style={{ fontWeight: 500 }}>{r.agency}</td>
+                      <td><span className="badge" style={{ fontSize: 10, background: r._kind === 'contribution' ? 'var(--accent-light)' : 'var(--success-light)', color: r._kind === 'contribution' ? 'var(--accent)' : 'var(--success)' }}>{r._kind === 'contribution' ? 'Contribution' : 'Loan Payment'}</span></td>
+                      <td style={{ fontSize: 12 }}>{PM_LABEL[r.payment_method] || r.payment_method}</td>
+                      <td className="mono" style={{ fontSize: 12 }}>{r.reference_no || '—'}</td>
+                      <td className="text-right mono">₱{fmt(r.amount)}</td>
+                      <td style={{ fontSize: 12, color: 'var(--muted)' }}>{r.notes || ''}</td>
+                      <td>{r._kind === 'loan' && isAdmin && <button className="btn-ghost btn-sm" onClick={() => deleteGovLoanPayment(r.id)}>🗑️</button>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {showGovLoanForm && (
+              <div className="modal-overlay" onClick={() => setShowGovLoanForm(false)}>
+                <div className="modal" onClick={e => e.stopPropagation()}>
+                  <h3 style={{ marginBottom: 14 }}>+ Add Loan Payment</h3>
+                  <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>Tracking only — this money was already withheld from employees' pay, so it does not post as a company expense.</p>
+                  <div className="form-grid" style={{ marginBottom: 14 }}>
+                    <div className="form-group"><label className="label required">Agency</label>
+                      <select value={govLoanForm.agency} onChange={e => setGovLoanForm(f => ({ ...f, agency: e.target.value }))}>
+                        <option value="SSS">SSS</option>
+                        <option value="HDMF">HDMF</option>
+                      </select>
+                    </div>
+                    <div className="form-group"><label className="label required">Date Paid</label>
+                      <DatePickerSingle value={govLoanForm.date_paid} onChange={e => setGovLoanForm(f => ({ ...f, date_paid: e.target.value }))} max={new Date().toISOString().slice(0,10)} />
+                    </div>
+                    <div className="form-group"><label className="label required">Amount (₱)</label>
+                      <input type="number" step="0.01" value={govLoanForm.amount} onChange={e => setGovLoanForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" />
+                    </div>
+                    <div className="form-group"><label className="label">Payment Method</label>
+                      <select value={govLoanForm.payment_method} onChange={e => setGovLoanForm(f => ({ ...f, payment_method: e.target.value }))}>
+                        <option value="transfer">Transfer</option>
+                        <option value="check">Check</option>
+                        <option value="cash">Cash</option>
+                        <option value="egov_bancnet">eGov (BancNet)</option>
+                      </select>
+                    </div>
+                    <div className="form-group"><label className="label">Reference No.</label>
+                      <input value={govLoanForm.reference_no} onChange={e => setGovLoanForm(f => ({ ...f, reference_no: e.target.value }))} />
+                    </div>
+                    <div className="form-group" style={{ gridColumn: '1 / -1' }}><label className="label">Notes</label>
+                      <input value={govLoanForm.notes} onChange={e => setGovLoanForm(f => ({ ...f, notes: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="modal-actions">
+                    <button className="btn-ghost" onClick={() => setShowGovLoanForm(false)}>Cancel</button>
+                    <button className="btn-primary" onClick={saveGovLoanPayment} disabled={savingGovLoan}>{savingGovLoan ? 'Saving…' : 'Save'}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
 
       {/* ── PER TRUCK VIEW ── */}
       {tab === 'Per Truck View' && (
@@ -1014,7 +1196,7 @@ export default function Expenses() {
                 <div className="form-group"><label className="label required">Insurance Type</label><select value={insForm.insurance_type} onChange={e=>setInsForm(f=>({...f,insurance_type:e.target.value}))}><option value="Cargo Insurance">Cargo Insurance</option><option value="Own Damage Insurance">Own Damage Insurance</option></select></div>
                 <div className="form-group"><label className="label">Policy Number</label><input value={insForm.policy_no||''} onChange={e=>setInsForm(f=>({...f,policy_no:e.target.value}))} placeholder="e.g. POL-2025-0001" /></div>
                 <div className="form-group"><label className="label required">Annual Amount (₱)</label><input type="number" step="0.01" value={insForm.annual_amount} onChange={e=>setInsForm(f=>({...f,annual_amount:e.target.value}))} placeholder="0.00" /></div>
-                <div className="form-group"><label className="label required">Start Date</label><DateInput value={insForm.start_date} onChange={e=>setInsForm(f=>({...f,start_date:e.target.value}))} /></div>
+                <div className="form-group"><label className="label required">Start Date</label><DatePickerSingle value={insForm.start_date} onChange={e=>setInsForm(f=>({...f,start_date:e.target.value}))} /></div>
                 <div className="form-group span-2"><label className="label required">Description</label><input value={insForm.description} onChange={e=>setInsForm(f=>({...f,description:e.target.value}))} placeholder="e.g. OONA Insurance 2025" /></div>
               </div>
               <p className="section-label">Select Covered Trucks</p>
@@ -1072,9 +1254,9 @@ export default function Expenses() {
             return (
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:10, marginBottom:16 }}>
                 {[
-                  { label:'Items In Stock', value: unallocated.length, color:'#d97706', icon:'📦' },
+                  { label:'Items In Stock', value: unallocated.length, color:'var(--warning)', icon:'📦' },
                   { label:'Stock Value Remaining', value:`₱${fmt(totalValue)}`, color:'var(--accent)', icon:'💰' },
-                  { label:'Fully Allocated', value: stocks.filter(s=>s.quantity_remaining<=0).length, color:'#16a34a', icon:'✅' },
+                  { label:'Fully Allocated', value: stocks.filter(s=>s.quantity_remaining<=0).length, color:'var(--success)', icon:'✅' },
                 ].map(c=>(
                   <div key={c.label} style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:10, padding:'12px 16px', position:'relative', overflow:'hidden' }}>
                     <div style={{ position:'absolute', top:8, right:10, fontSize:20, opacity:.15 }}>{c.icon}</div>
@@ -1120,10 +1302,10 @@ export default function Expenses() {
                       <td style={{ padding:'8px 12px', color:'var(--muted)', fontSize:12 }}>{s.reference_no||'—'}</td>
                       <td style={{ padding:'8px 12px' }}>
                         {s.quantity_remaining <= 0
-                          ? <span style={{ fontSize:11, background:'#f0fdf4', color:'#16a34a', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>✅ Fully Allocated</span>
+                          ? <span style={{ fontSize:11, background:'var(--success-light)', color:'var(--success)', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>✅ Fully Allocated</span>
                           : s.quantity_remaining < s.quantity
                             ? <span style={{ fontSize:11, background:'rgba(255,30,0,0.1)', color:'var(--accent)', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>⚡ Partial ({s.quantity_remaining}/{s.quantity} left)</span>
-                            : <span style={{ fontSize:11, background:'#fffbeb', color:'#d97706', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>📦 In Stock ({s.quantity_remaining})</span>
+                            : <span style={{ fontSize:11, background:'var(--warning-light)', color:'var(--warning)', padding:'1px 7px', borderRadius:10, fontWeight:600 }}>📦 In Stock ({s.quantity_remaining})</span>
                         }
                       </td>
                       <td style={{ padding:'8px 12px' }}>
@@ -1131,7 +1313,7 @@ export default function Expenses() {
                           <div style={{ display:'flex', gap:4 }}>
                             <button onClick={()=>handleAllocateStock(s)} style={{ padding:'3px 8px', background:'var(--accent)', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11, fontWeight:600 }}>Allocate</button>
                             <button onClick={()=>{setEditingStockId(s.id);setStockForm({purchase_date:s.purchase_date,category:s.category,description:s.description,quantity:s.quantity,unit:s.unit||'',unit_cost:String(s.unit_cost),reference_no:s.reference_no||'',notes:s.notes||''});setShowStockForm(true)}} style={{ padding:'3px 7px', background:'#3b82f6', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>✏️</button>
-                            <button onClick={()=>handleDeleteStock(s.id)} style={{ padding:'3px 7px', background:'#ef4444', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>🗑️</button>
+                            <button onClick={()=>handleDeleteStock(s.id)} style={{ padding:'3px 7px', background:'var(--danger)', color:'#fff', border:'none', borderRadius:4, cursor:'pointer', fontSize:11 }}>🗑️</button>
                           </div>
                         )}
                       </td>
@@ -1158,7 +1340,7 @@ export default function Expenses() {
                 <div style={{ display:'grid', gap:12 }}>
                   <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                     <div><label style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', display:'block', marginBottom:4 }}>Purchase Date</label>
-                      <DateInput value={stockForm.purchase_date} onChange={e=>setStockForm(f=>({...f,purchase_date:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
+                      <DatePickerSingle value={stockForm.purchase_date} onChange={e=>setStockForm(f=>({...f,purchase_date:e.target.value}))} style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
                     <div><label style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', display:'block', marginBottom:4 }}>Category *</label>
                       <input value={stockForm.category} onChange={e=>setStockForm(f=>({...f,category:e.target.value}))} list="stock-cats" placeholder="e.g. Engine Parts, Tires" style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} />
                       <datalist id="stock-cats"><option value="Engine Parts"/><option value="Tires"/><option value="Body Parts"/><option value="Electrical"/><option value="Brakes"/><option value="Suspension"/><option value="Filters"/><option value="Lubricants"/><option value="Other Parts"/></datalist></div>
@@ -1205,7 +1387,7 @@ export default function Expenses() {
                     onChange={e=>setAllocateModal(m=>({...m,qty:parseInt(e.target.value)||1}))}
                     style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
                 <div><label style={{ fontSize:11, color:'var(--muted)', textTransform:'uppercase', display:'block', marginBottom:4 }}>Allocation Date</label>
-                  <DateInput value={allocateModal.alloc_date}
+                  <DatePickerSingle value={allocateModal.alloc_date}
                     onChange={e=>setAllocateModal(m=>({...m,alloc_date:e.target.value}))}
                     style={{ width:'100%', padding:'7px 10px', borderRadius:6, border:'1px solid var(--border)', background:'var(--bg)', color:'var(--text)', fontSize:13, boxSizing:'border-box' }} /></div>
               </div>
@@ -1217,12 +1399,38 @@ export default function Expenses() {
                 </select></div>
               <div style={{ padding:'8px 12px', background:'var(--bg)', border:'1px solid var(--border)', borderRadius:6, fontSize:12, color:'var(--muted)' }}>
                 Expense amount: <strong style={{ color:'var(--text)' }}>₱{fmt((allocateModal.qty||0)*(allocateModal.stock.unit_cost||0))}</strong>
-                <span style={{ marginLeft:8, color:'#16a34a', fontSize:11 }}>— no new cash out</span>
+                <span style={{ marginLeft:8, color:'var(--success)', fontSize:11 }}>— no new cash out</span>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
                 <button onClick={()=>setAllocateModal(null)} style={{ padding:'8px 16px', border:'1px solid var(--border)', borderRadius:6, background:'transparent', cursor:'pointer', fontSize:13 }}>Cancel</button>
                 <button onClick={confirmAllocate} style={{ padding:'8px 20px', background:'var(--accent)', color:'#fff', border:'none', borderRadius:6, cursor:'pointer', fontSize:13, fontWeight:600 }}>Allocate</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin override PIN modal — gates Edit/Delete on government contribution entries */}
+      {pinGateModal && (
+        <div className="modal-overlay" onClick={() => setPinGateModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+            <h3 style={{ marginBottom: 8 }}>🔑 Admin Override Required</h3>
+            <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 12 }}>
+              This is a government contribution entry. Enter an admin override PIN to continue.
+            </p>
+            <div className="form-group" style={{ margin: 0, marginBottom: 12 }}>
+              <label className="label">Admin Override PIN</label>
+              <input value={pinGatePin} onChange={e => { setPinGatePin(e.target.value.toUpperCase()); setPinGateError('') }}
+                placeholder="e.g. A12345" maxLength={6}
+                style={{ fontFamily: 'var(--mono)', letterSpacing: 4, fontSize: 18, textAlign: 'center' }}
+                onKeyDown={e => e.key === 'Enter' && handlePinGateCheck()} autoFocus />
+              {pinGateError && <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{pinGateError}</div>}
+            </div>
+            <div className="modal-actions">
+              <button className="btn-ghost" onClick={() => { setPinGateModal(null); setPinGatePin(''); setPinGateError('') }}>Cancel</button>
+              <button className="btn-primary" onClick={handlePinGateCheck} disabled={pinGateChecking}>
+                {pinGateChecking ? 'Checking…' : 'Unlock'}
+              </button>
             </div>
           </div>
         </div>

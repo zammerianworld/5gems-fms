@@ -17,7 +17,7 @@ const PaidBadge = ({ paid, label }) => (
     display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, fontWeight: 600,
     padding: '2px 8px', borderRadius: 20,
     color: paid ? 'var(--success)' : 'var(--muted)',
-    background: paid ? 'rgba(22,163,74,0.1)' : 'rgba(148,163,184,0.15)',
+    background: paid ? 'var(--success-light)' : 'rgba(148,163,184,0.15)',
   }}>{paid ? '✅' : '⏳'} {label}</span>
 )
 
