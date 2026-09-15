@@ -2314,3 +2314,8 @@ create policy "gov_loan_payments_write" on public.gov_loan_payments for all usin
 
 grant select, insert, update, delete on public.gov_loan_payments to authenticated;
 grant all on public.gov_loan_payments to service_role;
+
+-- ============================================================
+-- Port to 5 Gems — Part 2, Section 3: Invoice Group field (September 2026)
+-- ============================================================
+alter table public.trucks add column if not exists invoice_group text default '';

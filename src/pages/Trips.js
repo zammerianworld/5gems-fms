@@ -111,6 +111,7 @@ export default function Trips() {
   const [step, setStep] = useState('type')
   const [showForm, setShowForm] = useState(false)
   const [editId, setEditId] = useState(null)
+  const [docRefDupeConfirmed, setDocRefDupeConfirmed] = useState(false)
 
   const [dumpTrips, setDumpTrips] = useState([])
   const [pmTrips, setPmTrips] = useState([])
@@ -221,6 +222,24 @@ export default function Trips() {
   }, [])
 
   const trucksOfType = (type) => trucks.filter(t => t.truck_type === type && t.active !== false)
+
+  // Live duplicate check — checked against the same complete dataset that
+  // powers the ⚠ DUPE badge in Manage Trips, not a fresh network query.
+  // A submit-time check that queries the database fresh on save can fail
+  // silently for reasons that never surface as a visible error (an RLS
+  // issue, a timing issue, anything) — if that query fails, nothing warns
+  // the user, the save just goes through. This version has no such
+  // failure mode since it only ever reads data already in memory.
+  const findDumpDupe = (field, value) => {
+    if (!value) return null
+    const v = value.trim().toLowerCase()
+    if (!v) return null
+    const match = dumpTrips.find(t => t.id !== editId && (t[field] || '').trim().toLowerCase() === v)
+    return match || null
+  }
+  const smcslWbDupe = findDumpDupe('smcsl_wb', dumpForm.smcsl_wb)
+  const docRefDupe = findDumpDupe('supplier_doc_ref', dumpForm.supplier_doc_ref)
+  useEffect(() => { setDocRefDupeConfirmed(false) }, [docRefDupe?.id])
   const isSubconTruck = (plate) => trucks.find(t => t.plate === plate)?.ownership === 'subcon'
   // saveRate removed — rates derived from trip history instead
   const saveIslandCodes = (origin, dest) => {
@@ -309,43 +328,6 @@ export default function Trips() {
       resetForm(); fetchAll(); setSaving(false)
     }
 
-    // Duplicate detection — SMCSL WB and Supplier Doc Ref (new and edit)
-    if (f.smcsl_wb) {
-      let q = supabase.from('trips_dump').select('id,trip_date,truck_plate').is('deleted_at', null).eq('smcsl_wb', f.smcsl_wb.trim())
-      if (editId) q = q.neq('id', editId)
-      const { data: wbDup } = await q.limit(1)
-      if (wbDup?.length) {
-        const d = wbDup[0]
-        setConfirmState({
-          title: 'Possible Duplicate',
-          variant: 'warning',
-          confirmLabel: 'Save Anyway',
-          message: `SMCSL WB "${f.smcsl_wb}" already exists on record:\n\nPlate: ${d.truck_plate}\nDate: ${d.trip_date}\n\nThis may be hidden by your current filters (try clearing month/truck filter to find it).`,
-          onConfirm: () => checkDumpDocRef(f, editId, proceedSaveDump),
-        })
-        return
-      }
-    }
-    checkDumpDocRef(f, editId, proceedSaveDump)
-  }
-
-  const checkDumpDocRef = async (f, editId, proceedSaveDump) => {
-    if (f.supplier_doc_ref) {
-      let q = supabase.from('trips_dump').select('id,trip_date,truck_plate').is('deleted_at', null).eq('supplier_doc_ref', f.supplier_doc_ref.trim())
-      if (editId) q = q.neq('id', editId)
-      const { data: drDup } = await q.limit(1)
-      if (drDup?.length) {
-        const d = drDup[0]
-        setConfirmState({
-          title: 'Possible Duplicate',
-          variant: 'warning',
-          confirmLabel: 'Save Anyway',
-          message: `Supplier Doc Ref "${f.supplier_doc_ref}" already exists on record:\n\nPlate: ${d.truck_plate}\nDate: ${d.trip_date}\n\nThis may be hidden by your current filters (try clearing month/truck filter to find it).`,
-          onConfirm: proceedSaveDump,
-        })
-        return
-      }
-    }
     proceedSaveDump()
   }
 
@@ -466,6 +448,7 @@ export default function Trips() {
     setShowForm(false); setStep('type'); setTruckType(null); setEditId(null)
     setDumpForm({ ...EMPTY_DUMP, trip_date: today() })
     setPmForm({ ...EMPTY_PM, trip_date: today(), containers: [] })
+    setDocRefDupeConfirmed(false)
   }
 
   const handleEditDump = (t) => {
@@ -820,8 +803,32 @@ export default function Trips() {
 
           <p className="section-label">SMC / Document Fields</p>
           <div className="form-grid" style={{ marginBottom: 16 }}>
-            <SF label="SMCSL WB" value={dumpForm.smcsl_wb} onChange={v => setDumpForm(f => ({ ...f, smcsl_wb: v.trim() }))} />
-            <SF label="Supplier Doc Ref" value={dumpForm.supplier_doc_ref} onChange={v => setDumpForm(f => ({ ...f, supplier_doc_ref: v.trim() }))} />
+            <div className="form-group">
+              <label className="label">SMCSL WB</label>
+              <input value={dumpForm.smcsl_wb || ''} onChange={e => setDumpForm(f => ({ ...f, smcsl_wb: e.target.value.trim() }))}
+                style={smcslWbDupe ? { borderColor: 'var(--danger)', background: 'var(--danger-light)' } : undefined} />
+              {smcslWbDupe && (
+                <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 4 }}>
+                  ⚠ Already used — {smcslWbDupe.truck_plate}, {fmtDate(smcslWbDupe.trip_date)}. SMCSL WB should never repeat — cannot save until this is corrected.
+                </div>
+              )}
+            </div>
+            <div className="form-group">
+              <label className="label">Supplier Doc Ref</label>
+              <input value={dumpForm.supplier_doc_ref || ''} onChange={e => setDumpForm(f => ({ ...f, supplier_doc_ref: e.target.value.trim() }))}
+                style={docRefDupe ? { borderColor: '#d97706', background: '#fffbeb' } : undefined} />
+              {docRefDupe && (
+                <>
+                  <div style={{ fontSize: 11, color: '#b45309', marginTop: 4, marginBottom: 6 }}>
+                    ⚠ Already used — {docRefDupe.truck_plate}, {fmtDate(docRefDupe.trip_date)}. This can be valid if it's a delivery receipt/waybill pair for the same shipment.
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, background: '#fffbeb', padding: '6px 8px', borderRadius: 6 }}>
+                    <input type="checkbox" checked={docRefDupeConfirmed} onChange={e => setDocRefDupeConfirmed(e.target.checked)} />
+                    I've checked — this is a valid reuse of this document
+                  </label>
+                </>
+              )}
+            </div>
             <SF label="RMSD / SMFI SAF DR" value={dumpForm.rmsd_smfi_saf_dr} onChange={v => setDumpForm(f => ({ ...f, rmsd_smfi_saf_dr: v }))} />
             <SF label="STO No." value={dumpForm.sto_no} onChange={v => setDumpForm(f => ({ ...f, sto_no: v }))} />
           </div>
@@ -863,7 +870,9 @@ export default function Trips() {
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
             <button className="btn-ghost" onClick={resetForm}>Cancel</button>
-            <button className="btn-primary" onClick={submitDump} disabled={saving}>{saving ? 'Saving…' : editId ? 'Update' : 'Save Trip'}</button>
+            <button className="btn-primary" onClick={submitDump} disabled={saving || !!smcslWbDupe || (!!docRefDupe && !docRefDupeConfirmed)}>
+              {saving ? 'Saving…' : smcslWbDupe ? 'Resolve SMCSL WB duplicate' : (docRefDupe && !docRefDupeConfirmed) ? 'Confirm duplicate above' : editId ? 'Update' : 'Save Trip'}
+            </button>
           </div>
         </div>
       )}
@@ -953,11 +962,11 @@ export default function Trips() {
           {pmForm.trip_code === 'Hauling PSACC' && (<>
             <p className="section-label">Hauling PSACC — Shared Details</p>
             <div className="form-grid" style={{ marginBottom: 16 }}>
+              <SF label="EMR Date" value={pmForm.emr_date} onChange={v => setPmForm(f => ({ ...f, emr_date: v }))} type="date" />
+              <SF label="Date of Completion" value={pmForm.date_completion} onChange={v => setPmForm(f => ({ ...f, date_completion: v }))} type="date" />
               <SF label="Waybill No. (our doc)" value={pmForm.waybill_no} onChange={v => setPmForm(f => ({ ...f, waybill_no: v.trim() }))} />
               <SF label="Vessel" value={pmForm.vessel} onChange={v => setPmForm(f => ({ ...f, vessel: v }))} />
               <SF label="Voyage" value={pmForm.voyage} onChange={v => setPmForm(f => ({ ...f, voyage: v }))} />
-              <SF label="EMR Date" value={pmForm.emr_date} onChange={v => setPmForm(f => ({ ...f, emr_date: v }))} type="date" />
-              <SF label="Date of Completion" value={pmForm.date_completion} onChange={v => setPmForm(f => ({ ...f, date_completion: v }))} type="date" />
               <div className="form-group">
                 <label className="label">Consignee</label>
                 <input 
@@ -972,6 +981,7 @@ export default function Trips() {
                   ))}
                 </datalist>
               </div>
+              <SF label="Delivery Address" value={pmForm.consignee_address} onChange={v => setPmForm(f => ({ ...f, consignee_address: v }))} />
               <SS label="Driver Rate Destination" value={pmForm.destination || 'PENDING'}
                 onChange={v => setPmForm(f => ({ ...f, destination: v === 'PENDING' ? '' : v }))}
                 options={[{ value: 'PENDING', label: '⚑ Pending / not yet listed' }, ...(pmDestinations['Hauling PSACC'] || [])]}

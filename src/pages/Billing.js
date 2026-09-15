@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs'
 import autoTable from 'jspdf-autotable'
 import { useAuth } from '../components/AuthContext'
 import SignatoryDialog from '../components/SignatoryDialog'
+import LastInvoicePanel from '../components/LastInvoicePanel'
 import { useLocation } from 'react-router-dom'
 const TABS = ['Generate', 'Invoice List', 'Manage Trips', 'Aging Report', 'Client Balance']
 const STATUS_OPTIONS = ['Invoiced', 'Paid', 'Returned', 'On Hold']
@@ -159,7 +160,7 @@ export default function Billing() {
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('invoices').select('*').is('deleted_at', null).order('invoice_date', { ascending: false })),
       supabase.from('company_settings').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('trucks').select('id,plate,ownership,truck_type'),
+      supabase.from('trucks').select('id,plate,ownership,truck_type,invoice_group'),
       supabase.from('commodities').select('name').order('name'),
       supabase.from('clients').select('*').order('nickname'),
       supabase.from('drivers').select('id,driver_name'),
@@ -444,11 +445,31 @@ export default function Billing() {
     fetchAll(); setSavingRates(false)
   }
 
+  // Identifies which real-world series an invoice belongs to — Dump: the
+  // truck group its trips are on; Prime Mover: the client itself. Used
+  // both to show "this invoice's own series" as a reference while editing
+  // its number, and to name where a colliding number actually belongs.
+  const describeInvoiceSeries = (inv) => {
+    if (!inv) return null
+    if (inv.truck_type === 'Prime Mover') return `Prime Mover — ${inv.client}`
+    if (inv.truck_type === 'Dump Truck') {
+      const plates = [...new Set(allDumpTrips.filter(t => t.invoice_id === inv.id).map(t => t.truck_plate).filter(Boolean))]
+      const groupNames = [...new Set(plates.map(p => trucks.find(t => t.plate === p)?.invoice_group).filter(Boolean))]
+      if (groupNames.length) return `Dump — ${groupNames.join(', ')} (client: ${inv.client})`
+      return `Dump Truck — no Invoice Group set (client: ${inv.client})`
+    }
+    return `client: ${inv.client}`
+  }
+
   const saveInvoiceUpdate = async () => {
     setSavingInvoice(true)
     if (editingInvoice.invoice_no) {
       const dupCheck = invoices.find(i => i.invoice_no === editingInvoice.invoice_no && i.id !== editingInvoice.id)
-      if (dupCheck) { showToast(`Invoice number ${editingInvoice.invoice_no} is already used by another invoice.`, 'error'); setSavingInvoice(false); return }
+      if (dupCheck) {
+        const where = describeInvoiceSeries(dupCheck)
+        showToast(`Invoice number ${editingInvoice.invoice_no} is already used${where ? ` by ${where}` : ''} — check the series before entering a number.`, 'error')
+        setSavingInvoice(false); return
+      }
     }
     const payload = { status: editingInvoice.status, remarks: editingInvoice.remarks || '', remarks_color: editingInvoice.remarks_color || null, invoice_no: editingInvoice.invoice_no, invoice_date: editingInvoice.invoice_date, updated_at: new Date().toISOString() }
     if (editingInvoice.status === 'Paid') { payload.actual_amount_credited = editingInvoice.actual_amount_credited || null; payload.date_credited = editingInvoice.date_credited || null }
@@ -917,7 +938,7 @@ export default function Billing() {
 
     const SMC_EXTRA = ['SMCSL WAYBILL NO.','SUPPLIER DOC','TRANSACTION TYPE','PORT OF ORIGIN','PORT OF DESTINATION','SHIPPER ADDRESS','CONSIGNEE ADDRESS','CON VAN NO.','SEAL NO.','COMMODITY','SUPPLIER AMT (VAT INC.)','STRIPPING FEE','TOTAL']
     const HUSTLING_EXTRA = ['WAYBILL','VESSEL','CTS NO.','VOYAGE','FROM-TO','VAN NO.','STATUS','SUPPLIER AMT']
-    const HAULING_EXTRA = ['VAN NO.','VESSEL','WAYBILL','VOYAGE','EMR DATE','DATE COMPLETION','CONSIGNEE','EMR NO.','BL NO.','SUPPLIER AMT']
+    const HAULING_EXTRA = ['EMR DATE','DATE COMPLETION','WAYBILL','VESSEL','VOYAGE','CONSIGNEE','DELIVERY ADDRESS','VAN NO.','EMR NO.','BL NO.','SUPPLIER AMT']
 
     codes.forEach(code => {
       const codeTrips = tripsByCode[code]
@@ -994,16 +1015,17 @@ export default function Billing() {
           dataCell(row.getCell(1), fmtDate(t.trip_date).toUpperCase(), bg)
           dataCell(row.getCell(2), t.truck_plate, bg, {bold:true})
           dataCell(row.getCell(3), t.container_size, bg)
-          dataCell(row.getCell(4), c0?.van_no||'—', bg)
-          dataCell(row.getCell(5), t.vessel||'—', bg)
+          dataCell(row.getCell(4), t.emr_date?fmtDate(t.emr_date):'—', bg)
+          dataCell(row.getCell(5), t.date_completion?fmtDate(t.date_completion):'—', bg)
           dataCell(row.getCell(6), t.waybill_no||'—', bg)
-          dataCell(row.getCell(7), t.voyage||'—', bg)
-          dataCell(row.getCell(8), t.emr_date?fmtDate(t.emr_date):'—', bg)
-          dataCell(row.getCell(9), t.date_completion?fmtDate(t.date_completion):'—', bg)
-          dataCell(row.getCell(10), t.consignee||'—', bg)
-          dataCell(row.getCell(11), c0?.emr_no||'—', bg)
-          dataCell(row.getCell(12), c0?.bl_no||'—', bg)
-          dataCell(row.getCell(13), cSup, bg, {align:'right', numFmt:'#,##0.00'})
+          dataCell(row.getCell(7), t.vessel||'—', bg)
+          dataCell(row.getCell(8), t.voyage||'—', bg)
+          dataCell(row.getCell(9), t.consignee||'—', bg)
+          dataCell(row.getCell(10), t.consignee_address||'—', bg)
+          dataCell(row.getCell(11), c0?.van_no||'—', bg)
+          dataCell(row.getCell(12), c0?.emr_no||'—', bg)
+          dataCell(row.getCell(13), c0?.bl_no||'—', bg)
+          dataCell(row.getCell(14), cSup, bg, {align:'right', numFmt:'#,##0.00'})
           r++
         } else {
           // SMC
@@ -1713,7 +1735,7 @@ export default function Billing() {
       }
       if (isHauling) {
         const cSup=parseFloat(containers[0]?.supplier_amount??t.supplier_amount)||0
-        return [(<tr key={t.id}><td style={{...tdS,background:bg}}>{fmtDate(t.trip_date).toUpperCase()}</td><td style={{...tdS,background:bg,fontWeight:'bold'}}>{t.truck_plate}</td><td style={{...tdS,background:bg}}>{t.container_size}</td><td style={{...tdS,background:bg}}>{containers[0]?.van_no||'—'}</td><td style={{...tdS,background:bg}}>{t.vessel||'—'}</td><td style={{...tdS,background:bg}}>{t.waybill_no||'—'}</td><td style={{...tdS,background:bg}}>{t.voyage||'—'}</td><td style={{...tdS,background:bg}}>{t.emr_date?fmtDate(t.emr_date):'—'}</td><td style={{...tdS,background:bg}}>{t.date_completion?fmtDate(t.date_completion):'—'}</td><td style={{...tdS,background:bg}}>{t.consignee||'—'}</td><td style={{...tdS,background:bg}}>{containers[0]?.emr_no||'—'}</td><td style={{...tdS,background:bg}}>{containers[0]?.bl_no||'—'}</td><td style={{...tdS,background:bg,textAlign:'right'}}>{fmt(cSup)}</td></tr>)]
+        return [(<tr key={t.id}><td style={{...tdS,background:bg}}>{fmtDate(t.trip_date).toUpperCase()}</td><td style={{...tdS,background:bg,fontWeight:'bold'}}>{t.truck_plate}</td><td style={{...tdS,background:bg}}>{t.container_size}</td><td style={{...tdS,background:bg}}>{t.emr_date?fmtDate(t.emr_date):'—'}</td><td style={{...tdS,background:bg}}>{t.date_completion?fmtDate(t.date_completion):'—'}</td><td style={{...tdS,background:bg}}>{t.waybill_no||'—'}</td><td style={{...tdS,background:bg}}>{t.vessel||'—'}</td><td style={{...tdS,background:bg}}>{t.voyage||'—'}</td><td style={{...tdS,background:bg}}>{t.consignee||'—'}</td><td style={{...tdS,background:bg}}>{t.consignee_address||'—'}</td><td style={{...tdS,background:bg}}>{containers[0]?.van_no||'—'}</td><td style={{...tdS,background:bg}}>{containers[0]?.emr_no||'—'}</td><td style={{...tdS,background:bg}}>{containers[0]?.bl_no||'—'}</td><td style={{...tdS,background:bg,textAlign:'right'}}>{fmt(cSup)}</td></tr>)]
       }
       const is20ft = t.container_size === '20ft' && containers.length > 1
       if (is20ft) {
@@ -1758,7 +1780,7 @@ export default function Billing() {
                     <th style={thS}>TRANSACTION DATE</th><th style={thS}>TRUCK PLATE</th><th style={thS}>CONTAINER SIZE</th>
                     {isSMC && <><th style={thS}>SMCSL WAYBILL NO.</th><th style={thS}>SUPPLIER DOC</th><th style={thS}>TRANSACTION TYPE</th><th style={thS}>PORT OF ORIGIN</th><th style={thS}>PORT OF DESTINATION</th><th style={thS}>SHIPPER ADDRESS</th><th style={thS}>CONSIGNEE ADDRESS</th><th style={thS}>CON VAN NO.</th><th style={thS}>SEAL NO.</th><th style={thS}>COMMODITY</th><th style={thS}>SUPPLIER AMT (VAT INC.)</th><th style={thS}>STRIPPING FEE</th><th style={thS}>TOTAL</th></>}
                     {isHustlingCode && <><th style={thS}>WAYBILL</th><th style={thS}>VESSEL</th><th style={thS}>CTS NO.</th><th style={thS}>VOYAGE</th><th style={thS}>FROM-TO</th><th style={thS}>VAN NO.</th><th style={thS}>STATUS</th><th style={thS}>SUPPLIER AMT</th></>}
-                    {isHaulingCode && <><th style={thS}>VAN NO.</th><th style={thS}>VESSEL</th><th style={thS}>WAYBILL</th><th style={thS}>VOYAGE</th><th style={thS}>EMR DATE</th><th style={thS}>DATE COMPLETION</th><th style={thS}>CONSIGNEE</th><th style={thS}>EMR NO.</th><th style={thS}>BL NO.</th><th style={thS}>SUPPLIER AMT</th></>}
+                    {isHaulingCode && <><th style={thS}>EMR DATE</th><th style={thS}>DATE COMPLETION</th><th style={thS}>WAYBILL</th><th style={thS}>VESSEL</th><th style={thS}>VOYAGE</th><th style={thS}>CONSIGNEE</th><th style={thS}>DELIVERY ADDRESS</th><th style={thS}>VAN NO.</th><th style={thS}>EMR NO.</th><th style={thS}>BL NO.</th><th style={thS}>SUPPLIER AMT</th></>}
                   </tr>
                 </thead>
                 <tbody>{buildRows(codeTrips, code)}</tbody>
@@ -1766,7 +1788,7 @@ export default function Billing() {
                   <tr>
                     {isSMC && <><td colSpan={13} style={{...tdS,fontWeight:'bold',textAlign:'right',background:'#f5f5f5'}}>TOTAL</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeSupTotal)}</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeStripTotal)}</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeTotal)}</td></>}
                     {isHustlingCode && <><td colSpan={10} style={{...tdS,fontWeight:'bold',textAlign:'right',background:'#f5f5f5'}}>TOTAL</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeSupTotal)}</td></>}
-                    {isHaulingCode && <><td colSpan={12} style={{...tdS,fontWeight:'bold',textAlign:'right',background:'#f5f5f5'}}>TOTAL</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeSupTotal)}</td></>}
+                    {isHaulingCode && <><td colSpan={13} style={{...tdS,fontWeight:'bold',textAlign:'right',background:'#f5f5f5'}}>TOTAL</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(codeSupTotal)}</td></>}
                   </tr>
                 </tfoot>
               </table>
@@ -1845,6 +1867,15 @@ export default function Billing() {
       {/* ── GENERATE TAB ── */}
       {tab === 'Generate' && (
         <div className="card tab-content" key={tab}>
+          <LastInvoicePanel
+            truckType={truckType}
+            selectedClient={selectedClient}
+            trucks={trucks}
+            invoices={invoices}
+            allDumpTrips={allDumpTrips}
+            relevantTrips={selectedIds.length ? billedTrips : filteredCandidates}
+            onUse={(no) => setInvoiceNo(no)}
+          />
           <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', letterSpacing: '.06em', marginBottom: 14 }}>DOCUMENT SETUP</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             {['Dump Truck', 'Prime Mover'].map(tt => (
@@ -2139,7 +2170,23 @@ export default function Billing() {
                   {isEditing && (
                     <div style={{ marginTop: 14, paddingTop: 14, borderTop: '0.5px solid var(--border)' }}>
                       <div className="form-grid" style={{ marginBottom: 12 }}>
-                        <div className="form-group"><label className="label">Invoice No.</label><input value={editingInvoice.invoice_no||''} onChange={e => setEditingInvoice(i => ({...i,invoice_no:e.target.value}))} /></div>
+                        <div className="form-group">
+                          <label className="label">Invoice No.</label>
+                          <input value={editingInvoice.invoice_no||''} onChange={e => setEditingInvoice(i => ({...i,invoice_no:e.target.value}))} />
+                          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>This invoice's series: {describeInvoiceSeries(editingInvoice) || '—'}</div>
+                          {(() => {
+                            const editInvoiceNoDupe = editingInvoice.invoice_no
+                              ? invoices.find(i => i.invoice_no === editingInvoice.invoice_no && i.id !== editingInvoice.id)
+                              : null
+                            if (!editInvoiceNoDupe) return null
+                            const where = describeInvoiceSeries(editInvoiceNoDupe)
+                            return (
+                              <div style={{ fontSize: 11, color: 'var(--danger)', background: 'var(--danger-light)', borderRadius: 6, padding: '5px 8px', marginTop: 4 }}>
+                                ⚠ Already used{where ? ` by ${where}` : ''} — put it on that series instead, or check manually before saving.
+                              </div>
+                            )
+                          })()}
+                        </div>
                         <div className="form-group"><label className="label">Invoice Date</label><DatePickerSingle value={editingInvoice.invoice_date||''} onChange={e => setEditingInvoice(i => ({...i,invoice_date:e.target.value}))} /></div>
                         <div className="form-group">
                           <label className="label">Status</label>
@@ -2221,7 +2268,9 @@ export default function Billing() {
                       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
                         <button className="btn-ghost" onClick={() => { setEditingInvoice(null); setInvoiceTrips([]); setEditingRates({}); setRateOverrideGranted(false) }}>Cancel</button>
                         {isAdmin && <button className="btn-danger" onClick={() => { setDeleteInvoiceTarget(editingInvoice); setEditingInvoice(null) }}>Delete Invoice</button>}
-                        <button className="btn-primary" onClick={saveInvoiceUpdate} disabled={savingInvoice}>{savingInvoice?'Saving…':'Save'}</button>
+                        <button className="btn-primary" onClick={saveInvoiceUpdate} disabled={savingInvoice || !!(editingInvoice.invoice_no && invoices.find(i => i.invoice_no === editingInvoice.invoice_no && i.id !== editingInvoice.id))}>
+                          {savingInvoice ? 'Saving…' : (editingInvoice.invoice_no && invoices.find(i => i.invoice_no === editingInvoice.invoice_no && i.id !== editingInvoice.id)) ? 'Resolve duplicate above' : 'Save'}
+                        </button>
                       </div>
                     </div>
                   )}

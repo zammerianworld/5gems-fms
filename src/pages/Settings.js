@@ -22,7 +22,17 @@ function F({ label, value, onChange, placeholder, type = 'text', span }) {
     </div>
   )
 }
-const EMPTY_NEW_TRUCK = { plate: '', truck_code: '', truck_type: 'Dump Truck', make: '', model: '', year: '', notes: '', ownership: 'company', subcon_name: '', start_date: '2024-01-01', end_date: '' }
+const EMPTY_NEW_TRUCK = { plate: '', truck_code: '', invoice_group: '', truck_type: 'Dump Truck', make: '', model: '', year: '', notes: '', ownership: 'company', subcon_name: '', start_date: '2024-01-01', end_date: '' }
+
+// Deterministic color per Invoice Group name, so trucks sharing a group
+// show the same badge color at a glance across the whole fleet list.
+const GROUP_COLORS = ['#2563eb', '#0f6e56', '#7c3aed', '#b45309', '#be185d', '#0891b2', '#4d7c0f']
+const invoiceGroupColor = (name) => {
+  if (!name) return null
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  return GROUP_COLORS[hash % GROUP_COLORS.length]
+}
 export default function Settings() {
   const { toast, showToast, dismissToast } = useToast()
   const { isSuperuser } = useAuth()
@@ -373,6 +383,16 @@ export default function Settings() {
                     <input value={newTruck.subcon_name || ''} onChange={e => setNewTruck(t => ({ ...t, subcon_name: e.target.value }))} placeholder="e.g. Juan dela Cruz" /></div>
                 )}
                 <F label="Truck Code" value={newTruck.truck_code} onChange={v => setNewTruck(t => ({ ...t, truck_code: v }))} placeholder="e.g. DT-01" />
+                <div className="form-group">
+                  <label className="label">Invoice Group</label>
+                  <input list="invoice-group-list" value={newTruck.invoice_group || ''} onChange={e => setNewTruck(t => ({ ...t, invoice_group: e.target.value }))} placeholder="e.g. Group A" />
+                  <datalist id="invoice-group-list">
+                    {[...new Set(trucks.map(t => t.invoice_group).filter(Boolean))].sort().map(g => <option key={g} value={g} />)}
+                  </datalist>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', marginTop: 3, display: 'block' }}>
+                    Trucks sharing one invoice pad/booklet — can span multiple clients.
+                  </span>
+                </div>
                 <F label="Make" value={newTruck.make} onChange={v => setNewTruck(t => ({ ...t, make: v }))} placeholder="e.g. Hino" />
                 <F label="Model" value={newTruck.model} onChange={v => setNewTruck(t => ({ ...t, model: v }))} />
                 <F label="Year" value={newTruck.year} onChange={v => setNewTruck(t => ({ ...t, year: v }))} />
@@ -392,6 +412,9 @@ export default function Settings() {
                     <div key={f} className="form-group"><label className="label">{l}</label>
                       <input value={editingTruck[f]||''} onChange={e => setEditingTruck(t=>({...t,[f]:e.target.value}))} /></div>
                   ))}
+                  <div className="form-group"><label className="label">Invoice Group</label>
+                    <input list="invoice-group-list" value={editingTruck.invoice_group || ''} onChange={e => setEditingTruck(t=>({...t, invoice_group: e.target.value}))} placeholder="e.g. Group A" />
+                  </div>
                   <div className="form-group"><label className="label">Type</label>
                     <select value={editingTruck.truck_type} onChange={e => setEditingTruck(t=>({...t,truck_type:e.target.value}))}>
                       <option value="Dump Truck">Dump Truck</option>
@@ -442,7 +465,7 @@ export default function Settings() {
             {/* Trucks table */}
             <div className="table-wrap">
               <table className="table">
-                <thead><tr><th>Plate</th><th>Code</th><th>Type</th><th>Make / Model</th><th>Year</th><th>Fleet Start</th><th>Fleet End</th><th></th></tr></thead>
+                <thead><tr><th>Plate</th><th>Code</th><th>Invoice Group</th><th>Type</th><th>Make / Model</th><th>Year</th><th>Fleet Start</th><th>Fleet End</th><th></th></tr></thead>
                 <tbody>
                   {trucks.length === 0
                     ? <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--muted)', padding: 24 }}>No trucks yet.</td></tr>
@@ -450,6 +473,7 @@ export default function Settings() {
                       <tr key={t.id}>
                         <td style={{ fontWeight: 500, fontFamily: 'var(--mono)' }}>{t.plate}</td>
                         <td className="muted">{t.truck_code || '—'}</td>
+                        <td>{t.invoice_group ? <span style={{ fontSize: 11, fontWeight: 600, padding: '2px 8px', borderRadius: 10, color: invoiceGroupColor(t.invoice_group), background: invoiceGroupColor(t.invoice_group) + '1a' }}>{t.invoice_group}</span> : <span className="muted">—</span>}</td>
                         <td>
                           <span className={`badge ${t.truck_type === 'Dump Truck' ? 'badge-dump' : 'badge-prime'}`}>{t.truck_type}</span>
                           {t.ownership === 'subcon' && <span className="badge" style={{ fontSize: 9, background: 'rgba(139,92,246,0.12)', color: '#6d28d9', marginLeft: 4 }}>🤝 Sub-con{t.subcon_name ? ` · ${t.subcon_name}` : ''}</span>}
