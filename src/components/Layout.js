@@ -71,6 +71,18 @@ export default function Layout({ children }) {
       })
   }, [])
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem('theme') === 'dark')
+  // Per-group nav collapse — remembered per device so a staff member's
+  // preferred sidebar layout persists across sessions.
+  const [collapsedGroups, setCollapsedGroups] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('ds_nav_collapsed') || '[]')) }
+    catch { return new Set() }
+  })
+  const toggleGroup = (key) => setCollapsedGroups(prev => {
+    const next = new Set(prev)
+    if (next.has(key)) next.delete(key); else next.add(key)
+    localStorage.setItem('ds_nav_collapsed', JSON.stringify([...next]))
+    return next
+  })
 
   useEffect(() => {
     document.body.classList.toggle('dark', darkMode)
@@ -165,51 +177,61 @@ export default function Layout({ children }) {
         {/* Navigation */}
         <nav style={{ flex: 1, padding: '10px 8px', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
           {/* Operations — all users */}
-          <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '8px 8px 4px' }}>{isViewer ? 'My Account' : 'Operations'}</div>
-          {isViewer ? (
+          <NavGroupHeader label={isViewer ? 'My Account' : 'Operations'} groupKey="operations" collapsed={collapsedGroups.has('operations')} onToggle={toggleGroup}
+            style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '8px 8px 4px' }} />
+          {!collapsedGroups.has('operations') && (isViewer ? (
             <NavItem item={{ path: '/my-trips', label: 'My Trips', icon: '🚛' }} active={location.pathname === '/my-trips'} onNav={() => setSidebarOpen(false)} />
           ) : (
             NAV_OPERATIONS.filter(item => (!item.adminOnly || isAdmin) && hasModule(item.moduleKey || 'dashboard')).map(item => (
               <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
             ))
-          )}
+          ))}
 
           {/* Finance — admin + superuser */}
           {isAdmin && (<>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }}>Finance</div>
-            {NAV_FINANCE.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
+            <NavGroupHeader label="Finance" groupKey="finance" collapsed={collapsedGroups.has('finance')} onToggle={toggleGroup}
+              style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }} />
+            {!collapsedGroups.has('finance') && NAV_FINANCE.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
               <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
             ))}
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }}>Reports</div>
-            {NAV_REPORTS.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
+            <NavGroupHeader label="Reports" groupKey="reports" collapsed={collapsedGroups.has('reports')} onToggle={toggleGroup}
+              style={{ fontSize: 9, color: 'rgba(255,255,255,0.3)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px' }} />
+            {!collapsedGroups.has('reports') && NAV_REPORTS.filter(item => isAdmin && hasModule(item.moduleKey || 'reports')).map(item => (
               <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
             ))}
           </>)}
 
           {/* My Account for staff — shown in simple system area */}
           {!isAdmin && <>
-            <div style={{ flex: 1 }} />
+            <div style={{ flex: collapsedGroups.has('operations') ? '0 0 auto' : 1 }} />
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px', borderTop: '0.5px solid rgba(255,255,255,0.06)', marginTop: 8 }}>Account</div>
             <NavItem item={{ path: '/my-account', label: 'My Account', icon: '👤' }} active={location.pathname === '/my-account'} onNav={() => setSidebarOpen(false)} />
           </>}
 
-          {/* Spacer to push system to bottom */}
-          <div style={{ flex: 1 }} />
+          {/* Spacer to push system to bottom — but only while a group above
+              is still expanded. If everything above is collapsed, growing
+              this spacer would strand System's header alone at the very
+              bottom instead of sitting right under the other (collapsed)
+              headers, so it collapses down to nothing too. */}
+          <div style={{ flex: (collapsedGroups.has('operations') && (!isAdmin || (collapsedGroups.has('finance') && collapsedGroups.has('reports')))) ? '0 0 auto' : 1 }} />
 
           {/* System — bottom, admin + superuser */}
           {isAdmin && (<>
-            <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px', borderTop: '0.5px solid rgba(255,255,255,0.06)', marginTop: 8 }}>System</div>
-            <NavItem item={{ path: '/my-account', label: 'My Account', icon: '👤' }} active={location.pathname === '/my-account'} onNav={() => setSidebarOpen(false)} />
-            {NAV_SYSTEM.filter(item => {
-              if (item.path === '/users') return isAdmin
-              if (item.path === '/logs') return isSuperuser
-              if (item.path === '/activity') return isAdmin || isSuperuser
-              return true
-            }).filter(item => !item.superuserOnly || isSuperuser)
-              .filter(item => !item.moduleKey || hasModule(item.moduleKey))
-              .map(item => (
-              <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
-            ))}
+            <NavGroupHeader label="System" groupKey="system" collapsed={collapsedGroups.has('system')} onToggle={toggleGroup}
+              style={{ fontSize: 9, color: 'rgba(255,255,255,0.2)', letterSpacing: '.08em', textTransform: 'uppercase', padding: '14px 8px 4px', borderTop: '0.5px solid rgba(255,255,255,0.06)', marginTop: 8 }} />
+            {!collapsedGroups.has('system') && <>
+              <NavItem item={{ path: '/my-account', label: 'My Account', icon: '👤' }} active={location.pathname === '/my-account'} onNav={() => setSidebarOpen(false)} />
+              {NAV_SYSTEM.filter(item => {
+                if (item.path === '/users') return isAdmin
+                if (item.path === '/logs') return isSuperuser
+                if (item.path === '/activity') return isAdmin || isSuperuser
+                return true
+              }).filter(item => !item.superuserOnly || isSuperuser)
+                .filter(item => !item.moduleKey || hasModule(item.moduleKey))
+                .map(item => (
+                <NavItem key={item.path} item={item} active={location.pathname === item.path} onNav={() => setSidebarOpen(false)} />
+              ))}
+            </>}
           </>)}
 
 
@@ -384,6 +406,17 @@ export default function Layout({ children }) {
         </div>
       )}
 
+    </div>
+  )
+}
+
+// Clickable group header with a collapse chevron — same visual weight as
+// the old plain label divs, just interactive now.
+function NavGroupHeader({ label, groupKey, collapsed, onToggle, style }) {
+  return (
+    <div onClick={() => onToggle(groupKey)} style={{ ...style, display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer', userSelect: 'none' }}>
+      <span style={{ fontSize: 8, display: 'inline-block', transform: collapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 0.15s' }}>▾</span>
+      <span>{label}</span>
     </div>
   )
 }

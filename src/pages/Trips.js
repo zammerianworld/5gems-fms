@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import DatePickerSingle from '../components/DatePickerSingle'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES, ISLAND_ZONES,
@@ -102,6 +102,84 @@ function DL({ label, value, onChange, req, list, listId, placeholder, type = 'te
   )
 }
 
+// SearchableInput — replaces the browser's native <input list>/<datalist>
+// combo (which renders inconsistently across browsers — Chrome, Firefox,
+// and Safari all show suggestions differently, and some don't filter as
+// you type at all) with a custom-styled dropdown that looks the same
+// everywhere. Still allows typing a brand new value not in the list —
+// this isn't a closed set, it's a "learn as you go" suggestion list.
+// Full list stays browsable (nothing hidden behind typing); rows are kept
+// tight so more fit on screen per scroll, and the box widens instead of
+// wrapping/truncating long entries.
+//
+// `list` is expected pre-ranked by rankByFrequency (most-used first) so
+// the codes staff actually pick surface near the top instead of wherever
+// they happen to fall alphabetically.
+function rankByFrequency(values) {
+  const counts = {}
+  values.forEach(v => { if (v) counts[v] = (counts[v] || 0) + 1 })
+  return Object.keys(counts).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b))
+}
+
+function SearchableInput({ label, value, onChange, req, list, placeholder }) {
+  const [open, setOpen] = useState(false)
+  const [activeIdx, setActiveIdx] = useState(-1)
+  const wrapRef = useRef(null)
+
+  useEffect(() => {
+    const onClickOutside = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  const q = (value || '').toLowerCase().trim()
+  const filtered = (list || []).filter(v => v.toLowerCase().includes(q))
+
+  useEffect(() => { setActiveIdx(-1) }, [value, open])
+
+  const select = (v) => { onChange(v); setOpen(false); setActiveIdx(-1) }
+
+  const onKeyDown = (e) => {
+    if (!open || filtered.length === 0) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => (i + 1) % filtered.length) }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActiveIdx(i => (i - 1 + filtered.length) % filtered.length) }
+    else if (e.key === 'Enter') { if (activeIdx >= 0) { e.preventDefault(); select(filtered[activeIdx]) } }
+    else if (e.key === 'Escape') { setOpen(false); setActiveIdx(-1) }
+  }
+
+  return (
+    <div className="form-group" ref={wrapRef} style={{ position: 'relative' }}>
+      <label className={`label ${req ? 'required' : ''}`}>{label}</label>
+      <input
+        type="text" value={value || ''} placeholder={placeholder || ''}
+        onChange={e => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={onKeyDown}
+      />
+      {open && filtered.length > 0 && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, zIndex: 20, marginTop: 2,
+          width: 'max-content', minWidth: '100%', maxWidth: 320,
+          background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 'var(--radius-sm)',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)', maxHeight: 220, overflowY: 'auto',
+        }}>
+          {filtered.map((v, i) => (
+            <div key={i}
+              onClick={() => select(v)}
+              onMouseEnter={() => setActiveIdx(i)}
+              style={{
+                padding: '2px 12px', fontSize: 12, lineHeight: '16px', cursor: 'pointer', color: 'var(--text)',
+                background: activeIdx === i ? 'var(--accent-light)' : 'transparent',
+                whiteSpace: 'nowrap',
+              }}
+            >{v}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Trips() {
   const { profile } = useAuth()
   const { toast, showToast, dismissToast } = useToast()
@@ -174,8 +252,8 @@ export default function Trips() {
     ])
     if (dt.data) {
       setDumpTrips(dt.data)
-      setSavedOriginCodes([...new Set(dt.data.map(t => t.island_origin_code).filter(Boolean))].sort())
-      setSavedDestCodes([...new Set(dt.data.map(t => t.island_dest_code).filter(Boolean))].sort())
+      setSavedOriginCodes(rankByFrequency(dt.data.map(t => t.island_origin_code)))
+      setSavedDestCodes(rankByFrequency(dt.data.map(t => t.island_dest_code)))
     }
     if (pt.data) setPmTrips(pt.data)
     if (tr.data) setTrucks(tr.data)
@@ -243,8 +321,12 @@ export default function Trips() {
   const isSubconTruck = (plate) => trucks.find(t => t.plate === plate)?.ownership === 'subcon'
   // saveRate removed — rates derived from trip history instead
   const saveIslandCodes = (origin, dest) => {
-    if (origin && !savedOriginCodes.includes(origin)) setSavedOriginCodes(p => [...p, origin].sort())
-    if (dest && !savedDestCodes.includes(dest)) setSavedDestCodes(p => [...p, dest].sort())
+    // New codes go to the front — they'll settle into frequency order on
+    // the next page load (rankByFrequency), but in the meantime a code
+    // just typed is more likely to be picked again than an alpha sort
+    // would suggest.
+    if (origin && !savedOriginCodes.includes(origin)) setSavedOriginCodes(p => [origin, ...p])
+    if (dest && !savedDestCodes.includes(dest)) setSavedDestCodes(p => [dest, ...p])
   }
 
   // When trip code or container size changes, rebuild containers array
@@ -454,9 +536,9 @@ export default function Trips() {
   const handleEditDump = (t) => {
     // Ensure the trip's own codes are in the datalist options
     if (t.island_origin_code && !savedOriginCodes.includes(t.island_origin_code))
-      setSavedOriginCodes(p => [...p, t.island_origin_code].sort())
+      setSavedOriginCodes(p => [t.island_origin_code, ...p])
     if (t.island_dest_code && !savedDestCodes.includes(t.island_dest_code))
-      setSavedDestCodes(p => [...p, t.island_dest_code].sort())
+      setSavedDestCodes(p => [t.island_dest_code, ...p])
     setDumpForm({
       ...t,
       weight_tons: String(t.weight_tons || ''),
@@ -836,11 +918,11 @@ export default function Trips() {
           <p className="section-label">Island Zone & Codes</p>
           <div className="form-grid" style={{ marginBottom: 16 }}>
             <SS label="Island Zone (Origin)" value={dumpForm.island_zone_origin || 'MIN'} onChange={v => setDumpForm(f => ({ ...f, island_zone_origin: v }))} options={ISLAND_ZONES} placeholder="Select zone" />
-            <DL label="Island Origin Code" value={dumpForm.island_origin_code} onChange={v => setDumpForm(f => ({ ...f, island_origin_code: v }))}
-              list={savedOriginCodes} listId="origin-codes" placeholder="e.g. DAVAO EXTERNAL VINASHIP (GOLD)" />
+            <SearchableInput label="Island Origin Code" value={dumpForm.island_origin_code} onChange={v => setDumpForm(f => ({ ...f, island_origin_code: v }))}
+              list={savedOriginCodes} placeholder="e.g. DAVAO EXTERNAL VINASHIP (GOLD)" />
             <SS label="Island Zone (Destination)" value={dumpForm.island_zone_dest || 'MIN'} onChange={v => setDumpForm(f => ({ ...f, island_zone_dest: v }))} options={ISLAND_ZONES} placeholder="Select zone" />
-            <DL label="Island Destination Code" value={dumpForm.island_dest_code} onChange={v => setDumpForm(f => ({ ...f, island_dest_code: v }))}
-              list={savedDestCodes} listId="dest-codes" placeholder="e.g. BMEG DAVAO FEED PLANT" />
+            <SearchableInput label="Island Destination Code" value={dumpForm.island_dest_code} onChange={v => setDumpForm(f => ({ ...f, island_dest_code: v }))}
+              list={savedDestCodes} placeholder="e.g. BMEG DAVAO FEED PLANT" />
           </div>
 
           <p className="section-label">Weight & Rate</p>

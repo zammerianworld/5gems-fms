@@ -99,6 +99,7 @@ export default function CheckVouchers() {
   const [pdcSeriesAmount, setPdcSeriesAmount] = useState('')
   const [confirmModal, setConfirmModal] = useState(null)
   const [search, setSearch] = useState('')
+  const [pdcSearch, setPdcSearch] = useState('')
   const [previewVoucher, setPreviewVoucher] = useState(null)
   const [pdfOrientation, setPdfOrientation] = useState('portrait')
 
@@ -594,8 +595,12 @@ export default function CheckVouchers() {
 
   const filtered = vouchers.filter(v => {
     if (filterStatus && v.status !== filterStatus) return false
-    if (search && !v.payee?.toLowerCase().includes(search.toLowerCase()) &&
-        !v.voucher_no?.toLowerCase().includes(search.toLowerCase())) return false
+    if (search) {
+      const q = search.toLowerCase()
+      const matchesCheckNo = v.check_no?.toLowerCase().includes(q) ||
+        (Array.isArray(v.check_rows) && v.check_rows.some(r => r.check_no?.toLowerCase().includes(q)))
+      if (!v.payee?.toLowerCase().includes(q) && !v.voucher_no?.toLowerCase().includes(q) && !matchesCheckNo) return false
+    }
     return true
   })
 
@@ -771,7 +776,7 @@ export default function CheckVouchers() {
 
           {/* Filters */}
           <div className="filter-bar" style={{ marginBottom: 12 }}>
-            <input placeholder="Search payee or voucher no…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 2 }} />
+            <input placeholder="Search payee, voucher no, or check no…" value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 2 }} />
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 'auto' }}>
               <option value="">All status</option>
               {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
@@ -1045,6 +1050,8 @@ export default function CheckVouchers() {
         <div className="tab-content" key={tab}>
           {/* Header row */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+            <input placeholder="Search payee, purpose, or check no…" value={pdcSearch} onChange={e => setPdcSearch(e.target.value)} style={{ flex: 1, minWidth: 220 }} />
+            {pdcSearch && <button className="btn-ghost btn-sm" onClick={() => setPdcSearch('')}>Clear</button>}
             <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
               <button onClick={() => { setPdcGroupMode(false); setEditingPdc(null); setPdcForm({ payee: '', purpose: '', bank: '', check_no: '', check_date: new Date().toISOString().slice(0,10), amount: '', status: 'Pending', group_label: '', notes: '' }); setShowPdcForm(true) }}
                 style={{ padding: '7px 14px', background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
@@ -1073,6 +1080,12 @@ export default function CheckVouchers() {
                 else effectiveStatus = 'Upcoming'
               }
               return { ...c, effectiveStatus, checkDate }
+            }).filter(c => {
+              if (!pdcSearch) return true
+              const q = pdcSearch.toLowerCase()
+              return c.payee?.toLowerCase().includes(q) || c.check_no?.toLowerCase().includes(q) ||
+                c.purpose?.toLowerCase().includes(q) || c.bank?.toLowerCase().includes(q) ||
+                c.group_label?.toLowerCase().includes(q)
             })
 
             // Group by month
@@ -1144,8 +1157,8 @@ export default function CheckVouchers() {
                 {months.length === 0 ? (
                   <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--muted)' }}>
                     <div style={{ fontSize: 36, marginBottom: 12 }}>📋</div>
-                    <div style={{ fontWeight: 600 }}>No PDC checks yet</div>
-                    <div style={{ fontSize: 13, marginTop: 6 }}>Add a single check or a PDC series above.</div>
+                    <div style={{ fontWeight: 600 }}>{pdcSearch ? 'No matching PDC checks' : 'No PDC checks yet'}</div>
+                    <div style={{ fontSize: 13, marginTop: 6 }}>{pdcSearch ? 'Try a different payee, purpose, or check number.' : 'Add a single check or a PDC series above.'}</div>
                   </div>
                 ) : months.map(monthKey => {
                   const checks = monthMap[monthKey]
@@ -1160,7 +1173,7 @@ export default function CheckVouchers() {
                   const monthBorderColor = hasOverdue ? 'var(--danger)' : hasDueToday ? 'var(--warning)' : allCleared ? 'var(--success)' : isCurrentMonth ? 'var(--accent)' : 'var(--border)'
                   const monthBg = hasOverdue ? '#fff5f5' : hasDueToday ? 'var(--warning-light)' : allCleared ? 'var(--success-light)' : isCurrentMonth ? 'rgba(255,30,0,0.04)' : 'var(--surface)'
 
-                  const isCollapsed = collapsedMonths.has(monthKey)
+                  const isCollapsed = pdcSearch ? false : collapsedMonths.has(monthKey)
                   return (
                     <div key={monthKey} style={{ border: `1px solid ${monthBorderColor}`, borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
                       {/* Month header */}
