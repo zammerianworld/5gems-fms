@@ -50,6 +50,96 @@ export const DUMP_TRUCK_ROUTES = [
 ]
 
 export const PM_TRIP_CODES = ['Hustling PSACC', 'Hauling PSACC', 'SMC']
+
+// ── Trip codes: built-in + configurable (Settings → Trip Codes) ────────────
+// The 3 built-in codes above keep their hardcoded behavior everywhere. Extra
+// codes live in the `trip_codes` table (item 6 migration) and are cached here
+// once per session (loaded by ProtectedRoute before any page renders), so
+// every page — including plain calculation functions — can read them
+// synchronously.
+//
+// VAT rule: built-in codes are FIXED here in code (SMC = VAT-inclusive,
+// everything else built-in = VAT-exclusive), regardless of what the table
+// says, so no database edit can ever change existing SMC/PSACC math. Only
+// non-built-in codes read `vat_inclusive` from the table. If the table
+// can't load, the cache is empty and behavior is exactly the old
+// `trip_code === 'SMC'` rule.
+let tripCodeCache = []
+let tripCodesPromise = null
+let tripCodesLoaded = false
+const isBuiltinCode = (code) => PM_TRIP_CODES.includes(code)
+export const setTripCodeCache = (rows) => { tripCodeCache = Array.isArray(rows) ? rows : [] }
+export const areTripCodesLoaded = () => tripCodesLoaded
+// Config rows for non-built-in codes only (built-in rows are just markers).
+// Also skip rows flagged is_builtin, so a seeded built-in this app doesn't
+// have (5 Gems has no Side Trip) can never show up as a configurable code.
+export const getCustomPmCodeDefs = () => tripCodeCache.filter(c => !c.is_builtin && !isBuiltinCode(c.code))
+export const getCustomPmCodeDef = (code) => (isBuiltinCode(code) ? null : tripCodeCache.find(c => c.code === code && !c.is_builtin) || null)
+// All codes that may appear on existing trips (for reports / SOA / filters).
+export const getAllPmCodes = () => [...PM_TRIP_CODES, ...getCustomPmCodeDefs().map(c => c.code)]
+// Codes offered when entering a new trip (inactive custom codes hidden).
+export const getActivePmCodes = () => [...PM_TRIP_CODES, ...getCustomPmCodeDefs().filter(c => c.active !== false).map(c => c.code)]
+// THE single VAT rule for PM trips. Replaces every `trip_code === 'SMC'` VAT check.
+export const isVatInclusiveCode = (code) => code === 'SMC' || !!getCustomPmCodeDef(code)?.vat_inclusive
+// Net-of-VAT sales for one PM trip (supplier amount + stripping fee).
+export const pmTripNet = (t) => {
+  const raw = (t.supplier_amount || 0) + (t.stripping_fee || 0)
+  return isVatInclusiveCode(t.trip_code) ? raw / 1.12 : raw
+}
+// Standard inputs a configured trip code can switch on. These are real
+// trips_pm columns ('trip' level) or keys inside each container object
+// ('container' level) — the same storage the built-in codes already use, so
+// search, SOA and duplicate checks understand them without special-casing.
+// A configured code's `fields` list mixes these with its own custom inputs:
+//   { kind: 'std', key: 'waybill_no', required, show_on_soa }
+//   { kind: 'custom', key: 'f_ab12', label, type, options, required, show_on_soa }
+export const PM_STD_FIELDS = [
+  { key: 'waybill_no', label: 'Waybill No.', level: 'trip', type: 'text' },
+  { key: 'vessel', label: 'Vessel', level: 'trip', type: 'text' },
+  { key: 'voyage', label: 'Voyage', level: 'trip', type: 'text' },
+  { key: 'consignee', label: 'Consignee', level: 'trip', type: 'text' },
+  { key: 'consignee_address', label: 'Delivery Address', level: 'trip', type: 'text' },
+  { key: 'shipper_address', label: 'Shipper Address', level: 'trip', type: 'text' },
+  { key: 'port_origin', label: 'Port of Origin', level: 'trip', type: 'text' },
+  { key: 'port_destination', label: 'Port of Destination', level: 'trip', type: 'text' },
+  { key: 'emr_date', label: 'EMR Date', level: 'trip', type: 'date' },
+  { key: 'date_completion', label: 'Date of Completion', level: 'trip', type: 'date' },
+  { key: 'van_no', label: 'Van No.', level: 'container', type: 'text' },
+  { key: 'seal_no', label: 'Seal No.', level: 'container', type: 'text' },
+  { key: 'commodity', label: 'Commodity', level: 'container', type: 'text' },
+  { key: 'bl_no', label: 'BL No.', level: 'container', type: 'text' },
+  { key: 'emr_no', label: 'EMR No.', level: 'container', type: 'text' },
+  { key: 'cts_no', label: 'CTS No.', level: 'container', type: 'text' },
+  { key: 'from_to', label: 'From–To', level: 'container', type: 'text' },
+  { key: 'stripping_fee', label: 'Stripping Fee', level: 'container', type: 'money' },
+]
+export const getStdField = (key) => PM_STD_FIELDS.find(f => f.key === key) || null
+// Resolves a configured code's inputs into display-ready descriptors:
+// { key, label, type, options, level ('trip' | 'container'), kind, required, show_on_soa }
+// Custom inputs are always trip-level and stored in trips_pm.custom_data.
+export const resolveCodeFields = (def) => (def?.fields || []).map(f => {
+  if (f.kind === 'std') {
+    const s = getStdField(f.key)
+    return s ? { ...s, kind: 'std', required: !!f.required, show_on_soa: !!f.show_on_soa } : null
+  }
+  return { key: f.key, label: f.label, type: f.type || 'text', options: f.options || [], level: 'trip', kind: 'custom', required: !!f.required, show_on_soa: !!f.show_on_soa }
+}).filter(Boolean)
+// Reads a resolved field's value from a trip (or one of its containers).
+export const codeFieldValue = (field, trip, container) => {
+  if (field.kind === 'custom') return trip?.custom_data?.[field.key]
+  return field.level === 'container' ? container?.[field.key] : trip?.[field.key]
+}
+
+export async function reloadTripCodes() {
+  const { data, error } = await supabase.from('trip_codes').select('*').order('code')
+  if (!error && data) setTripCodeCache(data)
+  tripCodesLoaded = true
+  return !error
+}
+export function ensureTripCodesLoaded() {
+  if (!tripCodesPromise) tripCodesPromise = reloadTripCodes().catch(() => { tripCodesLoaded = true; return false })
+  return tripCodesPromise
+}
 export const ISLAND_ZONES = ['MIN', 'VIS', 'LUZ']
 export const ISLAND_DEST_CODES = ['MIN Davao Plant', 'CDO Plant', 'Legazpi Plant', 'Other']
 export const CONTAINER_SIZES = ['40ft', '20ft']

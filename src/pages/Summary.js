@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fmt, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
 import { useToast, Toast } from '../components/Toast'
@@ -11,7 +11,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 // Other trip codes (Hustling/Hauling PSACC) already store net amounts.
 const pmSaleValue = (t) => {
   const raw = (t.supplier_amount||0)+(t.stripping_fee||0)
-  return t.trip_code === 'SMC' ? raw / 1.12 : raw
+  return isVatInclusiveCode(t.trip_code) ? raw / 1.12 : raw
 }
 
 export default function Summary() {

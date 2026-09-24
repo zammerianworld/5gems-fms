@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import DatePickerSingle from '../components/DatePickerSingle'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES, ISLAND_ZONES,
-  CONTAINER_SIZES, fmt, fmtDate, calcQtyDest, logAudit, fetchAllRows } from '../lib/supabase'
+  CONTAINER_SIZES, fmt, fmtDate, calcQtyDest, logAudit, fetchAllRows,
+  isVatInclusiveCode, getActivePmCodes, getCustomPmCodeDef, resolveCodeFields, codeFieldValue } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -48,6 +49,7 @@ const EMPTY_PM = {
   // driver_id (FK to drivers, for payroll trip-sweep) is a separate concept
   // from driver_name above (free-typed, shown on the van SOA) — both coexist.
   driver_id: '',
+  custom_data: {},
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -354,7 +356,7 @@ export default function Trips() {
   const handlePMTripCodeChange = (code) => {
     const count = pmForm.container_size === '20ft' ? (pmForm.num_20ft || 1) : 1
     const containers = rebuildContainers(code, pmForm.container_size, [], count)
-    const autoClient = PM_CLIENT_MAP[code] || ''
+    const autoClient = PM_CLIENT_MAP[code] || getCustomPmCodeDef(code)?.client || ''
     setPmForm(f => ({ ...f, trip_code: code, containers, client: autoClient || f.client }))
   }
 
@@ -413,6 +415,18 @@ export default function Trips() {
     proceedSaveDump()
   }
 
+  // Inputs for a configured (non-built-in) trip code — Settings → Trip Codes.
+  // Built-in codes keep their hardcoded sections and never have these.
+  const pmCodeDef = getCustomPmCodeDef(pmForm.trip_code)
+  const pmCodeFields = resolveCodeFields(pmCodeDef)
+  const pmCodeTripFields = pmCodeFields.filter(f => f.level === 'trip')
+  const pmCodeContainerFields = pmCodeFields.filter(f => f.level === 'container' && f.key !== 'stripping_fee')
+  const pmCodeHasStripping = pmCodeFields.some(f => f.key === 'stripping_fee')
+  const setPmCustom = (key, value) => setPmForm(f => ({ ...f, custom_data: { ...(f.custom_data || {}), [key]: value } }))
+  const setPmCodeTripField = (field, value) => field.kind === 'custom'
+    ? setPmCustom(field.key, value)
+    : setPmForm(f => ({ ...f, [field.key]: value }))
+
   const submitPM = async () => {
     const f = pmForm
     if (!f.trip_date || !f.truck_plate || !f.trip_code || !f.client) {
@@ -426,11 +440,31 @@ export default function Trips() {
       if (!hasAmounts) { showToast('All containers must have a supplier amount greater than ₱0.', 'error'); return }
     }
 
+    const isBlank = v => !String(v ?? '').trim()
+    const missing = pmCodeFields.filter(cf => cf.required && (cf.level === 'container'
+      ? (f.containers || []).some(c => isBlank(codeFieldValue(cf, f, c)))
+      : isBlank(codeFieldValue(cf, f))))
+    if (missing.length) {
+      showToast(`${f.trip_code} requires: ${missing.map(cf => cf.label).join(', ')}.`, 'error'); return
+    }
+
+    // Keep only values for the selected code's current custom inputs, plus
+    // any values the trip already had saved (so removing an input in
+    // Settings, or switching code while editing, never erases past data).
+    // Values typed for a code that was picked and then changed away are dropped.
+    const origCustom = editId ? (pmTrips.find(t => t.id === editId)?.custom_data || {}) : {}
+    const allowedKeys = new Set(pmCodeFields.filter(cf => cf.kind === 'custom').map(cf => cf.key))
+    const cleanedCustom = {}
+    Object.entries(f.custom_data || {}).forEach(([k, v]) => {
+      if (allowedKeys.has(k) || k in origCustom) cleanedCustom[k] = typeof v === 'string' ? v.trim() : v
+    })
+
     const proceedSavePM = async () => {
       setSaving(true)
+      const { custom_data: _cd, ...fNoCustom } = f
       const payload = isVanStyle
         ? {
-            ...f,
+            ...fNoCustom, ...(Object.keys(cleanedCustom).length ? { custom_data: cleanedCustom } : {}),
             supplier_amount: parseFloat(f.rate) || 0,
             stripping_fee: 0,
             emr_date: null,
@@ -439,7 +473,7 @@ export default function Trips() {
             created_by: profile?.id,
           }
         : {
-            ...f,
+            ...fNoCustom, ...(Object.keys(cleanedCustom).length ? { custom_data: cleanedCustom } : {}),
             supplier_amount: (f.containers || []).reduce((s, c) => s + (parseFloat(c.supplier_amount) || 0), 0),
             stripping_fee: (f.containers || []).reduce((s, c) => s + (parseFloat(c.stripping_fee) || 0), 0),
             emr_date: f.emr_date || null,
@@ -458,7 +492,7 @@ export default function Trips() {
           const { data: invTrips } = await supabase.from('trips_pm').select('supplier_amount,stripping_fee,trip_code').is('deleted_at', null).eq('invoice_id', origTrip.invoice_id)
           if (invTrips) {
             const rawNet = invTrips.reduce((s,t) => s+(parseFloat(t.supplier_amount)||0)+(parseFloat(t.stripping_fee)||0), 0)
-            const newNet = invTrips.length > 0 && invTrips.every(t => t.trip_code === 'SMC') ? rawNet / 1.12 : rawNet
+            const newNet = invTrips.length > 0 && invTrips.every(t => isVatInclusiveCode(t.trip_code)) ? rawNet / 1.12 : rawNet
             await supabase.from('invoices').update({ total_sales_net: newNet }).eq('id', origTrip.invoice_id)
           }
         }
@@ -562,6 +596,7 @@ export default function Trips() {
       date_completion: t.date_completion || '',
       num_20ft: numVans,
       containers: t.containers?.length ? t.containers : rebuildContainers(t.trip_code, t.container_size, [], numVans),
+      custom_data: t.custom_data || {},
     })
     setEditId(t.id); setTruckType('Prime Mover'); setStep('form'); setShowForm(true)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -653,8 +688,13 @@ export default function Trips() {
   dumpTrips.forEach(t => { const r = t.rate_per_ton; if (r && r > 0) dumpRateCounts[r] = (dumpRateCounts[r]||0)+1 })
   const dumpRates = Object.keys(dumpRateCounts).sort((a,b) => dumpRateCounts[b]-dumpRateCounts[a])
 
+  // PM rate suggestions narrow to the selected client's own past rates, so a
+  // new client's rates don't get buried under PSACC/SMC history. Falls back
+  // to all PM history when the client has none yet (brand-new client).
   const pmRateCounts = {}
-  pmTrips.forEach(t => { const r = t.supplier_amount; if (r && r > 0) pmRateCounts[r] = (pmRateCounts[r]||0)+1 })
+  const pmClientHistory = pmForm.client ? pmTrips.filter(t => t.client === pmForm.client) : []
+  ;(pmClientHistory.length ? pmClientHistory : pmTrips)
+    .forEach(t => { const r = t.supplier_amount; if (r && r > 0) pmRateCounts[r] = (pmRateCounts[r]||0)+1 })
   const pmRates = Object.keys(pmRateCounts).sort((a,b) => pmRateCounts[b]-pmRateCounts[a])
   const dumpTrucks = trucksOfType('Dump Truck')
   const pmTrucks = trucksOfType('Prime Mover')
@@ -667,6 +707,7 @@ export default function Trips() {
     return (
       <div key={idx} style={{ background: 'var(--bg)', borderRadius: 8, padding: '14px', marginBottom: 10, border: '0.5px solid var(--border)' }}>
         <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', marginBottom: 10 }}>{label}</div>
+        {!pmCodeDef && (
         <div className="form-grid" style={code === 'SMC' ? { gridTemplateColumns: 'repeat(3, 1fr)' } : {}}>
           <div className="form-group">
             <label className="label">{code === 'SMC' ? 'Con Van No.' : 'Van No.'}</label>
@@ -731,21 +772,30 @@ export default function Trips() {
             </div>
           </>}
         </div>
+        )}
+        {pmCodeDef && pmCodeContainerFields.length > 0 && (
+          <div className="form-grid">
+            {pmCodeContainerFields.map(cf => (
+              <SF key={cf.key} label={cf.label} value={c[cf.key] || ''} onChange={v => updateContainer(idx, cf.key, v)} req={cf.required} />
+            ))}
+          </div>
+        )}
         {/* Per-container amounts — separate row */}
         <div className="form-grid" style={{ marginTop: 10 }}>
           <div className="form-group">
             <label className="label required">
-              Supplier Amount (₱)
+              {pmCodeDef ? 'Amount (₱)' : 'Supplier Amount (₱)'}
               {code === 'SMC' && <span style={{ marginLeft: 6, fontSize: 9, background: 'rgba(255,30,0,0.12)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4, fontWeight: 400 }}>VAT Inclusive (SMC)</span>}
+              {pmCodeDef && <span style={{ marginLeft: 6, fontSize: 9, background: 'rgba(255,30,0,0.12)', color: 'var(--accent)', padding: '1px 5px', borderRadius: 4, fontWeight: 400 }}>{pmCodeDef.vat_inclusive ? 'VAT Inclusive' : 'VAT Exclusive'}</span>}
             </label>
             <input type="number" step="0.01" value={c.supplier_amount || ''} onChange={e => updateContainer(idx, 'supplier_amount', e.target.value)} placeholder="0.00" />
-            {code === 'SMC' && c.supplier_amount > 0 && (
+            {isVatInclusiveCode(code) && c.supplier_amount > 0 && (
               <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 3 }}>
                 VATABLE: ₱{((parseFloat(c.supplier_amount)||0)/1.12).toLocaleString('en-PH',{minimumFractionDigits:2})} · VAT 12%: ₱{((parseFloat(c.supplier_amount)||0)/1.12*0.12).toLocaleString('en-PH',{minimumFractionDigits:2})}
               </div>
             )}
           </div>
-          {code === 'SMC' && (
+          {(code === 'SMC' || pmCodeHasStripping) && (
             <div className="form-group">
               <label className="label">Stripping Fee (₱)</label>
               <input type="number" step="0.01" value={c.stripping_fee || ''} onChange={e => updateContainer(idx, 'stripping_fee', e.target.value)} placeholder="0.00" />
@@ -790,6 +840,13 @@ export default function Trips() {
       setEditId(trip.id); setTruckType('Prime Mover'); setStep('form'); setShowForm(true)
     }
   }
+
+  // One-line summary of a PM trip's custom input values (configured trip
+  // codes), labelled with the code's current input names. Empty values skipped.
+  const pmCustomSummary = (t) => resolveCodeFields(getCustomPmCodeDef(t.trip_code))
+    .filter(cf => cf.kind === 'custom')
+    .map(cf => { const v = t.custom_data?.[cf.key]; return v === undefined || v === null || String(v).trim() === '' ? null : `${cf.label}: ${cf.type === 'date' ? fmtDate(v) : v}` })
+    .filter(Boolean).join(' · ')
 
   return (
     <div className="page">
@@ -982,10 +1039,10 @@ export default function Trips() {
             <SS label="Driver" value={pmForm.driver_id} onChange={v => setPmForm(f => ({ ...f, driver_id: v, driver_name: f.driver_name || drivers.find(d => d.id === v)?.driver_name || '' }))}
               options={drivers.map(d => ({ value: d.id, label: d.driver_name }))}
               placeholder="Defaults to truck's assigned driver — change if relief driving" />
-            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...PM_TRIP_CODES, ...tripCodes]} placeholder="Select trip code" />
+            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...getActivePmCodes(), ...tripCodes, ...(pmForm.trip_code && ![...getActivePmCodes(), ...tripCodes].includes(pmForm.trip_code) ? [pmForm.trip_code] : [])]} placeholder="Select trip code" />
             <div className="form-group">
               <label className="label required">Client
-                {pmForm.trip_code && ['Hustling PSACC','Hauling PSACC','SMC'].includes(pmForm.trip_code) && (
+                {pmForm.trip_code && (['Hustling PSACC','Hauling PSACC','SMC'].includes(pmForm.trip_code) || getCustomPmCodeDef(pmForm.trip_code)?.client) && (
                   <span style={{ fontSize: 10, color: 'var(--accent)', fontWeight: 400, marginLeft: 6, textTransform: 'none', letterSpacing: 0 }}>
                     auto-set from trip code
                   </span>
@@ -1086,6 +1143,26 @@ export default function Trips() {
                 onChange={v => setPmForm(f => ({ ...f, destination: v === 'PENDING' ? '' : v }))}
                 options={[{ value: 'PENDING', label: '⚑ Pending / not yet listed' }, ...(pmDestinations['SMC'] || [])]}
                 placeholder="Select destination" />
+            </div>
+          </>)}
+
+          {/* Configured trip code — trip-level inputs from Settings → Trip
+              Codes (standard columns + custom inputs). Descriptive only:
+              never touches amounts, VAT, or driver pay. */}
+          {pmCodeTripFields.length > 0 && (<>
+            <p className="section-label">{pmForm.trip_code} — Details</p>
+            <div className="form-grid" style={{ marginBottom: 16 }}>
+              {pmCodeTripFields.map(cf => {
+                const val = codeFieldValue(cf, pmForm) ?? ''
+                if (cf.type === 'select') {
+                  // Keep a previously saved choice visible even if it was
+                  // later removed from the dropdown list.
+                  const opts = [...(cf.options || []), ...(val && !(cf.options || []).includes(val) ? [val] : [])]
+                  return <SS key={cf.key} label={cf.label} value={val} onChange={v => setPmCodeTripField(cf, v)} req={cf.required} options={opts} placeholder={`Select ${cf.label}`} />
+                }
+                return <SF key={cf.key} label={cf.label} value={val} onChange={v => setPmCodeTripField(cf, v)} req={cf.required}
+                  type={cf.type === 'number' ? 'number' : cf.type === 'date' ? 'date' : 'text'} />
+              })}
             </div>
           </>)}
 
@@ -1289,7 +1366,10 @@ export default function Trips() {
                         <span title="Destination not set — driver rate can't match until this is set" style={{ marginLeft: 5, fontSize: 10, color: 'var(--danger)', background: 'var(--danger-light)', padding: '2px 5px', borderRadius: 4, fontWeight: 600, whiteSpace: 'nowrap' }}>⚑ No dest.</span>
                       )}
                     </td>
-                    <td style={{ fontWeight: 500 }}>{t.client || '—'}</td>
+                    <td style={{ fontWeight: 500 }}>
+                      {t.client || '—'}
+                      {pmCustomSummary(t) && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 2 }}>{pmCustomSummary(t)}</div>}
+                    </td>
                     <td style={{ fontSize: 12 }}>{isVan ? '🚐 Van' : t.container_size}</td>
                     <td style={{ fontSize: 12, color: 'var(--muted)' }}>
                       {isVan
@@ -1350,7 +1430,7 @@ export default function Trips() {
               const currentMonth = summaryMonth
               const td = dumpTrips.filter(t => t.truck_plate === plate && t.trip_date?.startsWith(currentMonth))
               const tp = pmTrips.filter(t => t.truck_plate === plate && t.trip_date?.startsWith(currentMonth))
-              const totalAmt = td.reduce((s,t)=>s+(t.weight_tons||0)*(t.rate_per_ton||0),0) + tp.reduce((s,t)=>s+(t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0)
+              const totalAmt = td.reduce((s,t)=>s+(t.weight_tons||0)*(t.rate_per_ton||0),0) + tp.reduce((s,t)=>s+(isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0)
               const truck = trucks.find(t => t.plate === plate)
               if (td.length === 0 && tp.length === 0) return null
               return (
@@ -1392,7 +1472,7 @@ export default function Trips() {
                       {Object.entries(tp.reduce((acc, t) => {
                         const k = t.trip_code || 'Unknown'
                         if (!acc[k]) acc[k] = { trips: 0, amount: 0 }
-                        acc[k].trips++; acc[k].amount += t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)
+                        acc[k].trips++; acc[k].amount += isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)
                         return acc
                       }, {})).map(([code, d]) => (
                         <div key={code} style={{ display: 'flex', gap: 12, fontSize: 12, padding: '4px 0', borderBottom: '0.5px solid var(--border)' }}>

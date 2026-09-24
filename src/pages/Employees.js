@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
 import DatePickerSingle from '../components/DatePickerSingle'
 import DatePickerRange from '../components/DatePickerRange'
 import jsPDF from 'jspdf'
@@ -102,6 +103,10 @@ export default function Employees() {
   const [pinUnlockError, setPinUnlockError] = useState('')
   const [pinUnlocking, setPinUnlocking] = useState(false)
   const [activeTab, setActiveTab] = useState('payroll')  // 'payroll' | 'drivers' | 'cash-advance' | '13th-month' | 'payslip'
+  const location = useLocation()
+  useEffect(() => {
+    if (location.state?.activeTab) { setActiveTab(location.state.activeTab); window.history.replaceState({}, document.title) }
+  }, [location.state])
   const [payrollView, setPayrollView] = useState('register') // 'register' | 'roster' — sub-view within the Payroll tab
   const EMPTY_CUTOFF = { period_from:'', period_to:'', pay_date:'', basic_salary:'', allowance:'', overtime_pay:'', rest_day:'', holiday_pay:'', salary_adjustment:'', other_earnings:'' }
   const EMPTY_PAYSLIP = {

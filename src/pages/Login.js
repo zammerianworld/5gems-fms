@@ -150,72 +150,130 @@ export default function Login() {
       <div style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center',
         justifyContent: 'center', background: '#0f1f2e', padding: 20,
+        position: 'relative', overflow: 'hidden',
       }}>
-      <div style={{ width: '100%', maxWidth: 380 }}>
-        {/* Logo */}
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div style={{ margin: '0 auto 14px', maxWidth: 280 }}>
-            {logoUrl
-              ? <img src={logoUrl} alt="Logo" onLoad={() => setLogoLoaded(true)}
-                  style={{ maxWidth: '100%', maxHeight: 100, objectFit: 'contain', opacity: logoLoaded ? 1 : 0, transition: 'opacity 0.3s ease', display: 'block', margin: '0 auto' }} />
-              : <div style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.1)', borderRadius: 16, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto' }}><span>🐉</span></div>}
+        {/* Glow blobs — cheap, static base (no animation lib, no bundle
+            cost), with a slow drift added via CSS keyframes below. These
+            sit behind everything and give the glass card something to
+            actually show through. */}
+        <div className="ds-blob ds-blob-1" style={{ position: 'absolute', width: 320, height: 320, borderRadius: '50%', background: 'linear-gradient(135deg, #ff6d59, #ff1e00)', opacity: 0.32, filter: 'blur(70px)', top: -80, left: -80, pointerEvents: 'none' }} />
+        <div className="ds-blob ds-blob-2" style={{ position: 'absolute', width: 280, height: 280, borderRadius: '50%', background: '#ff1e00', opacity: 0.2, filter: 'blur(70px)', bottom: -70, right: -70, pointerEvents: 'none' }} />
+        <div className="ds-blob ds-blob-3" style={{ position: 'absolute', width: 200, height: 200, borderRadius: '50%', background: '#fff', opacity: 0.06, filter: 'blur(60px)', top: '38%', left: '62%', pointerEvents: 'none' }} />
+
+        {/* Scoped styles for the glass card — kept out of index.css since
+            this look is specific to this one page, not a global input/button
+            restyle. On narrow screens the blur is dropped for GPU cost (a
+            real concern on budget/older phones) and the card falls back to
+            a flatter, more opaque tint that stays readable without it.
+            Blob drift is slow and small on purpose — a background detail,
+            not something meant to draw the eye — and is skipped entirely
+            under prefers-reduced-motion. */}
+        <style>{`
+          .ds-login-glass { backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px); }
+          .ds-login-glass input::placeholder { color: rgba(255,255,255,0.4); }
+          .ds-signin-btn:not(:disabled):hover { box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 0 26px rgba(255,30,0,0.75); filter: brightness(1.06); }
+          .ds-signin-btn:not(:disabled):active { box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 0 30px rgba(255,30,0,0.85); filter: brightness(1.1); }
+          @media (max-width: 767px) {
+            .ds-login-glass { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(15,31,42,0.82) !important; }
+          }
+          @media (prefers-reduced-motion: no-preference) {
+            .ds-blob-1 { animation: ds-drift-1 22s ease-in-out infinite alternate; }
+            .ds-blob-2 { animation: ds-drift-2 26s ease-in-out infinite alternate; }
+            .ds-blob-3 { animation: ds-drift-3 19s ease-in-out infinite alternate; }
+          }
+          @keyframes ds-drift-1 { 0% { transform: translate(0, 0); } 100% { transform: translate(30px, 25px); } }
+          @keyframes ds-drift-2 { 0% { transform: translate(0, 0); } 100% { transform: translate(-25px, -20px); } }
+          @keyframes ds-drift-3 { 0% { transform: translate(0, 0); } 100% { transform: translate(-20px, 20px); } }
+        `}</style>
+
+        <div style={{ width: '100%', maxWidth: 380, position: 'relative', zIndex: 1 }}>
+          {/* Logo */}
+          <div style={{ textAlign: 'center', marginBottom: 32 }}>
+            <div style={{ margin: '0 auto 14px', maxWidth: 280 }}>
+              {logoUrl
+                ? <img src={logoUrl} alt="Logo" onLoad={() => setLogoLoaded(true)}
+                    style={{ maxWidth: '100%', maxHeight: 100, objectFit: 'contain', opacity: logoLoaded ? 1 : 0, transition: 'opacity 0.3s ease', display: 'block', margin: '0 auto', borderRadius: 14 }} />
+                : <div style={{ width: 72, height: 72, background: 'rgba(255,255,255,0.14)', borderTop: '0.5px solid rgba(255,255,255,0.4)', borderLeft: '0.5px solid rgba(255,255,255,0.25)', borderRight: '0.5px solid rgba(255,255,255,0.08)', borderBottom: '0.5px solid rgba(255,255,255,0.06)', borderRadius: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36, margin: '0 auto', boxShadow: '0 6px 14px rgba(0,0,0,0.35)' }}><span>🚚</span></div>}
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 500, color: '#fff', marginBottom: 4 }}>
+              {companyName}
+            </div>
+            <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
+              Fleet Management System
+            </div>
           </div>
-          <div style={{ fontSize: 20, fontWeight: 500, color: '#fff', marginBottom: 4 }}>
-            {companyName}
+
+          {/* Form — glass card */}
+          <div className="ds-login-glass" style={{
+            background: 'rgba(255,255,255,0.1)',
+            borderTop: '0.5px solid rgba(255,255,255,0.55)', borderLeft: '0.5px solid rgba(255,255,255,0.38)',
+            borderRight: '0.5px solid rgba(255,255,255,0.12)', borderBottom: '0.5px solid rgba(255,255,255,0.08)',
+            borderRadius: 22, padding: '28px 28px',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.3), inset 1px 0 0 rgba(255,255,255,0.18), 0 24px 50px rgba(0,0,0,0.45), 0 4px 10px rgba(0,0,0,0.3)',
+          }}>
+            <h2 style={{ fontSize: 16, fontWeight: 500, marginBottom: 20, color: '#fff' }}>
+              Sign in to your account
+            </h2>
+
+            {error && (
+              <div style={{
+                background: 'rgba(224,64,54,0.18)', color: '#ffb4ae',
+                padding: '10px 14px', borderRadius: 6, fontSize: 13,
+                marginBottom: 16, border: '0.5px solid rgba(224,64,54,0.4)',
+              }}>
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit}>
+              <div style={{ marginBottom: 14 }}>
+                <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>Email or Name</label>
+                <input
+                  type="text" value={email} required autoFocus
+                  onChange={e => setEmail(e.target.value)}
+                  placeholder="Email or full name"
+                  style={{
+                    width: '100%', height: 44, borderRadius: 999, padding: '0 18px',
+                    background: 'rgba(255,255,255,0.1)',
+                    borderTop: '0.5px solid rgba(255,255,255,0.35)', borderLeft: '0.5px solid rgba(255,255,255,0.22)',
+                    borderRight: '0.5px solid rgba(255,255,255,0.1)', borderBottom: '0.5px solid rgba(255,255,255,0.08)',
+                    color: '#fff', fontSize: 14, boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: 'block', fontSize: 13, color: 'rgba(255,255,255,0.6)', marginBottom: 6 }}>Password</label>
+                <input
+                  type="password" value={password} required
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  style={{
+                    width: '100%', height: 44, borderRadius: 999, padding: '0 18px',
+                    background: 'rgba(255,255,255,0.1)',
+                    borderTop: '0.5px solid rgba(255,255,255,0.35)', borderLeft: '0.5px solid rgba(255,255,255,0.22)',
+                    borderRight: '0.5px solid rgba(255,255,255,0.1)', borderBottom: '0.5px solid rgba(255,255,255,0.08)',
+                    color: '#fff', fontSize: 14, boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <button type="submit" disabled={loading} className="ds-signin-btn"
+                style={{
+                  width: '100%', height: 44, borderRadius: 999, border: 'none',
+                  background: 'linear-gradient(135deg, #ff6d59, #ff1e00)', color: '#3d0a00', fontSize: 14, fontWeight: 500,
+                  cursor: loading ? 'default' : 'pointer', opacity: loading ? 0.7 : 1,
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 18px rgba(255,30,0,0.5)',
+                  transition: 'box-shadow 0.25s ease, filter 0.25s ease',
+                }}>
+                {loading ? 'Signing in…' : 'Sign in'}
+              </button>
+            </form>
           </div>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.4)' }}>
-            Fleet Management System
-          </div>
+
+          <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.25)', marginTop: 20 }}>
+            {companyName} © {new Date().getFullYear()}
+          </p>
         </div>
-
-        {/* Form */}
-        <div style={{
-          background: '#fff', borderRadius: 12, padding: '28px 28px',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
-        }}>
-          <h2 style={{ fontSize: 16, fontWeight: 500, marginBottom: 20, color: 'var(--text)' }}>
-            Sign in to your account
-          </h2>
-
-          {error && (
-            <div style={{
-              background: 'var(--danger-light)', color: 'var(--danger)',
-              padding: '10px 14px', borderRadius: 6, fontSize: 13,
-              marginBottom: 16, border: '0.5px solid #e0a09a',
-            }}>
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit}>
-            <div style={{ marginBottom: 14 }}>
-              <label className="label">Email or Name</label>
-              <input
-                type="text" value={email} required autoFocus
-                onChange={e => setEmail(e.target.value)}
-                placeholder="Email or full name"
-              />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label className="label">Password</label>
-              <input
-                type="password" value={password} required
-                onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
-              />
-            </div>
-            <button type="submit" className="btn-primary" disabled={loading}
-              style={{ width: '100%', padding: '11px', fontSize: 14 }}>
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-        </div>
-
-        <p style={{ textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.25)', marginTop: 20 }}>
-          {companyName} © {new Date().getFullYear()}
-        </p>
       </div>
-    </div>
     </>
   )
 }

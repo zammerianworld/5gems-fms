@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fmt, fmtDate, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fmtDate, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
@@ -127,7 +127,7 @@ export default function PaidInvoices() {
   const inScope = (plate) => truckScope === 'all' ? allScopePlates.has(plate) : ownedPlates.has(plate)
   const pmNet = (t) => {
     const raw = (parseFloat(t.supplier_amount) || 0) + (parseFloat(t.stripping_fee) || 0)
-    return t.trip_code === 'SMC' ? raw / 1.12 : raw
+    return isVatInclusiveCode(t.trip_code) ? raw / 1.12 : raw
   }
 
   const summaryRows = getPeriods(periodType, summaryYear).map(p => {

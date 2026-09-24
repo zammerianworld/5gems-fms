@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useLocation } from 'react-router-dom'
 import DatePickerSingle from '../components/DatePickerSingle'
 import { supabase, fmt, fmtDate, numberToWords, logAudit } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
@@ -49,6 +50,7 @@ export default function CheckVouchers() {
   const { toast, showToast, dismissToast } = useToast()
 
   const [tab, setTab] = useState('Vouchers')
+  const location = useLocation()
   const [vouchers, setVouchers] = useState([])
   const [settings, setSettings] = useState({})
   const [loading, setLoading] = useState(true)
@@ -100,6 +102,12 @@ export default function CheckVouchers() {
   const [confirmModal, setConfirmModal] = useState(null)
   const [search, setSearch] = useState('')
   const [pdcSearch, setPdcSearch] = useState('')
+  useEffect(() => {
+    if (location.state?.searchVoucher) {
+      setSearch(location.state.searchVoucher)
+      window.history.replaceState({}, document.title)
+    }
+  }, [location.state])
   const [previewVoucher, setPreviewVoucher] = useState(null)
   const [pdfOrientation, setPdfOrientation] = useState('portrait')
 

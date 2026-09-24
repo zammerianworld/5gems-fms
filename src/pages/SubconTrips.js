@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fmt, fmtDate, sortRows, logAudit, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fmtDate, sortRows, logAudit, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import DatePickerSingle from '../components/DatePickerSingle'
 import SignatoryDialog from '../components/SignatoryDialog'
@@ -148,7 +148,7 @@ export default function SubconTrips() {
 
   const getTripAmount = (t, type) => type === 'dump'
     ? (t.weight_tons || 0) * (t.rate_per_ton || 0)
-    : (t.trip_code === 'SMC' ? ((t.supplier_amount || 0) + (t.stripping_fee || 0)) / 1.12 : (t.supplier_amount || 0) + (t.stripping_fee || 0))
+    : (isVatInclusiveCode(t.trip_code) ? ((t.supplier_amount || 0) + (t.stripping_fee || 0)) / 1.12 : (t.supplier_amount || 0) + (t.stripping_fee || 0))
   const regularTrucks = trucks.filter(t => t.ownership === 'subcon')
   const specialTrucks = trucks.filter(t => t.ownership === 'special_subcon')
   const subconTrucks = subconTab === 'regular' ? regularTrucks : specialTrucks
@@ -1186,7 +1186,7 @@ export default function SubconTrips() {
                 const totalEarned = truckTrips.reduce((s,t) => {
                   const amt = truck.truck_type === 'Dump Truck' || t.weight_tons
                     ? (t.weight_tons||0)*(t.rate_per_ton||0)
-                    : (t.trip_code==='SMC' ? ((t.supplier_amount||0)+(t.stripping_fee||0))/1.12 : (t.supplier_amount||0)+(t.stripping_fee||0))
+                    : (isVatInclusiveCode(t.trip_code) ? ((t.supplier_amount||0)+(t.stripping_fee||0))/1.12 : (t.supplier_amount||0)+(t.stripping_fee||0))
                   return s + amt
                 }, 0)
                 const totalPaid = truckTrips.filter(t => t.subcon_paid).reduce((s,t) => s + (t.subcon_cost||0), 0)
@@ -1229,7 +1229,7 @@ export default function SubconTrips() {
                           monthMap[mo].push(t)
                         })
                         const totalNetCredited = Object.entries(monthMap).reduce((s, [mo, trips]) => {
-                          const collected = trips.reduce((ss, t) => ss + ((t.weight_tons||0)*(t.rate_per_ton||0)||(t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0))), 0)
+                          const collected = trips.reduce((ss, t) => ss + ((t.weight_tons||0)*(t.rate_per_ton||0)||(isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0))), 0)
                           const expShare = calcExpenseShare(truck.id, mo + '-01')
                           return s + collected - expShare
                         }, 0)
@@ -1261,7 +1261,7 @@ export default function SubconTrips() {
             {/* Fleet total — regular subcon only */}
             {regularTrucks.length > 0 && (() => {
               const regTrips = rawTrips.filter(t => regularTrucks.some(tr => tr.plate === t.truck_plate))
-              const grandBilled = regTrips.reduce((s,t) => s + ((t.weight_tons||0)*(t.rate_per_ton||0)||(t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0))), 0)
+              const grandBilled = regTrips.reduce((s,t) => s + ((t.weight_tons||0)*(t.rate_per_ton||0)||(isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0))), 0)
               const grandPaid = regTrips.filter(t => t.subcon_paid).reduce((s,t) => s+(t.subcon_cost||0), 0)
               return (
                 <div style={{ marginTop: 12, padding: '12px 16px', background: 'var(--accent)', borderRadius: 10, display: 'flex', gap: 24, flexWrap: 'wrap' }}>

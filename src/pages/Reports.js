@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fmt, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import { useAuth } from '../components/AuthContext'
 import * as XLSX from 'xlsx'
@@ -214,7 +214,7 @@ export default function Reports() {
       if (!byRoute[key]) byRoute[key] = { trips:0, sales:0 }
       byRoute[key].trips++
       const raw = (t.supplier_amount||0)+(t.stripping_fee||0)
-      byRoute[key].sales += t.trip_code === 'SMC' ? raw / 1.12 : raw
+      byRoute[key].sales += isVatInclusiveCode(t.trip_code) ? raw / 1.12 : raw
     })
     const totalSales = Object.values(byRoute).reduce((s,r) => s+r.sales, 0)
     const wht2 = totalSales * 0.02
@@ -630,7 +630,7 @@ export default function Reports() {
                 <thead><tr><th>Client</th><th className="text-right">Dump Sales</th><th className="text-right">PM Sales</th><th className="text-right">Total Sales</th><th className="text-right">% of Total</th><th className="text-right">Trips</th></tr></thead>
                 <tbody>
                   {(() => {
-                    const pmVal = t => t.trip_code === 'SMC' ? ((t.supplier_amount||0)+(t.stripping_fee||0)) / 1.12 : (t.supplier_amount||0)+(t.stripping_fee||0)
+                    const pmVal = t => isVatInclusiveCode(t.trip_code) ? ((t.supplier_amount||0)+(t.stripping_fee||0)) / 1.12 : (t.supplier_amount||0)+(t.stripping_fee||0)
                     const grandTotal = allTrips.reduce((s,t) => s+('trip_code' in t ? pmVal(t) : (t.weight_tons||0)*(t.rate_per_ton||0)), 0)
                     return clients.map(client => {
                       const cDump = dumpTrips.filter(t => t.client === client && inPeriod(t.trip_date))
@@ -660,8 +660,8 @@ export default function Reports() {
                 <tfoot><tr>
                   <td style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>TOTAL</td>
                   <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>₱{fmt(dumpTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(t.weight_tons||0)*(t.rate_per_ton||0),0))}</td>
-                  <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>₱{fmt(pmTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0))}</td>
-                  <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>₱{fmt(dumpTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(t.weight_tons||0)*(t.rate_per_ton||0),0) + pmTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(t.trip_code==='SMC'?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0))}</td>
+                  <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>₱{fmt(pmTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0))}</td>
+                  <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>₱{fmt(dumpTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(t.weight_tons||0)*(t.rate_per_ton||0),0) + pmTrips.filter(t=>inPeriod(t.trip_date)).reduce((s,t)=>s+(isVatInclusiveCode(t.trip_code)?((t.supplier_amount||0)+(t.stripping_fee||0))/1.12:(t.supplier_amount||0)+(t.stripping_fee||0)),0))}</td>
                   <td className="text-right" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>100%</td>
                   <td className="text-right mono" style={{ fontWeight: 600, padding: '8px 14px', borderTop: '1px solid var(--border-md)' }}>{[...dumpTrips,...pmTrips].filter(t=>inPeriod(t.trip_date)).length}</td>
                 </tr></tfoot>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { supabase, fmt, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fetchAllRows, isVatInclusiveCode, getCustomPmCodeDef } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import { useAuth } from '../components/AuthContext'
 import ExcelJS from 'exceljs'
@@ -106,7 +106,7 @@ export default function MidyearReport() {
   // ── SALES — MANAGEMENT BASIS (trip_date), SMC VAT-inclusive adjusted ──────
   const pmNet = (t) => {
     const raw = (parseFloat(t.supplier_amount) || 0) + (parseFloat(t.stripping_fee) || 0)
-    return t.trip_code === 'SMC' ? raw / 1.12 : raw
+    return isVatInclusiveCode(t.trip_code) ? raw / 1.12 : raw
   }
   const dumpNet = (t) => (parseFloat(t.weight_tons) || 0) * (parseFloat(t.rate_per_ton) || 0)
   const inH1 = (d) => d && d.startsWith(String(year)) && MONTH_KEYS.includes(d.slice(5, 7))

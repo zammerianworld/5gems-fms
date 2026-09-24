@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES } from '../lib/supabase'
+import { useLocation } from 'react-router-dom'
+import { supabase, DUMP_TRUCK_ROUTES, PM_TRIP_CODES, PM_STD_FIELDS, getStdField, reloadTripCodes } from '../lib/supabase'
 import { EULA_SECTIONS, DMCA_SECTIONS, PRIVACY_SECTIONS, LEGAL_LAST_UPDATED } from '../lib/legalDocs'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
@@ -22,6 +23,193 @@ function F({ label, value, onChange, placeholder, type = 'text', span }) {
     </div>
   )
 }
+// ── Configurable PM trip codes (Settings → Trip Codes) ────────────────────
+// Rows live in `trip_codes` (item 6 migration). Built-in codes are listed but
+// locked. A configured code picks its client, whether rates are entered
+// VAT-inclusive, and which inputs the trip form shows: standard inputs
+// (real trips_pm / container fields, see PM_STD_FIELDS) plus its own custom
+// inputs (stored in trips_pm.custom_data, keyed by a permanent `key`).
+const CF_TYPES = [['text', 'Text'], ['number', 'Number'], ['date', 'Date'], ['select', 'Dropdown']]
+const newFieldKey = () => 'f_' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-3)
+const EMPTY_CODE = { code: '', client: '', vat_inclusive: false, active: true, fields: [] }
+
+function CustomInputsEditor({ fields, onChange }) {
+  const update = (i, patch) => onChange(fields.map((f, idx) => idx === i ? { ...f, ...patch } : f))
+  const remove = (i) => onChange(fields.filter((_, idx) => idx !== i))
+  const move = (i, dir) => {
+    const j = i + dir
+    if (j < 0 || j >= fields.length) return
+    const next = [...fields]; [next[i], next[j]] = [next[j], next[i]]; onChange(next)
+  }
+  const add = () => onChange([...fields, { kind: 'custom', key: newFieldKey(), label: '', type: 'text', options: [], required: false, show_on_soa: false }])
+  const cell = { padding: '6px 6px', verticalAlign: 'middle' }
+  return (
+    <div>
+      {fields.length === 0 ? (
+        <div style={{ fontSize: 12, color: 'var(--muted)', padding: '6px 0' }}>No custom inputs.</div>
+      ) : (
+        <div className="table-wrap">
+          <table className="table" style={{ fontSize: 12 }}>
+            <thead><tr><th>Label</th><th>Type</th><th>Dropdown choices</th><th style={{ textAlign: 'center' }}>Required</th><th style={{ textAlign: 'center' }}>On SOA</th><th></th></tr></thead>
+            <tbody>
+              {fields.map((f, i) => (
+                <tr key={f.key}>
+                  <td style={cell}><input value={f.label} onChange={e => update(i, { label: e.target.value })} placeholder="e.g. Booking Ref" style={{ minWidth: 130 }} /></td>
+                  <td style={cell}>
+                    <select value={f.type} onChange={e => update(i, { type: e.target.value })} style={{ width: 'auto' }}>
+                      {CF_TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </td>
+                  <td style={cell}>
+                    {f.type === 'select'
+                      ? <input value={(f.options || []).join(',')} onChange={e => update(i, { options: e.target.value.split(',') })} placeholder="Comma-separated, e.g. Full,Empty" style={{ minWidth: 150 }} />
+                      : <span style={{ color: 'var(--muted)' }}>—</span>}
+                  </td>
+                  <td style={{ ...cell, textAlign: 'center' }}><input type="checkbox" checked={!!f.required} onChange={e => update(i, { required: e.target.checked })} style={{ width: 'auto' }} /></td>
+                  <td style={{ ...cell, textAlign: 'center' }}><input type="checkbox" checked={!!f.show_on_soa} onChange={e => update(i, { show_on_soa: e.target.checked })} style={{ width: 'auto' }} /></td>
+                  <td style={{ ...cell, whiteSpace: 'nowrap' }}>
+                    <button type="button" className="btn-ghost btn-sm" title="Move up" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
+                    <button type="button" className="btn-ghost btn-sm" title="Move down" onClick={() => move(i, 1)} disabled={i === fields.length - 1}>↓</button>
+                    <button type="button" className="btn-danger btn-sm" onClick={() => remove(i)}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <button type="button" className="btn-ghost btn-sm" style={{ marginTop: 8 }} onClick={add}>+ Add custom input</button>
+    </div>
+  )
+}
+
+// Cleans a code's field list before saving: standard inputs in registry
+// order first, then custom inputs in their chosen order. Blocks empty labels,
+// empty dropdowns and duplicate labels (incl. clashes with standard labels).
+function normalizeCodeFields(fields) {
+  const std = PM_STD_FIELDS
+    .map(sf => (fields || []).find(f => f.kind === 'std' && f.key === sf.key))
+    .filter(Boolean)
+    .map(f => ({ kind: 'std', key: f.key, required: !!f.required, show_on_soa: !!f.show_on_soa }))
+  const seen = new Set(std.map(f => getStdField(f.key).label.toLowerCase()))
+  const custom = []
+  for (const f of (fields || []).filter(x => x.kind === 'custom')) {
+    const label = (f.label || '').trim()
+    if (!label) return { error: 'Every custom input needs a label.' }
+    if (seen.has(label.toLowerCase())) return { error: `Duplicate input label "${label}".` }
+    seen.add(label.toLowerCase())
+    const options = f.type === 'select' ? (f.options || []).map(o => o.trim()).filter(Boolean) : []
+    if (f.type === 'select' && !options.length) return { error: `Dropdown "${label}" needs at least one choice.` }
+    custom.push({ kind: 'custom', key: f.key || newFieldKey(), label, type: f.type || 'text', options, required: !!f.required, show_on_soa: !!f.show_on_soa })
+  }
+  return { fields: [...std, ...custom] }
+}
+
+function TripCodeEditor({ initial, clients, otherCodes, locked, onCancel, onSave, saving }) {
+  const [form, setForm] = useState(initial)
+  const [copyFrom, setCopyFrom] = useState('')
+  const stdOn = (key) => form.fields.find(f => f.kind === 'std' && f.key === key)
+  const setStd = (key, patch) => setForm(f => {
+    const exists = f.fields.some(x => x.kind === 'std' && x.key === key)
+    if (patch === null) return { ...f, fields: f.fields.filter(x => !(x.kind === 'std' && x.key === key)) }
+    return { ...f, fields: exists
+      ? f.fields.map(x => (x.kind === 'std' && x.key === key) ? { ...x, ...patch } : x)
+      : [...f.fields, { kind: 'std', key, required: false, show_on_soa: true, ...patch }] }
+  })
+  const customFields = form.fields.filter(f => f.kind === 'custom')
+  const setCustom = (next) => setForm(f => ({ ...f, fields: [...f.fields.filter(x => x.kind !== 'custom'), ...next] }))
+  const copyInputs = () => {
+    const src = otherCodes.find(c => c.id === copyFrom)
+    if (!src) return
+    // Copied custom inputs get fresh keys — they belong to this code from now on.
+    setForm(f => ({ ...f, fields: (src.fields || []).map(x => x.kind === 'custom' ? { ...x, key: newFieldKey() } : { ...x }) }))
+    setCopyFrom('')
+  }
+  const cell = { padding: '5px 6px', verticalAlign: 'middle' }
+  return (
+    <div className="card" style={{ marginBottom: 20, border: '1.5px solid var(--accent)' }}>
+      <h2 style={{ fontSize: 14, fontWeight: 500, marginBottom: 14 }}>{initial.id ? `Editing: ${initial.code}` : 'New trip code'}</h2>
+      <div className="form-grid" style={{ marginBottom: 14 }}>
+        <div className="form-group">
+          <label className="label required">Trip code name</label>
+          <input value={form.code} disabled={locked} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="e.g. Northport Port Haul" />
+        </div>
+        <div className="form-group">
+          <label className="label required">Client</label>
+          <select value={form.client || ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}>
+            <option value="">Select client</option>
+            {clients.map(c => <option key={c.id} value={c.nickname}>{c.nickname} — {c.full_name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="label">Rates entered as</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[[false, 'VAT-exclusive'], [true, 'VAT-inclusive']].map(([v, l]) => (
+              <button key={l} type="button" disabled={locked} onClick={() => setForm(f => ({ ...f, vat_inclusive: v }))}
+                className={form.vat_inclusive === v ? 'btn-primary btn-sm' : 'btn-ghost btn-sm'} style={{ flex: 1 }}>{l}</button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
+            {form.vat_inclusive ? 'Works like SMC: amounts are entered with VAT; net = amount ÷ 1.12 everywhere.' : 'Works like PSACC: amounts are entered as net; VAT is added on the SOA.'}
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="label">Status</label>
+          <select value={form.active ? 'active' : 'inactive'} onChange={e => setForm(f => ({ ...f, active: e.target.value === 'active' }))}>
+            <option value="active">Active — offered on new trips</option>
+            <option value="inactive">Inactive — hidden from new trips</option>
+          </select>
+        </div>
+      </div>
+      {locked && (
+        <div style={{ fontSize: 12, color: 'var(--warning)', background: 'var(--warning-light)', padding: '8px 10px', borderRadius: 6, marginBottom: 14 }}>
+          This code already has trips, so its name and VAT setting are locked — changing them would rewrite past trips and reports. Inputs, client and status can still be changed. For different rates, create a new code.
+        </div>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+        <div style={{ fontSize: 13, fontWeight: 500 }}>Standard inputs</div>
+        {otherCodes.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <select value={copyFrom} onChange={e => setCopyFrom(e.target.value)} style={{ width: 'auto', fontSize: 12 }}>
+              <option value="">Copy inputs from…</option>
+              {otherCodes.map(c => <option key={c.id} value={c.id}>{c.code}</option>)}
+            </select>
+            <button type="button" className="btn-ghost btn-sm" onClick={copyInputs} disabled={!copyFrom}>Copy</button>
+          </div>
+        )}
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>Date, plate, driver, container size and amount are always included.</div>
+      <div className="table-wrap" style={{ marginBottom: 16 }}>
+        <table className="table" style={{ fontSize: 12 }}>
+          <thead><tr><th>Use</th><th>Input</th><th>Level</th><th style={{ textAlign: 'center' }}>Required</th><th style={{ textAlign: 'center' }}>On SOA</th></tr></thead>
+          <tbody>
+            {PM_STD_FIELDS.map(sf => {
+              const on = stdOn(sf.key)
+              return (
+                <tr key={sf.key} style={{ opacity: on ? 1 : 0.6 }}>
+                  <td style={cell}><input type="checkbox" checked={!!on} onChange={e => setStd(sf.key, e.target.checked ? {} : null)} style={{ width: 'auto' }} /></td>
+                  <td style={cell}>{sf.label}</td>
+                  <td style={{ ...cell, color: 'var(--muted)' }}>{sf.level === 'container' ? 'per container' : 'per trip'}</td>
+                  <td style={{ ...cell, textAlign: 'center' }}><input type="checkbox" disabled={!on || sf.key === 'stripping_fee'} checked={!!on?.required} onChange={e => setStd(sf.key, { required: e.target.checked })} style={{ width: 'auto' }} /></td>
+                  <td style={{ ...cell, textAlign: 'center' }}><input type="checkbox" disabled={!on || sf.key === 'stripping_fee'} checked={sf.key === 'stripping_fee' ? !!on : !!on?.show_on_soa} onChange={e => setStd(sf.key, { show_on_soa: e.target.checked })} style={{ width: 'auto' }} /></td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 6 }}>Custom inputs</div>
+      <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 8 }}>For details the standard inputs don't cover. Removing one only hides it — values already saved on past trips are kept.</div>
+      <CustomInputsEditor fields={customFields} onChange={setCustom} />
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+        <button className="btn-ghost" onClick={onCancel}>Cancel</button>
+        <button className="btn-primary" disabled={saving} onClick={() => onSave(form)}>{saving ? 'Saving…' : 'Save trip code'}</button>
+      </div>
+    </div>
+  )
+}
+
 const EMPTY_NEW_TRUCK = { plate: '', truck_code: '', invoice_group: '', truck_type: 'Dump Truck', make: '', model: '', year: '', notes: '', ownership: 'company', subcon_name: '', start_date: '2024-01-01', end_date: '' }
 
 // Deterministic color per Invoice Group name, so trucks sharing a group
@@ -40,9 +228,13 @@ export default function Settings() {
   const [appBeta, setAppBeta] = useState(true)
   const [appBetaLabel, setAppBetaLabel] = useState('BETA — Testing Phase')
   const [versionSaving, setVersionSaving] = useState(false)
-  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Clientele', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Clientele', 'Trip Codes', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
   const [legalDoc, setLegalDoc] = useState('eula')
   const [tab, setTab] = useState('Company Info')
+  const location = useLocation()
+  useEffect(() => {
+    if (location.state?.tab) { setTab(location.state.tab); window.history.replaceState({}, document.title) }
+  }, [location.state])
   const [confirmState, setConfirmState] = useState(null)
   const [settings, setSettings] = useState({
     company_name: '',
@@ -107,6 +299,15 @@ export default function Settings() {
     setLoading(false)
   }
   const confirm = (message, onConfirm) => setConfirmState({ title: 'Confirm Removal', variant: 'danger', confirmLabel: 'Remove', message, onConfirm })
+  // Runs permanent_delete and reports the database's actual answer — the RPC
+  // raises on refusal (e.g. table not whitelisted) and returns false when
+  // no row was deleted. Returns true only when the row is really gone.
+  const removeRow = async (table, id, label) => {
+    const { data, error } = await supabase.rpc('permanent_delete', { p_table: table, p_id: id })
+    if (error) { showToast(`Couldn't remove ${label}: ${error.message}`, 'error'); return false }
+    if (data === false) { showToast(`${label} wasn't removed — it may already be gone.`, 'error'); return false }
+    return true
+  }
   const saveSettings = async () => {
     setSaving(true)
     const { error } = await supabase.from('company_settings')
@@ -141,8 +342,7 @@ export default function Settings() {
     else { showToast('Truck updated.'); setEditingTruck(null); fetchAll() }
   }
   const deleteTruck = (id, plate) => confirm(`Remove truck ${plate}?`, async () => {
-    await supabase.rpc('permanent_delete', { p_table: 'trucks', p_id: id })
-    showToast('Removed.', 'info'); fetchAll()
+    if (await removeRow('trucks', id, 'this truck')) { showToast('Removed.', 'info'); fetchAll() }
   })
   const addClient = async () => {
     if (!newClient.nickname || !newClient.full_name) { showToast('Nickname and full name required.', 'error'); return }
@@ -155,9 +355,51 @@ export default function Settings() {
     if (error) showToast('Error: ' + error.message, 'error')
     else { showToast('Client updated.'); setEditingClient(null); fetchAll() }
   }
+  // ── Trip codes ──
+  const [configuredTripCodes, setConfiguredTripCodes] = useState([])
+  const [configuredTripCodesError, setConfiguredTripCodesError] = useState('')
+  const [editingCode, setEditingCode] = useState(null) // { initial, locked }
+  const [codeSaving, setCodeSaving] = useState(false)
+  const fetchConfiguredTripCodes = async () => {
+    const { data, error } = await supabase.from('trip_codes').select('*').order('is_builtin', { ascending: false }).order('code')
+    if (error) { setConfiguredTripCodesError('Trip codes need database migration first (item6-trip-codes.sql).'); setConfiguredTripCodes([]); return }
+    setConfiguredTripCodesError(''); setConfiguredTripCodes(data || [])
+  }
+  useEffect(() => { if (tab === 'Trip Codes') fetchConfiguredTripCodes() }, [tab])
+  const openEditCode = async (c) => {
+    // Name + VAT lock once any trip (incl. deleted ones in Trash) uses the code.
+    const { count } = await supabase.from('trips_pm').select('id', { count: 'exact', head: true }).eq('trip_code', c.code)
+    setEditingCode({ initial: { ...c, fields: c.fields || [] }, locked: (count || 0) > 0 })
+  }
+  const saveTripCode = async (form) => {
+    const code = (form.code || '').trim()
+    if (!code) { showToast('Trip code name is required.', 'error'); return }
+    const clash = [...PM_TRIP_CODES, ...configuredTripCodes.filter(c => c.id !== form.id).map(c => c.code)].some(c => c.toLowerCase() === code.toLowerCase())
+    if (clash) { showToast(`A trip code named "${code}" already exists.`, 'error'); return }
+    if (!form.client) { showToast('Select the client this trip code bills to.', 'error'); return }
+    const { fields, error: fErr } = normalizeCodeFields(form.fields)
+    if (fErr) { showToast(fErr, 'error'); return }
+    const locked = editingCode?.locked
+    const payload = { client: form.client, active: form.active !== false, fields, ...(locked ? {} : { code, vat_inclusive: !!form.vat_inclusive }) }
+    setCodeSaving(true)
+    const { error } = form.id
+      ? await supabase.from('trip_codes').update(payload).eq('id', form.id)
+      : await supabase.from('trip_codes').insert(payload)
+    setCodeSaving(false)
+    if (error) { showToast(error.code === '23503' ? 'This code already has trips, so its name can\'t change.' : 'Error: ' + error.message, 'error'); return }
+    showToast(form.id ? 'Trip code updated.' : 'Trip code added.')
+    setEditingCode(null)
+    await reloadTripCodes() // refresh the app-wide cache so the trip form sees it right away
+    fetchConfiguredTripCodes()
+  }
+  const deleteConfiguredTripCode = (c) => confirm(`Delete trip code "${c.code}"?`, async () => {
+    const { error } = await supabase.from('trip_codes').delete().eq('id', c.id)
+    if (error) { showToast(error.code === '23503' ? 'This code has trips, so it can\'t be deleted. Set it to Inactive instead.' : 'Error: ' + error.message, 'error'); return }
+    showToast('Trip code deleted.', 'info'); await reloadTripCodes(); fetchConfiguredTripCodes()
+  })
+
   const deleteClient = (id, name) => confirm(`Remove client "${name}"?`, async () => {
-    await supabase.rpc('permanent_delete', { p_table: 'clients', p_id: id })
-    showToast('Removed.', 'info'); fetchAll()
+    if (await removeRow('clients', id, `"${name}"`)) { showToast('Removed.', 'info'); fetchAll() }
   })
   const addRoute = async () => {
     const name = newRoute.trim()
@@ -201,8 +443,7 @@ export default function Settings() {
     else { showToast(`"${name}" added.`); setNewCommodity(''); fetchAll() }
   }
   const deleteCommodity = (id, name) => confirm(`Remove "${name}"?`, async () => {
-    await supabase.rpc('permanent_delete', { p_table: 'commodities', p_id: id })
-    showToast('Removed.', 'info'); fetchAll()
+    if (await removeRow('commodities', id, 'this commodity')) { showToast('Removed.', 'info'); fetchAll() }
   })
 
   // ── TRUCK DATE FIELDS ── shared between Add and Edit forms
@@ -347,7 +588,7 @@ export default function Settings() {
                           confirmLabel: 'Remove',
                           message: `Remove ${sig.full_name}?`,
                           onConfirm: async () => {
-                            await supabase.rpc('permanent_delete', { p_table: 'signatories', p_id: sig.id }); fetchAll()
+                            if (await removeRow('signatories', sig.id, 'this signatory')) fetchAll()
                           },
                         })
                       }}>✕</button>
@@ -582,6 +823,55 @@ export default function Settings() {
               </table>
             </div>
           </>
+        )}
+        {tab === 'Trip Codes' && (
+          <div className="tab-content">
+            {configuredTripCodesError ? (
+              <div className="card" style={{ color: 'var(--danger)', fontSize: 13 }}>{configuredTripCodesError}</div>
+            ) : (<>
+              {editingCode ? (
+                <TripCodeEditor
+                  key={editingCode.initial.id || 'new'}
+                  initial={editingCode.initial}
+                  locked={editingCode.locked}
+                  clients={clients}
+                  otherCodes={configuredTripCodes.filter(c => !c.is_builtin && c.id !== editingCode.initial.id && (c.fields || []).length)}
+                  saving={codeSaving}
+                  onCancel={() => setEditingCode(null)}
+                  onSave={saveTripCode}
+                />
+              ) : (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 560 }}>Prime Mover trip codes. Built-in codes work exactly as before and can't be edited. Add a code when a client needs a new kind of trip or different trip details — no code change needed.</div>
+                  <button className="btn-primary" onClick={() => setEditingCode({ initial: { ...EMPTY_CODE }, locked: false })}>+ Add trip code</button>
+                </div>
+              )}
+              <div className="table-wrap">
+                <table className="table">
+                  <thead><tr><th>Trip code</th><th>Client</th><th>Rates</th><th>Inputs</th><th>Status</th><th></th></tr></thead>
+                  <tbody>
+                    {configuredTripCodes.map(c => (
+                      <tr key={c.id}>
+                        <td style={{ fontWeight: 500 }}>{c.code}</td>
+                        <td>{c.client || <span className="muted">—</span>}</td>
+                        <td style={{ fontSize: 12 }}>{c.vat_inclusive ? 'VAT-incl.' : 'VAT-excl.'}</td>
+                        <td style={{ fontSize: 12 }}>{c.is_builtin ? <span className="muted">Fixed layout</span> : `${(c.fields || []).length} input${(c.fields || []).length === 1 ? '' : 's'}`}</td>
+                        <td>{c.is_builtin
+                          ? <span className="badge">Built-in</span>
+                          : <span className="badge" style={c.active === false ? { opacity: 0.6 } : {}}>{c.active === false ? 'Inactive' : 'Active'}</span>}</td>
+                        <td>{!c.is_builtin && (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button className="btn-ghost btn-sm" onClick={() => openEditCode(c)}>Edit</button>
+                            <button className="btn-danger btn-sm" onClick={() => deleteConfiguredTripCode(c)}>Delete</button>
+                          </div>
+                        )}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>)}
+          </div>
         )}
         {tab === 'Commodities' && (
           <>

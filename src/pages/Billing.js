@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import DatePickerSingle from '../components/DatePickerSingle'
-import { supabase, fmt, fmtDate, logAudit, numberToWords, calcQtyDest, DUMP_TRUCK_ROUTES, sortRows, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fmtDate, logAudit, numberToWords, calcQtyDest, DUMP_TRUCK_ROUTES, sortRows, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
@@ -57,6 +57,7 @@ export default function Billing() {
   const [isVatInvoice, setIsVatInvoice] = useState(false)
   const [invoiceNo, setInvoiceNo] = useState('')
   const [invoiceDate, setInvoiceDate] = useState(new Date().toISOString().slice(0, 10))
+  const [genRemarks, setGenRemarks] = useState('')
   const [generating, setGenerating] = useState(false)
   const [invoiceDupWarning, setInvoiceDupWarning] = useState(false)
   // Invoice list
@@ -141,6 +142,7 @@ export default function Billing() {
   const [agingShowAll, setAgingShowAll] = useState(false)
   const [agingSortKey, setAgingSortKey] = useState('days')
   const [agingSortDir, setAgingSortDir] = useState('desc')
+  const [agingIncludeRemarks, setAgingIncludeRemarks] = useState(true)
   const toggleAgingSort = (k) => { setAgingSortKey(k); setAgingSortDir(d => k === agingSortKey ? (d === 'asc' ? 'desc' : 'asc') : 'desc') }
   const [showOverduePrintModal, setShowOverduePrintModal] = useState(false)
   const [overduePrintType, setOverduePrintType] = useState('')
@@ -244,7 +246,7 @@ export default function Billing() {
     return mC && mM && mR && mCo && mT && mTc && mO && mD && mS
   })
   const billedTrips = filteredCandidates.filter(t => selectedIds.includes(t.id))
-  const isSMCInvoice = truckType === 'Prime Mover' && billedTrips.length > 0 && billedTrips.every(t => t.trip_code === 'SMC')
+  const isSMCInvoice = truckType === 'Prime Mover' && billedTrips.length > 0 && billedTrips.every(t => isVatInclusiveCode(t.trip_code))
   const rawTotal = truckType === 'Dump Truck'
     ? billedTrips.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
     : billedTrips.reduce((s, t) => s + ((t.supplier_amount || 0) + (t.stripping_fee || 0)), 0)
@@ -346,13 +348,14 @@ export default function Billing() {
       billing_period_start: billedTrips[0]?.trip_date,
       billing_period_end: billedTrips[billedTrips.length - 1]?.trip_date,
       total_sales_net: totalNet, status: 'Invoiced', is_vat: isVatInvoice,
+      remarks: genRemarks.trim() || '',
     }).select().maybeSingle()
     if (error) { showToast('Error: ' + error.message, 'error'); setGenerating(false); return }
     const tbl = truckType === 'Dump Truck' ? 'trips_dump' : 'trips_pm'
     await supabase.from(tbl).update({ invoice_id: inv.id }).in('id', billedTrips.map(t => t.id))
     logAudit('generate', 'Generated', 'Invoice', `Generated invoice ${invoiceNo} — ${selectedClient} (${truckType}) — ${billedTrips.length} trips — ₱${fmt(totalNet)} net${isVatInvoice ? ' (VAT)' : ''}`, inv?.id, profile?.id, profile?.full_name)
     showToast(`Invoice ${invoiceNo} generated.`)
-    setSelectedIds([]); setInvoiceNo(''); setIsVatInvoice(false)
+    setSelectedIds([]); setInvoiceNo(''); setIsVatInvoice(false); setGenRemarks('')
     fetchAll(); setTab('Invoice List')
     setGenerating(false)
   }
@@ -403,7 +406,7 @@ export default function Billing() {
     const { data: allTrips } = await supabase.from(tbl).select('*').eq('invoice_id', inv.id)
     let newNet = 0
     if (inv.truck_type === 'Dump Truck') { newNet = (allTrips||[]).reduce((s,t) => s+(t.weight_tons||0)*(t.rate_per_ton||0), 0) }
-    else { newNet = (allTrips||[]).reduce((s,t) => s+(t.supplier_amount||0)+(t.stripping_fee||0), 0); if (allTrips?.[0]?.trip_code === 'SMC') newNet = newNet / 1.12 }
+    else { newNet = (allTrips||[]).reduce((s,t) => s+(t.supplier_amount||0)+(t.stripping_fee||0), 0); if (isVatInclusiveCode(allTrips?.[0]?.trip_code)) newNet = newNet / 1.12 }
     await supabase.from('invoices').update({ total_sales_net: newNet }).eq('id', inv.id)
     logAudit('destructive', 'Added Trips', 'Invoice', `Added ${addTripSelected.length} trip(s) to invoice ${inv.invoice_no} — new net: ₱${fmt(newNet)}`, inv.id, profile?.id, profile?.full_name)
     showToast(`${addTripSelected.length} trip(s) added. Invoice total updated.`)
@@ -436,7 +439,7 @@ export default function Billing() {
     const { data: updatedTrips } = await supabase.from(tbl).select('*').eq('invoice_id', editingInvoice.id)
     let newNet = 0
     if (editingInvoice.truck_type === 'Dump Truck') { newNet = (updatedTrips||[]).reduce((s,t) => s+(t.weight_tons||0)*(t.rate_per_ton||0), 0) }
-    else { newNet = (updatedTrips||[]).reduce((s,t) => s+(t.supplier_amount||0)+(t.stripping_fee||0), 0); if (updatedTrips?.[0]?.trip_code === 'SMC') newNet = newNet / 1.12 }
+    else { newNet = (updatedTrips||[]).reduce((s,t) => s+(t.supplier_amount||0)+(t.stripping_fee||0), 0); if (isVatInclusiveCode(updatedTrips?.[0]?.trip_code)) newNet = newNet / 1.12 }
     await supabase.from('invoices').update({ total_sales_net: newNet }).eq('id', editingInvoice.id)
     logAudit('destructive', 'Edited Rates', 'Invoice', `Edited rates on ${Object.keys(editingRates).length} trip(s) in invoice ${editingInvoice.invoice_no} — new net: ₱${fmt(newNet)}`, editingInvoice.id, profile?.id, profile?.full_name)
     showToast(`Rates updated. New net: ₱${fmt(newNet)}`)
@@ -496,7 +499,7 @@ export default function Billing() {
       let newNet = type === 'Dump Truck'
         ? remaining.reduce((s, t) => s + ((t.weight_tons || 0) * (t.rate_per_ton || 0)), 0)
         : remaining.reduce((s, t) => s + ((t.supplier_amount || 0) + (t.stripping_fee || 0)), 0)
-      if (type !== 'Dump Truck' && remaining[0]?.trip_code === 'SMC') newNet = newNet / 1.12
+      if (type !== 'Dump Truck' && isVatInclusiveCode(remaining[0]?.trip_code)) newNet = newNet / 1.12
       await supabase.from('invoices').update({ total_sales_net: newNet }).eq('id', invId)
       setInvoiceTrips(remaining)
       showToast('Trip removed from invoice.')
@@ -561,7 +564,7 @@ export default function Billing() {
     const { data: trips } = await supabase.from(tbl).select('*').is('deleted_at', null).eq('invoice_id', invoiceId)
     if (!trips?.length) return
     let newNet = tbl === 'trips_dump' ? trips.reduce((s,t) => s+(t.weight_tons||0)*(t.rate_per_ton||0), 0) : trips.reduce((s,t) => s+(parseFloat(t.supplier_amount)||0)+(parseFloat(t.stripping_fee)||0), 0)
-    if (tbl === 'trips_pm' && trips[0]?.trip_code === 'SMC') newNet = newNet / 1.12
+    if (tbl === 'trips_pm' && isVatInclusiveCode(trips[0]?.trip_code)) newNet = newNet / 1.12
     await supabase.from('invoices').update({ total_sales_net: newNet }).eq('id', invoiceId)
   }
 
@@ -860,7 +863,7 @@ export default function Billing() {
     const tripsByCode = {}
     codes.forEach(c => { tripsByCode[c] = tripsData.filter(t => t.trip_code === c) })
     const grandTotal = tripsData.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
-    const allSMC = tripsData.length > 0 && tripsData.every(t => t.trip_code === 'SMC')
+    const allSMC = tripsData.length > 0 && tripsData.every(t => isVatInclusiveCode(t.trip_code))
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
     const vat12 = isVat ? vatable * 0.12 : 0
     const totalAmt = isVat ? vatable * 1.12 : vatable
@@ -1416,7 +1419,7 @@ export default function Billing() {
         const items = grouped[bucketLabel]; if (!items?.length) return
         const bucket = getBucket(getDaysO(items[0]))
         doc.setFontSize(8); doc.setFont(undefined,'bold'); doc.setTextColor(...bucket.color); doc.text(`${bucketLabel}  (${items.length} invoice${items.length>1?'s':''})`,14,startY); doc.setTextColor(0); doc.setFont(undefined,'normal')
-        autoTable(doc, { startY:startY+3, head:[['Invoice No.','Client','Date','Type','Days','Net Sales','Total Sales','Remarks']], body:items.map(i=>{const net=i.total_sales_net||0;return[i.invoice_no,i.client,fmtDate(i.invoice_date),i.truck_type==='Dump Truck'?'Dump':'PM',`${getDaysO(i)}d`,f2(net),f2(net),i.remarks||'']}), headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{5:{halign:'right'},6:{halign:'right'}}, margin:{left:14,right:14}, didParseCell:(data)=>{if(data.section==='body'&&data.column.index===4)data.cell.styles.textColor=bucket.color} })
+        autoTable(doc, { startY:startY+3, head:[agingIncludeRemarks?['Invoice No.','Client','Date','Type','Days','Net Sales','Total Sales','Remarks']:['Invoice No.','Client','Date','Type','Days','Net Sales','Total Sales']], body:items.map(i=>{const net=i.total_sales_net||0;const row=[i.invoice_no,i.client,fmtDate(i.invoice_date),i.truck_type==='Dump Truck'?'Dump':'PM',`${getDaysO(i)}d`,f2(net),f2(net)];if(agingIncludeRemarks)row.push(i.remarks||'');return row}), headStyles:{fillColor:bucket.color,fontSize:7,fontStyle:'bold'}, bodyStyles:{fontSize:7}, alternateRowStyles:{fillColor:[250,250,250]}, columnStyles:{5:{halign:'right'},6:{halign:'right'}}, margin:{left:14,right:14}, didParseCell:(data)=>{if(data.section==='body'&&data.column.index===4)data.cell.styles.textColor=bucket.color} })
         startY = doc.lastAutoTable.finalY+2
         const sub = items.reduce((s,i)=>s+(i.total_sales_net||0),0)
         doc.setFontSize(7.5); doc.setFont(undefined,'bold'); doc.setTextColor(...bucket.color); doc.text(`Subtotal (${items.length}): ${f2(sub)}`,14,startY+1); doc.setTextColor(0); doc.setFont(undefined,'normal'); startY+=8
@@ -1450,10 +1453,10 @@ export default function Billing() {
       { label: 'CURRENT (1–29d)', items: list.filter(i => getDaysO(i) < 30), color:'FF16A34A', bg:'FFDCFCE7' },
     ].filter(b => b.items.length > 0)
 
-    const COLS = 9
+    const COLS = agingIncludeRemarks ? 9 : 8
     const wb = new ExcelJS.Workbook()
     const ws = wb.addWorksheet('Aging Report')
-    ws.columns = [{width:12},{width:22},{width:12},{width:8},{width:10},{width:13},{width:15},{width:8},{width:24}]
+    ws.columns = [{width:12},{width:22},{width:12},{width:8},{width:10},{width:13},{width:15},{width:8},...(agingIncludeRemarks?[{width:24}]:[])]
     const thin = { style:'thin', color:{argb:'FFAAAAAA'} }
     const allBorders = { top:thin, left:thin, bottom:thin, right:thin }
 
@@ -1500,7 +1503,7 @@ export default function Billing() {
       ws.getRow(r).height = 18
       r++
       // Header row
-      const hdr = ['Invoice No.','Client','Invoice Date','Type','Status','Net Sales','Total Sales','Days','Remarks']
+      const hdr = ['Invoice No.','Client','Invoice Date','Type','Status','Net Sales','Total Sales','Days',...(agingIncludeRemarks?['Remarks']:[])]
       hdr.forEach((h,i) => headerCell(ws.getCell(r,i+1), h))
       r++
       // Data rows
@@ -1508,7 +1511,7 @@ export default function Billing() {
         const net = inv.total_sales_net || 0
         const bg = i % 2 === 0 ? bucket.bg : 'FFFFFFFF'
         const row = ws.getRow(r)
-        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, inv.is_vat ? net*1.12 : net, `${getDaysO(inv)}d`, inv.remarks||'']
+        const vals = [inv.invoice_no, inv.client, fmtDate(inv.invoice_date)||'', inv.truck_type==='Dump Truck'?'Dump':'PM', inv.status, net, inv.is_vat ? net*1.12 : net, `${getDaysO(inv)}d`,...(agingIncludeRemarks?[inv.remarks||'']:[])]
         vals.forEach((v,ci) => {
           const cell = row.getCell(ci+1)
           cell.value = v
@@ -1538,7 +1541,7 @@ export default function Billing() {
         cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF9FAFB'} }
         cell.border = allBorders
       })
-      ws.mergeCells(r,8,r,9)
+      ws.mergeCells(r,8,r,COLS)
       ws.getCell(r,8).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF9FAFB'} }
       ws.getCell(r,8).border = allBorders
       r++
@@ -1562,7 +1565,7 @@ export default function Billing() {
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFEF9C3'} }
       cell.border = allBorders
     })
-    ws.mergeCells(r,8,r,9)
+    ws.mergeCells(r,8,r,COLS)
     ws.getCell(r,8).fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFFEF9C3'} }
     ws.getCell(r,8).border = allBorders
     r++
@@ -1717,7 +1720,7 @@ export default function Billing() {
     const tripsByCode = {}
     codes.forEach(c => { tripsByCode[c] = trips.filter(t => t.trip_code === c) })
     const grandTotal = trips.reduce((s,t) => s + (t.supplier_amount||0) + (t.stripping_fee||0), 0)
-    const allSMC = trips.length > 0 && trips.every(t => t.trip_code === 'SMC')
+    const allSMC = trips.length > 0 && trips.every(t => isVatInclusiveCode(t.trip_code))
     const vatable = allSMC ? grandTotal / 1.12 : grandTotal
     const vat12 = isVat ? vatable * 0.12 : 0
     const totalAmt = isVat ? vatable * 1.12 : vatable
@@ -1901,6 +1904,11 @@ export default function Billing() {
             <div className="form-group">
               <label className="label required">Invoice Date</label>
               <DatePickerSingle value={invoiceDate} onChange={e => setInvoiceDate(e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label className="label">Remarks (optional)</label>
+              <input value={genRemarks} onChange={e => setGenRemarks(e.target.value)} placeholder="Note to attach to this invoice" />
+              <div style={{ color: 'var(--muted)', fontSize: 11, marginTop: 4 }}>Color-coding a remark is only available afterwards, editing from Invoice List.</div>
             </div>
           </div>
           {truckType === 'Prime Mover' && (
@@ -2781,6 +2789,10 @@ export default function Billing() {
               <div className="form-group" style={{ margin:0 }}><label className="label">Client</label><select value={overduePrintClient} onChange={e => setOverduePrintClient(e.target.value)}><option value="">All Clients</option>{[...new Set(agingDisplayed.map(i=>i.client).filter(Boolean))].sort().map(c => <option key={c} value={c}>{c}</option>)}</select></div>
               <div className="form-group" style={{ margin:0 }}><label className="label">Orientation</label><div style={{ display:'flex', gap:8 }}>{['landscape','portrait'].map(o => (<button key={o} onClick={() => setPrintOrientation(o)} className={printOrientation===o?'btn-primary btn-sm':'btn-ghost btn-sm'} style={{ flex:1 }}>{o==='landscape'?'⬜ Landscape':'📄 Portrait'}</button>))}</div></div>
               <div className="form-group" style={{ margin:0 }}><label className="label">Export Format</label><div style={{ display:'flex', gap:8 }}>{['pdf','excel'].map(f => (<button key={f} onClick={() => setPrintFormat(f)} className={printFormat===f?'btn-primary btn-sm':'btn-ghost btn-sm'} style={{ flex:1 }}>{f==='pdf'?'📄 PDF':'📊 Excel'}</button>))}</div></div>
+              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer' }}>
+                <input type="checkbox" checked={agingIncludeRemarks} onChange={e => setAgingIncludeRemarks(e.target.checked)} style={{ width:'auto' }} />
+                Include Remarks column
+              </label>
               <div style={{ fontSize:12, color:'var(--muted)', padding:'8px 12px', background:'var(--bg)', borderRadius:8 }}>
                 {(() => { const now5=new Date(); const count=agingDisplayed.filter(i=>{if(overduePrintType&&i.truck_type!==overduePrintType)return false;if(overduePrintClient&&i.client!==overduePrintClient)return false;return true}).length; return <span>{count} invoice{count!==1?'s':''} will be printed</span> })()}
               </div>

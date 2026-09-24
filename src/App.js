@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './components/AuthContext'
+import { ensureTripCodesLoaded, areTripCodesLoaded } from './lib/supabase'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -33,7 +35,14 @@ import './index.css'
 
 function ProtectedRoute({ children, adminOnly, superuserOnly, moduleKey, viewerAllowed }) {
   const { user, profile, loading, isSuperuser, isAdmin, isViewer, hasModule } = useAuth()
-  if (loading) return (
+  // Trip codes (built-in + Settings → Trip Codes) are cached once per session
+  // before any page renders, so VAT/code-list logic never runs on an empty
+  // cache. If the load fails, pages still render using built-in codes only.
+  const [codesReady, setCodesReady] = useState(areTripCodesLoaded())
+  useEffect(() => {
+    if (user && !codesReady) ensureTripCodesLoaded().finally(() => setCodesReady(true))
+  }, [user, codesReady])
+  if (loading || (user && !codesReady)) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg)', color: 'var(--muted)', fontSize: 14 }}>
       Loading…
     </div>

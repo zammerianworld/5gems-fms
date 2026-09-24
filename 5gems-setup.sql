@@ -2106,6 +2106,8 @@ AS $function$
 declare
   v_role text;
   v_rows int;
+  v_nick text;
+  v_full text;
 begin
   select role into v_role from public.profiles where id = auth.uid();
   if v_role not in ('admin', 'superuser') then
@@ -2118,7 +2120,17 @@ begin
   elsif p_table = 'expenses' then delete from public.expenses where id = p_id;
   elsif p_table = 'orcr_records' then delete from public.orcr_records where id = p_id;
   elsif p_table = 'pdc_checks' then delete from public.pdc_checks where id = p_id;
-  elsif p_table = 'clients' then delete from public.clients where id = p_id;
+  elsif p_table = 'clients' then
+    select nickname, full_name into v_nick, v_full from public.clients where id = p_id;
+    if v_nick is not null and (
+         exists (select 1 from public.trips_dump where client in (v_nick, v_full))
+      or exists (select 1 from public.trips_pm   where client in (v_nick, v_full))
+      or exists (select 1 from public.invoices   where client in (v_nick, v_full))
+      or exists (select 1 from public.trip_codes where client in (v_nick, v_full))
+    ) then
+      raise exception 'Client "%" still has trips, invoices or a trip code — reassign or remove those first', v_nick;
+    end if;
+    delete from public.clients where id = p_id;
   elsif p_table = 'extra_income' then delete from public.extra_income where id = p_id;
   elsif p_table = 'loans' then delete from public.loans where id = p_id;
   elsif p_table = 'cash_vouchers' then delete from public.cash_vouchers where id = p_id;
