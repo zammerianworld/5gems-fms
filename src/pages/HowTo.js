@@ -39,9 +39,9 @@ const GUIDES = [
         content: [
           { type: 'text', text: 'Press "/" from anywhere in the app (when not typing in a field) to open the global search — also available via the search bar on this dashboard, the sidebar "Search…" button, or the 🔍 icon in the mobile topbar.' },
           { type: 'steps', items: [
-            'Type at least 2 characters to search invoices (by invoice no. or client), Dump Truck trips (plate, SMCSL WB, client), and Prime Mover trips (plate, waybill no., client).',
+            'Type at least 2 characters to search invoices (by invoice no. or client), Dump Truck trips (plate, SMCSL WB, client), Prime Mover trips (plate, waybill no., client, or a value typed into a Trip Code custom input — e.g. a Booking Ref), clients, drivers, trucks, and check vouchers (by voucher no., payee, or check no.).',
             'Use ↑↓ to navigate results, Enter to open, Esc to close.',
-            'Clicking a result jumps you straight to the matching invoice in Billing, or the matching trip in Trip Entry with the search term pre-filled.',
+            'Clicking a result jumps you straight to the matching record — an invoice or trip opens in the right page and tab with the search term pre-filled, a client or truck opens Settings on the matching tab, a driver opens Employees → Drivers, and a check voucher opens Check Vouchers with the search already filled in.',
           ]},
         ],
       },
@@ -149,14 +149,16 @@ const GUIDES = [
           { type: 'text', text: 'The fields shown depend on the client you select — this is controlled by that client\'s "Prime Mover Trip Entry Style" set in Settings → Clientele (Container/Port by default, or Generic Van).' },
           { type: 'steps', items: [
             'Go to Trip Entry → Prime Mover tab.',
-            'Fill in Trip Date, Truck Plate, and Trip Code (built-in codes like SMC, plus any custom codes added in Settings → PM Trip Codes).',
-            'Select the Client — this determines which fields appear next.',
-            'Container/Port clients: pick Container Size (20ft/40ft), then fill the standard fields plus per-container details using + Add Container.',
+            'Fill in Trip Date, Truck Plate, and Trip Code. This list includes the built-in codes (Hustling PSACC, Hauling PSACC, SMC), any simple custom names saved from Settings → PM Trip Codes, and any structured trip code set up in Settings → Trip Codes.',
+            'Select the Client — this determines which fields appear next. For a trip code set up in Settings → Trip Codes with a client attached, this fills in automatically.',
+            'Container/Port clients: pick Container Size (20ft/40ft), then fill the standard fields plus per-container details using + Add Container. The Amount field suggests the client\'s own past rates.',
             'Generic Van clients: fill Driver, Van Number/Vessel, Destination, TOLL Ticket, TOLL Scale, and Rate/Total Amount instead — no container fields.',
+            'For a trip code set up in Settings → Trip Codes, a "[code] — Details" section appears with exactly the inputs configured for that code, and each container shows its own configured inputs too. Fields marked * are required — the trip won\'t save until they\'re filled in.',
             'Click Save Trip.',
           ]},
           { type: 'note', text: 'A new client defaults to Container/Port style. Switch a client to Generic Van in Settings → Clientele if their Prime Mover trips are simple point-to-point van runs rather than container/port logistics.' },
           { type: 'note', text: 'For the built-in trip codes (Hustling PSACC, Hauling PSACC, SMC) specifically, a separate "Driver Rate Destination" dropdown also appears — this is unrelated to the Generic Van Destination field above, and instead controls which driver pay rate applies to the trip. See the Employees guide, Structured Prime Mover Rate Matching, for details.' },
+          { type: 'note', text: 'SMC, and any trip code set as VAT-inclusive in Settings → Trip Codes, are entered with VAT already included — net is worked out as amount ÷ 1.12. One invoice can\'t mix VAT-inclusive and VAT-exclusive trip codes; Generate and + Trip will stop you and ask to invoice them separately.' },
         ],
       },
       {
@@ -194,9 +196,11 @@ const GUIDES = [
             'Review the trips listed. You can remove individual trips using the ✕ button.',
             'Adjust the rate per trip if needed (requires Admin PIN).',
             'Choose Invoice Type: Non-VAT (default) or VAT — see VAT & Withholding Tax below for what this changes.',
+            'Optional: type a note in Remarks — it is saved with the invoice. Color-coding a remark is done afterwards from Invoice List.',
             'Click Generate Invoice. The invoice number starts blank for manual entry — type the number before printing.',
             'Click Print / Preview to open the SOA print dialog. Select signatories, then print or export.',
           ]},
+          { type: 'note', text: 'On the Prime Mover SOA, each trip code set up in Settings → Trip Codes gets its own section after the built-in ones, showing only the columns marked "On SOA" for that code.' },
         ],
       },
       {
@@ -268,6 +272,7 @@ const GUIDES = [
           { type: 'steps', items: [
             'Access via the Aging Report tab or the Aging button in Invoice List.',
             'Both 🖨️ Print PDF and 📊 Export Excel open the Signatory dialog first — the exported report includes Prepared by / Approved by signatures for external review.',
+            'Untick "Include Remarks column" in the print dialog to leave invoice remarks out of the PDF/Excel — useful when sending the report outside the company.',
           ]},
         ],
       },
@@ -462,6 +467,13 @@ const GUIDES = [
         heading: 'Year-over-Year',
         content: [
           { type: 'text', text: 'Year-over-Year (under Finance menu) compares revenue, expenses, and net profit across multiple years side by side. Useful for spotting trends and presenting to management.' },
+        ],
+      },
+      {
+        heading: 'Midyear Report — Monthly Payments',
+        content: [
+          { type: 'text', text: 'The Monthly Payments tab splits payments received (by date credited) into SMC, PSACC and Dump Truck columns.' },
+          { type: 'note', text: 'Once a trip code set up in Settings → Trip Codes has paid invoices in the year, an "Other PM" column appears for it, in the screen table and the Excel export.' },
         ],
       },
       {
@@ -662,13 +674,31 @@ const GUIDES = [
             ['Company Info', 'Company name, address, TIN, contact, email'],
             ['Signatories', 'Add/edit people who sign documents (appears in signatory picker when printing)'],
             ['Trucks', 'Add/edit/deactivate trucks in the fleet'],
-            ['Clientele', 'Add/edit clients, their billing details, and Prime Mover Trip Entry Style (Container/Port or Generic Van)'],
+            ['Clientele', 'Add/edit clients, their billing details, and Prime Mover Trip Entry Style (Container/Port or Generic Van). A client that still has trips, invoices or a trip code under its name can\'t be removed — the app says why.'],
+            ['Trip Codes', 'Set up a fully configured Prime Mover trip code for a client — its own required fields, VAT treatment, and SOA layout. Different from "PM Trip Codes" below, which is just a plain list of extra code names.'],
             ['Commodities', 'Add/edit commodity types used in trip entry'],
             ['Routes', 'Add/remove custom Dump Truck routes — appear in Trip Entry and Manage Trips filter'],
-            ['PM Trip Codes', 'Add custom Prime Mover trip codes (e.g. for a new client) — no schema change needed, works for both Container and Van style clients'],
+            ['PM Trip Codes', 'A simple list of extra Prime Mover trip code names, with no fields or client attached — mainly for Generic Van clients. For a code that needs its own required fields or VAT treatment, use "Trip Codes" above instead.'],
             ['Legal', 'View the End User License Agreement, Privacy Policy, and DMCA / Copyright Policy'],
             ['PWA Icons', 'Superuser only — app icon for install-to-homescreen'],
           ]},
+        ],
+      },
+      {
+        heading: 'Setting Up a Trip Code',
+        content: [
+          { type: 'text', text: 'Add a trip code (Settings → Trip Codes) when a client needs a new kind of Prime Mover trip or different trip details. No programming change is needed. The built-in codes keep working exactly as before and can\'t be edited.' },
+          { type: 'steps', items: [
+            'Go to Settings → Trip Codes and click + Add trip code.',
+            'Enter the code name and pick the client it bills to.',
+            'Choose Rates entered as: VAT-exclusive (like PSACC — amounts are net) or VAT-inclusive (like SMC — amounts include VAT, net is amount ÷ 1.12).',
+            'Tick the standard inputs this job needs (waybill, vessel, van no., seal no., stripping fee, etc.). For each, choose Required and whether it shows On SOA.',
+            'Add custom inputs for anything not in the standard list — label, type (text, number, date, dropdown), Required, On SOA. Or use Copy inputs from another code.',
+            'Save. The code appears right away in Trip Entry → Prime Mover.',
+          ]},
+          { type: 'note', text: 'Once a code has trips, its name and VAT setting lock — changing them would rewrite past trips and reports. Inputs, client and status can still be changed. For different rates, add a new code.' },
+          { type: 'note', text: 'Set a code to Inactive to hide it from new trips; its past trips stay as they are. A code with trips can\'t be deleted.' },
+          { type: 'note', text: 'Driver pay for these codes: add a rate for the code in Employees → Drivers → Rates (flat per trip code, no destination needed).' },
         ],
       },
       {
