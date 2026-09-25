@@ -135,9 +135,9 @@ function TripCodeEditor({ initial, clients, otherCodes, locked, onCancel, onSave
           <input value={form.code} disabled={locked} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="e.g. Northport Port Haul" />
         </div>
         <div className="form-group">
-          <label className="label required">Client</label>
+          <label className="label">Client <span style={{ fontWeight: 400, color: 'var(--hint)', textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
           <select value={form.client || ''} onChange={e => setForm(f => ({ ...f, client: e.target.value }))}>
-            <option value="">Select client</option>
+            <option value="">No client — a plain reusable code name</option>
             {clients.map(c => <option key={c.id} value={c.nickname}>{c.nickname} — {c.full_name}</option>)}
           </select>
         </div>
@@ -228,7 +228,7 @@ export default function Settings() {
   const [appBeta, setAppBeta] = useState(true)
   const [appBetaLabel, setAppBetaLabel] = useState('BETA — Testing Phase')
   const [versionSaving, setVersionSaving] = useState(false)
-  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Clientele', 'Trip Codes', 'Commodities', 'Routes', 'PM Trip Codes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
+  const TABS = ['Company Info', 'Signatories', 'Trucks', 'Clientele', 'Trip Codes', 'Commodities', 'Routes', 'Legal', ...(isSuperuser ? ['PWA Icons', 'App Version'] : [])]
   const [legalDoc, setLegalDoc] = useState('eula')
   const [tab, setTab] = useState('Company Info')
   const location = useLocation()
@@ -259,8 +259,6 @@ export default function Settings() {
   const [commodities, setCommodities] = useState([])
   const [routes, setRoutes] = useState([])
   const [newRoute, setNewRoute] = useState('')
-  const [tripCodes, setTripCodes] = useState([])
-  const [newTripCode, setNewTripCode] = useState('')
   const [saving, setSaving] = useState(false)
   const [signatories, setSignatories] = useState([])
   const [newSig, setNewSig] = useState({ full_name: '', title: '', is_default_prepared: false, is_default_approved: false })
@@ -293,8 +291,6 @@ export default function Settings() {
     if (co.data) setCommodities(co.data)
     const { data: rts } = await supabase.from('saved_routes').select('*').order('label')
     if (rts) setRoutes(rts)
-    const { data: tcs } = await supabase.from('saved_pm_trip_codes').select('*').order('label')
-    if (tcs) setTripCodes(tcs)
     if (sig.data) setSignatories(sig.data)
     setLoading(false)
   }
@@ -376,7 +372,6 @@ export default function Settings() {
     if (!code) { showToast('Trip code name is required.', 'error'); return }
     const clash = [...PM_TRIP_CODES, ...configuredTripCodes.filter(c => c.id !== form.id).map(c => c.code)].some(c => c.toLowerCase() === code.toLowerCase())
     if (clash) { showToast(`A trip code named "${code}" already exists.`, 'error'); return }
-    if (!form.client) { showToast('Select the client this trip code bills to.', 'error'); return }
     const { fields, error: fErr } = normalizeCodeFields(form.fields)
     if (fErr) { showToast(fErr, 'error'); return }
     const locked = editingCode?.locked
@@ -416,22 +411,6 @@ export default function Settings() {
     const { error } = await supabase.from('saved_routes').delete().eq('id', id)
     if (error) { showToast('Error: ' + error.message, 'error'); return }
     setRoutes(prev => prev.filter(r => r.id !== id))
-    showToast(`"${name}" removed.`, 'info')
-  }
-  const addTripCode = async () => {
-    const name = newTripCode.trim()
-    if (!name) return
-    if (tripCodes.some(c => c.label?.toLowerCase() === name.toLowerCase()) || PM_TRIP_CODES.some(c => c.toLowerCase() === name.toLowerCase())) { showToast('Trip code already exists.', 'error'); return }
-    const { data, error } = await supabase.from('saved_pm_trip_codes').insert({ label: name }).select().single()
-    if (error) { showToast('Error: ' + error.message, 'error'); return }
-    setTripCodes(prev => [...prev, data].sort((a,b) => a.label.localeCompare(b.label)))
-    setNewTripCode('')
-    showToast('Trip code added.')
-  }
-  const deleteTripCode = async (id, name) => {
-    const { error } = await supabase.from('saved_pm_trip_codes').delete().eq('id', id)
-    if (error) { showToast('Error: ' + error.message, 'error'); return }
-    setTripCodes(prev => prev.filter(c => c.id !== id))
     showToast(`"${name}" removed.`, 'info')
   }
 
@@ -842,7 +821,7 @@ export default function Settings() {
                 />
               ) : (
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 560 }}>Prime Mover trip codes. Built-in codes work exactly as before and can't be edited. Add a code when a client needs a new kind of trip or different trip details — no code change needed.</div>
+                  <div style={{ fontSize: 12, color: 'var(--muted)', maxWidth: 560 }}>Prime Mover trip codes. Built-in codes work exactly as before and can't be edited. Add a code for a new kind of trip — attach a client for structured billing/VAT, or leave it blank for a plain reusable code name.</div>
                   <button className="btn-primary" onClick={() => setEditingCode({ initial: { ...EMPTY_CODE }, locked: false })}>+ Add trip code</button>
                 </div>
               )}
@@ -947,45 +926,6 @@ export default function Settings() {
                       <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 20, padding: '5px 10px 5px 14px' }}>
                         {r.label}
                         <button onClick={() => deleteRoute(r.id, r.label)} style={{ background: 'none', border: 'none', color: 'var(--hint)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-              }
-            </div>
-          </>
-        )}
-        {tab === 'PM Trip Codes' && (
-          <>
-            <div className="card" style={{ marginBottom: 20, maxWidth: 480 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 6 }}>Add Trip Code</h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Trip codes identify which client/billing arrangement a Prime Mover trip belongs to — used for both Container/Port and Generic Van style clients.</p>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <input value={newTripCode} onChange={e => setNewTripCode(e.target.value)}
-                  placeholder="e.g. NewClientName" onKeyDown={e => e.key === 'Enter' && addTripCode()}
-                  style={{ flex: 1 }} />
-                <button className="btn-primary" onClick={addTripCode}>Add</button>
-              </div>
-            </div>
-            <div className="card" style={{ marginBottom: 20 }}>
-              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Built-in Trip Codes</h2>
-              <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12 }}>Always available in Trip Entry — cannot be removed here.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {PM_TRIP_CODES.map(c => (
-                  <div key={c} style={{ fontSize: 13, background: 'var(--bg)', border: '0.5px solid var(--border)', borderRadius: 20, padding: '5px 14px', color: 'var(--muted)' }}>
-                    {c}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="card">
-              <h2 style={{ fontSize: 15, fontWeight: 500, marginBottom: 12 }}>Custom Trip Codes</h2>
-              {tripCodes.length === 0
-                ? <p style={{ fontSize: 13, color: 'var(--muted)', fontStyle: 'italic' }}>No custom trip codes yet.</p>
-                : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {tripCodes.map(c => (
-                      <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, background: 'var(--surface)', border: '0.5px solid var(--border-md)', borderRadius: 20, padding: '5px 10px 5px 14px' }}>
-                        {c.label}
-                        <button onClick={() => deleteTripCode(c.id, c.label)} style={{ background: 'none', border: 'none', color: 'var(--hint)', cursor: 'pointer', fontSize: 18, lineHeight: 1, padding: '0 2px' }}>×</button>
                       </div>
                     ))}
                   </div>

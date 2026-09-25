@@ -212,7 +212,6 @@ export default function Trips() {
   const [summaryTruck, setSummaryTruck] = useState('')
   const [filterRoute, setFilterRoute] = useState('')
   const [savedRoutes, setSavedRoutes] = useState([])
-  const [tripCodes, setTripCodes] = useState([])
   const [drivers, setDrivers] = useState([])
   const [filterCommodity, setFilterCommodity] = useState('')
   const [filterTruck, setFilterTruck] = useState('')
@@ -241,7 +240,7 @@ export default function Trips() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true)
-    const [dt, pt, tr, cl, co, inv, rts, tcs, dv] = await Promise.all([
+    const [dt, pt, tr, cl, co, inv, rts, dv] = await Promise.all([
       fetchAllRows(() => supabase.from('trips_dump').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       fetchAllRows(() => supabase.from('trips_pm').select('*').is('deleted_at', null).order('trip_date', { ascending: false })),
       supabase.from('trucks').select('*').order('truck_type').order('plate'),
@@ -249,7 +248,6 @@ export default function Trips() {
       supabase.from('commodities').select('name,for_type').order('name'),
       fetchAllRows(() => supabase.from('invoices').select('id,invoice_no,status,date_credited').is('deleted_at', null)),
       supabase.from('saved_routes').select('label').order('label'),
-      supabase.from('saved_pm_trip_codes').select('label').order('label'),
       supabase.from('drivers').select('id,driver_name,truck_id').eq('active', true).order('driver_name'),
     ])
     if (dt.data) {
@@ -264,7 +262,6 @@ export default function Trips() {
     if (co.data) setCommodities(co.data)
     // savedRates removed — rates now derived from trip history
     if (rts.data) setSavedRoutes(rts.data.map(r => r.label))
-    if (tcs.data) setTripCodes(tcs.data.map(c => c.label))
     if (dv.data) setDrivers(dv.data)
     if (inv.data) {
       setInvoiceMap(Object.fromEntries(inv.data.map(i => [i.id, i.invoice_no])))
@@ -1040,7 +1037,7 @@ export default function Trips() {
             <SS label="Driver" value={pmForm.driver_id} onChange={v => setPmForm(f => ({ ...f, driver_id: v, driver_name: f.driver_name || drivers.find(d => d.id === v)?.driver_name || '' }))}
               options={drivers.map(d => ({ value: d.id, label: d.driver_name }))}
               placeholder="Defaults to truck's assigned driver — change if relief driving" />
-            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...getActivePmCodes(), ...tripCodes, ...(pmForm.trip_code && ![...getActivePmCodes(), ...tripCodes].includes(pmForm.trip_code) ? [pmForm.trip_code] : [])]} placeholder="Select trip code" />
+            <SS label="Trip Code" value={pmForm.trip_code} onChange={handlePMTripCodeChange} req options={[...getActivePmCodes(), ...(pmForm.trip_code && !getActivePmCodes().includes(pmForm.trip_code) ? [pmForm.trip_code] : [])]} placeholder="Select trip code" />
             <div className="form-group">
               <label className="label required">Client
                 {pmForm.trip_code && (['Hustling PSACC','Hauling PSACC','SMC'].includes(pmForm.trip_code) || getCustomPmCodeDef(pmForm.trip_code)?.client) && (

@@ -149,7 +149,7 @@ const GUIDES = [
           { type: 'text', text: 'The fields shown depend on the client you select — this is controlled by that client\'s "Prime Mover Trip Entry Style" set in Settings → Clientele (Container/Port by default, or Generic Van).' },
           { type: 'steps', items: [
             'Go to Trip Entry → Prime Mover tab.',
-            'Fill in Trip Date, Truck Plate, and Trip Code. This list includes the built-in codes (Hustling PSACC, Hauling PSACC, SMC), any simple custom names saved from Settings → PM Trip Codes, and any structured trip code set up in Settings → Trip Codes.',
+            'Fill in Trip Date, Truck Plate, and Trip Code. This list includes the built-in codes (Hustling PSACC, Hauling PSACC, SMC) plus any code set up in Settings → Trip Codes.',
             'Select the Client — this determines which fields appear next. For a trip code set up in Settings → Trip Codes with a client attached, this fills in automatically.',
             'Container/Port clients: pick Container Size (20ft/40ft), then fill the standard fields plus per-container details using + Add Container. The Amount field suggests the client\'s own past rates.',
             'Generic Van clients: fill Driver, Van Number/Vessel, Destination, TOLL Ticket, TOLL Scale, and Rate/Total Amount instead — no container fields.',
@@ -675,10 +675,9 @@ const GUIDES = [
             ['Signatories', 'Add/edit people who sign documents (appears in signatory picker when printing)'],
             ['Trucks', 'Add/edit/deactivate trucks in the fleet'],
             ['Clientele', 'Add/edit clients, their billing details, and Prime Mover Trip Entry Style (Container/Port or Generic Van). A client that still has trips, invoices or a trip code under its name can\'t be removed — the app says why.'],
-            ['Trip Codes', 'Set up a fully configured Prime Mover trip code for a client — its own required fields, VAT treatment, and SOA layout. Different from "PM Trip Codes" below, which is just a plain list of extra code names.'],
+            ['Trip Codes', 'Set up a Prime Mover trip code — a plain reusable name, or attach a client for structured billing/VAT, required fields, and its own SOA layout.'],
             ['Commodities', 'Add/edit commodity types used in trip entry'],
             ['Routes', 'Add/remove custom Dump Truck routes — appear in Trip Entry and Manage Trips filter'],
-            ['PM Trip Codes', 'A simple list of extra Prime Mover trip code names, with no fields or client attached — mainly for Generic Van clients. For a code that needs its own required fields or VAT treatment, use "Trip Codes" above instead.'],
             ['Legal', 'View the End User License Agreement, Privacy Policy, and DMCA / Copyright Policy'],
             ['PWA Icons', 'Superuser only — app icon for install-to-homescreen'],
           ]},
@@ -687,10 +686,10 @@ const GUIDES = [
       {
         heading: 'Setting Up a Trip Code',
         content: [
-          { type: 'text', text: 'Add a trip code (Settings → Trip Codes) when a client needs a new kind of Prime Mover trip or different trip details. No programming change is needed. The built-in codes keep working exactly as before and can\'t be edited.' },
+          { type: 'text', text: 'Add a trip code (Settings → Trip Codes) whenever you need a new kind of Prime Mover trip — from a quick reusable name with no extra structure, up to a client-specific code with its own required fields and VAT treatment. No programming change is needed. The built-in codes keep working exactly as before and can\'t be edited.' },
           { type: 'steps', items: [
             'Go to Settings → Trip Codes and click + Add trip code.',
-            'Enter the code name and pick the client it bills to.',
+            'Enter the code name. Attaching a client is optional — leave it blank for a plain reusable code, or pick a client if this code should auto-fill their name and bill under structured VAT rules.',
             'Choose Rates entered as: VAT-exclusive (like PSACC — amounts are net) or VAT-inclusive (like SMC — amounts include VAT, net is amount ÷ 1.12).',
             'Tick the standard inputs this job needs (waybill, vessel, van no., seal no., stripping fee, etc.). For each, choose Required and whether it shows On SOA.',
             'Add custom inputs for anything not in the standard list — label, type (text, number, date, dropdown), Required, On SOA. Or use Copy inputs from another code.',
@@ -712,18 +711,6 @@ const GUIDES = [
             'Click the × on any route pill to remove it.',
           ]},
           { type: 'note', text: 'The full list of built-in routes is shown under Settings → Routes for reference — they are always available and cannot be removed; only custom-added routes can be deleted.' },
-        ],
-      },
-      {
-        heading: 'Managing PM Trip Codes',
-        content: [
-          { type: 'text', text: 'Prime Mover trips use a Trip Code to identify which client/billing arrangement a trip belongs to (e.g. SMC, Hustling PSACC). The built-in codes always work; add more here whenever a new Prime Mover client comes on board.' },
-          { type: 'steps', items: [
-            'Go to Settings → PM Trip Codes.',
-            'Type the new code (usually the client name) and click Add, or press Enter.',
-            'New codes appear immediately in the Trip Code dropdown on Trip Entry, for both Container/Port and Generic Van style clients.',
-            'Click the × on any custom code pill to remove it — built-in codes cannot be removed.',
-          ]},
         ],
       },
       {
