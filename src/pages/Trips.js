@@ -479,6 +479,7 @@ export default function Trips() {
             emr_date: f.emr_date || null,
             date_completion: f.date_completion || null,
             driver_id: f.driver_id || null,
+            rate: null,
             created_by: profile?.id,
           }
       let error
