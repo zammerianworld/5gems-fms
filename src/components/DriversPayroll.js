@@ -3,7 +3,7 @@ import DatePickerSingle from './DatePickerSingle'
 import DatePickerRange from './DatePickerRange'
 import SignatoryDialog from './SignatoryDialog'
 import ConfirmDialog from './ConfirmDialog'
-import { supabase, fmt, fmtDate, logAudit, PM_TRIP_CODES } from '../lib/supabase'
+import { supabase, fmt, fmtDate, logAudit, getAllPmCodes } from '../lib/supabase'
 import { buildPayslipDoc } from '../lib/payslipTemplate'
 import * as XLSX from 'xlsx'
 
@@ -1349,7 +1349,7 @@ export default function DriversPayroll({ isAdmin, isSuperuser, profile, showToas
                 <FormRow label="Trip Code">
                   <select value={rateForm.trip_code} onChange={e => setRateForm(f => ({ ...f, trip_code: e.target.value, container_size: '', van_status: '', destination: '' }))} style={INPUT}>
                     <option value="">— Select trip code —</option>
-                    {PM_TRIP_CODES.map(code => <option key={code} value={code}>{code}</option>)}
+                    {getAllPmCodes().map(code => <option key={code} value={code}>{code}</option>)}
                   </select>
                 </FormRow>
                 {rateForm.trip_code && (

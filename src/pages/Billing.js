@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import DatePickerSingle from '../components/DatePickerSingle'
-import { supabase, fmt, fmtDate, logAudit, numberToWords, calcQtyDest, DUMP_TRUCK_ROUTES, sortRows, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
+import { supabase, fmt, fmtDate, logAudit, numberToWords, calcQtyDest, DUMP_TRUCK_ROUTES, sortRows, fetchAllRows, isVatInclusiveCode, getCustomPmCodeDef, getAllPmCodes, resolveCodeFields, codeFieldValue } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
 import jsPDF from 'jspdf'
 import * as XLSX from 'xlsx'
@@ -219,6 +219,39 @@ export default function Billing() {
   }, [fetchAll])
 
   const getClientDetails = (nickname) => clientsList.find(c => c.nickname === nickname || c.full_name === nickname) || null
+
+  // SOA layout for configured (non-built-in) trip codes — Settings → Trip
+  // Codes. Built-in codes keep their hardcoded sections; these are appended
+  // after them. Columns: DATE, PLATE, SIZE, the code's "On SOA" inputs, then
+  // SUPPLIER AMT (+ STRIPPING FEE and TOTAL when the code uses stripping
+  // fee). Trip-level values print on a trip's first container row only.
+  const customSoaCodes = (trips) => [...new Set(trips.map(t => t.trip_code))].filter(c => getCustomPmCodeDef(c)).sort()
+  const customSoaLayout = (code, codeTrips) => {
+    const def = getCustomPmCodeDef(code)
+    const all = resolveCodeFields(def)
+    const cols = all.filter(f => f.show_on_soa && f.key !== 'stripping_fee')
+    const hasStrip = all.some(f => f.key === 'stripping_fee')
+    const cellText = (f, t, c, isFirst) => {
+      if (f.level === 'trip' && !isFirst) return ''
+      const v = codeFieldValue(f, t, c)
+      if (v === undefined || v === null || String(v).trim() === '') return '—'
+      return f.type === 'date' ? fmtDate(v) : String(v)
+    }
+    const rows = codeTrips.flatMap(t => {
+      const cs = (t.containers || []).length ? t.containers : [{ supplier_amount: t.supplier_amount, stripping_fee: t.stripping_fee }]
+      return cs.map((c, ci) => {
+        const sup = parseFloat(c.supplier_amount ?? (ci === 0 ? t.supplier_amount : 0)) || 0
+        const strip = hasStrip ? (parseFloat(c.stripping_fee) || 0) : 0
+        return { t, c, isFirst: ci === 0, sup, strip, total: sup + strip }
+      })
+    })
+    const supTotal = rows.reduce((s, r) => s + r.sup, 0)
+    const stripTotal = rows.reduce((s, r) => s + r.strip, 0)
+    // Matches 5 Gems' own built-in column wording (SMC_EXTRA/HUSTLING_EXTRA/
+    // HAULING_EXTRA), not a generic 'AMOUNT' label.
+    const amtLabel = def?.vat_inclusive ? 'SUPPLIER AMT (VAT INC.)' : 'SUPPLIER AMT'
+    return { cols, hasStrip, rows, supTotal, stripTotal, total: supTotal + stripTotal, amtLabel, cellText }
+  }
   // Checks ALL invoices incl. soft-deleted — the DB unique constraint applies to those too,
   // so a number "freed" by deleting an invoice is still blocked at insert time.
   const checkDuplicate = async (no) => {
@@ -323,6 +356,18 @@ export default function Billing() {
     if (invoiceDupWarning) { showToast('Invoice number already used.', 'error'); return }
     if (!selectedClient) { showToast('Select a client first.', 'error'); return }
     if (billedTrips.length === 0) { showToast('Select at least one trip.', 'error'); return }
+
+    // An invoice gets ONE VAT treatment (all VAT-inclusive, or not). Mixing a
+    // configured trip code with trips of a different VAT treatment would
+    // mis-state the totals, so block it. Only checked when a configured
+    // (non-built-in) code is involved — built-in SMC/PSACC invoicing is
+    // unchanged.
+    if (truckType !== 'Dump Truck' && billedTrips.some(t => getCustomPmCodeDef(t.trip_code))) {
+      const vatModes = new Set(billedTrips.map(t => isVatInclusiveCode(t.trip_code)))
+      if (vatModes.size > 1) {
+        showToast('These trips mix VAT-inclusive and VAT-exclusive trip codes. Invoice them separately.', 'error'); return
+      }
+    }
     if (truckType === 'Dump Truck') {
       const routes = [...new Set(billedTrips.map(t => t.route).filter(Boolean))]
       const comms = [...new Set(billedTrips.map(t => t.commodity).filter(Boolean))]
@@ -399,8 +444,20 @@ export default function Billing() {
 
   const handleAddTripsConfirm = async () => {
     if (!addTripSelected.length) return
-    setAddTripSaving(true)
     const inv = addTripModal.inv
+
+    // Same one-VAT-treatment-per-invoice rule as Generate: only enforced when
+    // a configured (non-built-in) trip code is involved.
+    if (inv.truck_type !== 'Dump Truck') {
+      const { data: existing } = await supabase.from('trips_pm').select('trip_code').eq('invoice_id', inv.id)
+      const adding = addTripCandidates.filter(t => addTripSelected.includes(t.id))
+      const combined = [...(existing || []), ...adding]
+      if (combined.some(t => getCustomPmCodeDef(t.trip_code)) && new Set(combined.map(t => isVatInclusiveCode(t.trip_code))).size > 1) {
+        showToast('Those trips have a different VAT treatment than this invoice. Invoice them separately.', 'error'); return
+      }
+    }
+
+    setAddTripSaving(true)
     const tbl = inv.truck_type === 'Dump Truck' ? 'trips_dump' : 'trips_pm'
     await supabase.from(tbl).update({ invoice_id: inv.id }).in('id', addTripSelected)
     const { data: allTrips } = await supabase.from(tbl).select('*').eq('invoice_id', inv.id)
@@ -1111,10 +1168,56 @@ export default function Billing() {
       r++ // spacer between sections
     })
 
+    // Configured trip codes (Settings → Trip Codes), after the built-in sections.
+    customSoaCodes(tripsData).forEach(code => {
+      const L = customSoaLayout(code, tripsData.filter(t => t.trip_code === code))
+      const lead = 3 + L.cols.length
+      const lastCol = lead + 1 + (L.hasStrip ? 2 : 0)
+      ws.mergeCells(r,1,r,Math.max(COLS, lastCol))
+      const titleCell = ws.getCell(r,1)
+      titleCell.value = code.toUpperCase()
+      titleCell.font = { bold:true, color:{argb:'FFFFFFFF'}, size:8.5 }
+      titleCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF333333'} }
+      titleCell.alignment = { vertical:'middle' }
+      r++
+      const heads = ['TRANSACTION DATE','TRUCK PLATE','CONTAINER SIZE', ...L.cols.map(f => f.label.toUpperCase()), L.amtLabel, ...(L.hasStrip ? ['STRIPPING FEE','TOTAL'] : [])]
+      heads.forEach((h, hi) => headerCell(ws.getCell(r, hi + 1), h))
+      ws.getRow(r).height = 26
+      r++
+      L.rows.forEach((rw, ri) => {
+        const bg = ri % 2 === 0 ? 'FFFFFFFF' : 'FFF2F2F2'
+        const row = ws.getRow(r)
+        dataCell(row.getCell(1), rw.isFirst ? fmtDate(rw.t.trip_date).toUpperCase() : '', bg)
+        dataCell(row.getCell(2), rw.isFirst ? rw.t.truck_plate : '', bg, {bold:true})
+        dataCell(row.getCell(3), rw.t.container_size, bg)
+        // Text format so refs like 00123 keep their leading zeros.
+        L.cols.forEach((f, fi) => dataCell(row.getCell(4 + fi), L.cellText(f, rw.t, rw.c, rw.isFirst), bg, {numFmt:'@'}))
+        dataCell(row.getCell(lead + 1), rw.sup, bg, {align:'right', numFmt:'#,##0.00'})
+        if (L.hasStrip) {
+          dataCell(row.getCell(lead + 2), rw.strip || '—', bg, {align:'right', numFmt: rw.strip ? '#,##0.00' : '@'})
+          dataCell(row.getCell(lead + 3), rw.total, bg, {align:'right', numFmt:'#,##0.00', bold:true})
+        }
+        r++
+      })
+      const grayFill = 'FFF5F5F5'
+      ws.mergeCells(r,1,r,lead)
+      const lc = ws.getCell(r,1)
+      lc.value = 'TOTAL'; lc.font = { bold:true, size:9 }; lc.alignment = { horizontal:'right' }
+      lc.fill = { type:'pattern', pattern:'solid', fgColor:{argb:grayFill} }; lc.border = allBorders
+      ;[[lead + 1, L.supTotal], ...(L.hasStrip ? [[lead + 2, L.stripTotal], [lead + 3, L.total]] : [])].forEach(([c, v]) => {
+        const cell = ws.getCell(r, c)
+        cell.value = v; cell.numFmt = '#,##0.00'; cell.font = { bold:true, size:9 }
+        cell.alignment = { horizontal:'right' }
+        cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:grayFill} }; cell.border = allBorders
+      })
+      r++
+      r++ // spacer
+    })
+
     // Generic Van trips — any trip_code not in the 3 built-in codes (covers
     // both custom trip codes for van clients and any unexpected code, so
     // nothing invoiced ever silently disappears from the printed SOA).
-    const vanTrips = tripsData.filter(t => !codes.includes(t.trip_code))
+    const vanTrips = tripsData.filter(t => !codes.includes(t.trip_code) && !getCustomPmCodeDef(t.trip_code))
     if (vanTrips.length > 0) {
       const VAN_EXTRA = ['DRIVER','VAN NO. / VESSEL','DESTINATION','TOLL TICKET','TOLL SCALE','RATE']
       const vanTotalUsedCols = 3 + VAN_EXTRA.length
@@ -1798,8 +1901,51 @@ export default function Billing() {
             </div>
           )
         })}
+        {customSoaCodes(trips).map(code => {
+          const L = customSoaLayout(code, trips.filter(t => t.trip_code === code))
+          const lead = 3 + L.cols.length
+          return (
+            <div key={code} style={{ marginBottom: 6 }}>
+              <div style={{ fontSize: 8.5, fontWeight: 'bold', background: '#333', color: '#fff', padding: '1px 4px', marginBottom: 2 }}>{code.toUpperCase()}</div>
+              <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse', tableLayout: 'fixed' }}>
+                <thead>
+                  <tr>
+                    <th style={thS}>TRANSACTION DATE</th><th style={thS}>TRUCK PLATE</th><th style={thS}>CONTAINER SIZE</th>
+                    {L.cols.map(f => <th key={f.key} style={thS}>{f.label.toUpperCase()}</th>)}
+                    <th style={thS}>{L.amtLabel}</th>
+                    {L.hasStrip && <><th style={thS}>STRIPPING FEE</th><th style={thS}>TOTAL</th></>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {L.rows.map((r, ri) => {
+                    const bg = ri % 2 === 0 ? '#fff' : '#f2f2f2'
+                    return (
+                      <tr key={`${r.t.id}-${ri}`}>
+                        <td style={{...tdS,background:bg}}>{r.isFirst ? fmtDate(r.t.trip_date).toUpperCase() : ''}</td>
+                        <td style={{...tdS,background:bg,fontWeight:'bold'}}>{r.isFirst ? r.t.truck_plate : ''}</td>
+                        <td style={{...tdS,background:bg}}>{r.t.container_size}</td>
+                        {L.cols.map(f => <td key={f.key} style={{...tdS,background:bg}}>{L.cellText(f, r.t, r.c, r.isFirst)}</td>)}
+                        <td style={{...tdS,background:bg,textAlign:'right'}}>{fmt(r.sup)}</td>
+                        {L.hasStrip && <><td style={{...tdS,background:bg,textAlign:'right'}}>{r.strip ? fmt(r.strip) : '—'}</td><td style={{...tdS,background:bg,textAlign:'right',fontWeight:'bold'}}>{fmt(r.total)}</td></>}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={lead} style={{...tdS,fontWeight:'bold',textAlign:'right',background:'#f5f5f5'}}>TOTAL</td>
+                    <td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(L.supTotal)}</td>
+                    {L.hasStrip && <><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(L.stripTotal)}</td><td style={{...tdS,textAlign:'right',fontWeight:'bold',background:'#f5f5f5'}}>{fmt(L.total)}</td></>}
+                  </tr>
+                </tfoot>
+              </table>
+              </div>
+            </div>
+          )
+        })}
         {(() => {
-          const vanTrips = trips.filter(t => !codes.includes(t.trip_code))
+          const vanTrips = trips.filter(t => !codes.includes(t.trip_code) && !getCustomPmCodeDef(t.trip_code))
           if (vanTrips.length === 0) return null
           const vanTotal = vanTrips.reduce((s,t) => s + (parseFloat(t.supplier_amount)||0), 0)
           const vanCols = ['DATE','TRUCK PLATE','TRIP CODE','DRIVER','VAN NO. / VESSEL','DESTINATION','TOLL TICKET','TOLL SCALE','RATE']
@@ -2600,7 +2746,7 @@ export default function Billing() {
                   <div className="form-group">
                     <label className="label">Trip Code</label>
                     <select value={quickEditTrip.trip_code||''} onChange={e => setQuickEditTrip(t => ({...t, trip_code: e.target.value}))}>
-                      {['Hustling PSACC','Hauling PSACC','SMC'].map(c => <option key={c} value={c}>{c}</option>)}
+                      {['Hustling PSACC','Hauling PSACC','SMC', ...getAllPmCodes().filter(c => getCustomPmCodeDef(c))].map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                   </div>
                   <div className="form-group">

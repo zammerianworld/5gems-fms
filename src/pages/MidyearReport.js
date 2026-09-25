@@ -291,7 +291,7 @@ export default function MidyearReport() {
   const invoiceClientType = (inv) => {
     const trips = tripsForInvoice(inv.id)
     const pm = trips.find(t => t.trip_code)
-    if (pm) return pm.trip_code === 'SMC' ? 'SMC' : 'PSACC'
+    if (pm) return pm.trip_code === 'SMC' ? 'SMC' : getCustomPmCodeDef(pm.trip_code) ? 'Other' : 'PSACC'
     return 'Dump'
   }
   const invoiceNetInScope = (inv) => {
@@ -316,16 +316,18 @@ export default function MidyearReport() {
     const rows = paidInv.filter(inv => inMonth(inv.date_credited, mk) && invoiceNetInScope(inv) > 0)
     const smc = rows.filter(i => invoiceClientType(i) === 'SMC').reduce((s, i) => s + invoiceNetInScope(i), 0)
     const psacc = rows.filter(i => invoiceClientType(i) === 'PSACC').reduce((s, i) => s + invoiceNetInScope(i), 0)
+    const other = rows.filter(i => invoiceClientType(i) === 'Other').reduce((s, i) => s + invoiceNetInScope(i), 0)
     const dump = rows.filter(i => invoiceClientType(i) === 'Dump').reduce((s, i) => s + invoiceNetInScope(i), 0)
     const override = paymentOverride(mk)
     if (override) {
-      return { month: MONTHS[i], smc: null, psacc: null, dump: null, total: parseFloat(override.total_amount) || 0, count: null, audited: true }
+      return { month: MONTHS[i], smc: null, psacc: null, other: null, dump: null, total: parseFloat(override.total_amount) || 0, count: null, audited: true }
     }
-    return { month: MONTHS[i], smc, psacc, dump, total: smc + psacc + dump, count: rows.length, audited: false }
+    return { month: MONTHS[i], smc, psacc, other, dump, total: smc + psacc + other + dump, count: rows.length, audited: false }
   })
   const mpTotals = monthlyPayments.reduce((a, r) => ({
-    smc: a.smc + (r.smc || 0), psacc: a.psacc + (r.psacc || 0), dump: a.dump + (r.dump || 0), total: a.total + r.total, count: a.count + (r.count || 0),
-  }), { smc: 0, psacc: 0, dump: 0, total: 0, count: 0 })
+    smc: a.smc + (r.smc || 0), psacc: a.psacc + (r.psacc || 0), other: a.other + (r.other || 0), dump: a.dump + (r.dump || 0), total: a.total + r.total, count: a.count + (r.count || 0),
+  }), { smc: 0, psacc: 0, other: 0, dump: 0, total: 0, count: 0 })
+  const showOtherPm = mpTotals.other > 0
 
   // ── OVERALL CLIENT PAYMENTS ───────────────────────────────────────────────
   const clientPayments = (() => {
@@ -535,19 +537,20 @@ export default function MidyearReport() {
 
     if (activeTab === 'monthly-pay') {
       const ws = wb.addWorksheet('Monthly Payments')
-      ws.columns = [{ width: 14 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 16 }, { width: 10 }]
-      addHeader(ws, 'Monthly Payments Received (by Date Credited)', 6)
-      writeRow(ws, 5, ['Month', 'SMC', 'PSACC', 'Dump Truck', 'Total', 'Invoices'], { header: true })
+      ws.columns = [{ width: 14 }, { width: 16 }, { width: 16 }, ...(showOtherPm ? [{ width: 16 }] : []), { width: 16 }, { width: 16 }, { width: 10 }]
+      addHeader(ws, 'Monthly Payments Received (by Date Credited)', showOtherPm ? 7 : 6)
+      writeRow(ws, 5, ['Month', 'SMC', 'PSACC', ...(showOtherPm ? ['Other PM'] : []), 'Dump Truck', 'Total', 'Invoices'], { header: true })
       let r = 6
       monthlyPayments.forEach(m => writeRow(ws, r++, [
         m.audited ? `${m.month} (audited total — see notes)` : m.month,
         m.audited ? 'n/a' : m.smc,
         m.audited ? 'n/a' : m.psacc,
+        ...(showOtherPm ? [m.audited ? 'n/a' : m.other] : []),
         m.audited ? 'n/a' : m.dump,
         m.total,
         m.audited ? 'n/a' : m.count,
       ]))
-      writeRow(ws, r, ['TOTAL', mpTotals.smc, mpTotals.psacc, mpTotals.dump, mpTotals.total, mpTotals.count], { total: true })
+      writeRow(ws, r, ['TOTAL', mpTotals.smc, mpTotals.psacc, ...(showOtherPm ? [mpTotals.other] : []), mpTotals.dump, mpTotals.total, mpTotals.count], { total: true })
       ws.views = [{ showGridLines: false }]
     }
 
@@ -892,7 +895,7 @@ export default function MidyearReport() {
               <p style={{ fontSize: 11.5, color: 'var(--muted)', marginBottom: 12 }}>Grouped by the month payment was credited. Company trucks only; SMC amounts are net of VAT.</p>
               <div className="table-wrap">
                 <table className="table">
-                  <thead><tr><th>Month</th><th className="text-right">SMC</th><th className="text-right">PSACC</th><th className="text-right">Dump Truck</th><th className="text-right">Total</th><th className="text-right">Invoices</th></tr></thead>
+                  <thead><tr><th>Month</th><th className="text-right">SMC</th><th className="text-right">PSACC</th>{showOtherPm && <th className="text-right">Other PM</th>}<th className="text-right">Dump Truck</th><th className="text-right">Total</th><th className="text-right">Invoices</th></tr></thead>
                   <tbody>
                     {monthlyPayments.map(m => (
                       <tr key={m.month} style={m.audited ? { background: 'rgba(37,99,235,0.04)' } : undefined}>
@@ -903,6 +906,7 @@ export default function MidyearReport() {
                         </td>
                         <td className="text-right mono">{m.audited ? <span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: 11.5 }}>n/a</span> : `₱${fmt(m.smc)}`}</td>
                         <td className="text-right mono">{m.audited ? <span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: 11.5 }}>n/a</span> : `₱${fmt(m.psacc)}`}</td>
+                        {showOtherPm && <td className="text-right mono">{m.audited ? <span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: 11.5 }}>n/a</span> : `₱${fmt(m.other)}`}</td>}
                         <td className="text-right mono">{m.audited ? <span style={{ color: 'var(--muted)', fontStyle: 'italic', fontSize: 11.5 }}>n/a</span> : `₱${fmt(m.dump)}`}</td>
                         <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(m.total)}</td>
                         <td className="text-right mono muted">{m.audited ? '—' : m.count}</td>
@@ -914,6 +918,7 @@ export default function MidyearReport() {
                       <td style={{ fontWeight: 700 }}>TOTAL</td>
                       <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(mpTotals.smc)}</td>
                       <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(mpTotals.psacc)}</td>
+                      {showOtherPm && <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(mpTotals.other)}</td>}
                       <td className="text-right mono" style={{ fontWeight: 700 }}>₱{fmt(mpTotals.dump)}</td>
                       <td className="text-right mono" style={{ fontWeight: 700, color: 'var(--success)' }}>₱{fmt(mpTotals.total)}</td>
                       <td className="text-right mono" style={{ fontWeight: 700 }}>{mpTotals.count}</td>
