@@ -89,25 +89,33 @@ export default function Login() {
 
     // If input doesn't look like email, try to find user by name
     if (email && !email.includes('@')) {
-      // Look up profile by full_name — try exact then partial match
+      // Look up the account's email by full name (exact, then partial match)
+      // through the login_email_for_name() function — it returns only the
+      // email, so logged-out visitors never read the profiles table itself
+      // (migration 027). Falls back to the old direct lookup only if the
+      // function isn't installed yet, so name-login keeps working if this
+      // file is deployed before the SQL is run.
       let foundEmail = null
-      const { data: exact } = await supabase
-        .from('profiles')
-        .select('email, full_name')
-        .ilike('full_name', email.trim())
-        .limit(1)
-      if (exact && exact.length > 0) {
-        foundEmail = exact[0].email
+      const { data: rpcEmail, error: rpcErr } = await supabase.rpc('login_email_for_name', { p_name: email.trim() })
+      if (!rpcErr) {
+        foundEmail = rpcEmail || null
       } else {
-        // Try partial match in case they typed partial name
-        const { data: partial } = await supabase
+        const { data: exact } = await supabase
           .from('profiles')
           .select('email, full_name')
-          .ilike('full_name', `%${email.trim()}%`)
+          .ilike('full_name', email.trim())
           .limit(1)
-        if (partial && partial.length > 0) foundEmail = partial[0].email
+        if (exact && exact.length > 0) {
+          foundEmail = exact[0].email
+        } else {
+          const { data: partial } = await supabase
+            .from('profiles')
+            .select('email, full_name')
+            .ilike('full_name', `%${email.trim()}%`)
+            .limit(1)
+          if (partial && partial.length > 0) foundEmail = partial[0].email
+        }
       }
-
 
       if (!foundEmail) {
         setError('No account found with that name.')

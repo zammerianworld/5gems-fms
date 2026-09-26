@@ -76,8 +76,14 @@ export default function Users() {
 
   const fetchUsers = async () => {
     setLoading(true)
-    const { data } = await supabase.from('profiles').select('*,override_pin').order('created_at')
-    setUsers(data || [])
+    const { data } = await supabase.from('profiles').select('*').order('created_at')
+    // Override PINs live in the admin-only override_pins table (migration 028),
+    // so ordinary logins can't read them through profiles. Falls back to the
+    // old profiles.override_pin column if the table isn't there yet.
+    const { data: pins, error: pinTableErr } = await supabase.from('override_pins').select('user_id,pin')
+    const pinByUser = {}
+    if (!pinTableErr) (pins || []).forEach(r => { pinByUser[r.user_id] = r.pin })
+    setUsers((data || []).map(u => ({ ...u, override_pin: pinTableErr ? u.override_pin : (pinByUser[u.id] || null) })))
     const { data: tk } = await supabase.from('trucks').select('id,plate').order('plate')
     setTrucks(tk || [])
     setLoading(false)
@@ -111,22 +117,24 @@ export default function Users() {
   }
 
   const handleUpdateUser = async () => {
-    if (editForm.override_pin) {
+    // Only admins/superusers hold override PINs; staff ask an admin to authorize.
+    const pinAllowed = editForm.role === 'admin' || editForm.role === 'superuser'
+    if (pinAllowed && editForm.override_pin) {
       const pinErr = validatePin(editForm.override_pin)
       if (pinErr) { setPinError(pinErr); return }
-      // Check uniqueness against other admins
-      const { data: others } = await supabase.from('profiles').select('id,full_name,override_pin').neq('id', editingUser.id)
-      const dup = others?.find(u => u.override_pin && u.override_pin.toUpperCase() === editForm.override_pin.toUpperCase())
+      // `users` already carries each account's PIN (from override_pins, or the old column as fallback)
+      const dup = users.find(u => u.id !== editingUser.id && u.override_pin && u.override_pin.toUpperCase() === editForm.override_pin.toUpperCase())
       if (dup) { setPinError(`PIN already used by ${dup.full_name}. Each admin must have a unique PIN.`); return }
     }
     setPinError('')
     setSaving(true)
     try {
       await callEdgeFunction({ action: 'update_password', user_id: editingUser.id, full_name: editForm.full_name, role: editForm.role, new_password: editForm.new_password || undefined, viewer_plates: editForm.role === 'viewer' ? editForm.viewer_plates : undefined })
-      // Save override_pin via a SECURITY DEFINER RPC — a raw client-side
-      // update here would only ever succeed for your own row (profiles'
-      // RLS only allows self-updates), silently doing nothing for anyone
-      // else while still showing "User updated."
+      // Override PINs live in the admin-only override_pins table — its RLS
+      // allows any admin/superuser to write any user's row directly, so no
+      // SECURITY DEFINER RPC is needed here anymore (unlike profiles, whose
+      // RLS only ever allowed self-updates). Falls back to the old
+      // set_user_override_pin RPC if the table isn't there yet.
       if (editForm.override_pin !== undefined) {
         let targetId = editingUser.id
         if (targetId === 'superuser') {
@@ -134,8 +142,15 @@ export default function Users() {
           targetId = user?.id
         }
         if (targetId) {
-          const { error: pinError } = await supabase.rpc('set_user_override_pin', { p_user_id: targetId, p_pin: editForm.override_pin.toUpperCase() || null })
-          if (pinError) { showToast('Error setting PIN: ' + pinError.message, 'error'); setSaving(false); return }
+          const newPin = pinAllowed ? (editForm.override_pin.toUpperCase() || null) : null
+          const { error: pinTableErr } = newPin
+            ? await supabase.from('override_pins').upsert({ user_id: targetId, pin: newPin, updated_at: new Date().toISOString() })
+            : await supabase.from('override_pins').delete().eq('user_id', targetId)
+          // Before migration 028 the table doesn't exist — keep the old RPC working.
+          if (pinTableErr) {
+            const { error: pinError } = await supabase.rpc('set_user_override_pin', { p_user_id: targetId, p_pin: newPin })
+            if (pinError) { showToast('Error setting PIN: ' + pinError.message, 'error'); setSaving(false); return }
+          }
         }
       }
       logAudit('destructive', 'Edited', 'User',
@@ -158,8 +173,11 @@ export default function Users() {
           await callEdgeFunction({ action: 'delete', user_id: userId })
           showToast('User deleted.', 'info')
         } catch (err) {
-          await supabase.rpc('permanent_delete', { p_table: 'profiles', p_id: userId })
-          showToast('Removed from list.', 'info')
+          // Edge function failed — fall back to removing just the profile row.
+          const { data, error } = await supabase.rpc('permanent_delete', { p_table: 'profiles', p_id: userId })
+          if (error) showToast(`Couldn't delete "${name}": ${error.message}`, 'error')
+          else if (data === false) showToast(`"${name}" wasn't removed — it may already be gone.`, 'error')
+          else showToast('Login account couldn\'t be removed, but the user was removed from this list.', 'info')
         }
         fetchUsers()
       }

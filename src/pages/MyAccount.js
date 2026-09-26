@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../components/AuthContext'
 import { useToast, Toast } from '../components/Toast'
@@ -63,18 +63,39 @@ export default function MyAccount() {
     setSaving(false)
   }
 
+  // Override PINs live in the admin-only override_pins table (migrations
+  // 028/029), not in profiles. Only admins/superusers have PINs.
+  const [hasPin, setHasPin] = useState(false)
+  useEffect(() => {
+    if (!isAdmin || !profile?.id) return
+    supabase.from('override_pins').select('user_id').eq('user_id', profile.id).maybeSingle()
+      .then(({ data, error }) => setHasPin(error ? !!profile?.override_pin : !!data))
+  }, [isAdmin, profile?.id])
+
   const handleSavePin = async () => {
     setPinError(''); setPinSuccess(false)
     if (!pin) { setPinError('Enter a PIN.'); return }
     if (!/^[A-Za-z]\d{5}$/.test(pin)) { setPinError('PIN must be 1 letter + 5 numbers (e.g. A12345).'); return }
-    // Check uniqueness against other users
-    const { data: others } = await supabase.from('profiles').select('id,full_name,override_pin').neq('id', profile.id)
-    const dup = others?.find(u => u.override_pin && u.override_pin.toUpperCase() === pin.toUpperCase())
-    if (dup) { setPinError(`PIN already used by ${dup.full_name}. Choose a different one.`); return }
+    const upper = pin.toUpperCase()
     setPinSaving(true)
-    const { error } = await supabase.from('profiles').update({ override_pin: pin.toUpperCase() }).eq('id', profile.id)
-    if (error) setPinError('Error: ' + error.message)
-    else { setPinSuccess(true); setPin(''); refreshProfile() }
+    // Check uniqueness against other admins' PINs
+    const { data: pins, error: tableErr } = await supabase.from('override_pins').select('user_id,pin').neq('user_id', profile.id)
+    if (!tableErr) {
+      if ((pins || []).some(r => (r.pin || '').toUpperCase() === upper)) {
+        setPinError('That PIN is already used by another admin. Choose a different one.'); setPinSaving(false); return
+      }
+      const { error } = await supabase.from('override_pins').upsert({ user_id: profile.id, pin: upper, updated_at: new Date().toISOString() })
+      if (error) setPinError('Error: ' + error.message)
+      else { setPinSuccess(true); setPin(''); setHasPin(true) }
+    } else {
+      // Before migration 028 the table doesn't exist — keep the old column working.
+      const { data: others } = await supabase.from('profiles').select('id,full_name,override_pin').neq('id', profile.id)
+      const dup = others?.find(u => u.override_pin && u.override_pin.toUpperCase() === upper)
+      if (dup) { setPinError(`PIN already used by ${dup.full_name}. Choose a different one.`); setPinSaving(false); return }
+      const { error } = await supabase.from('profiles').update({ override_pin: upper }).eq('id', profile.id)
+      if (error) setPinError('Error: ' + error.message)
+      else { setPinSuccess(true); setPin(''); setHasPin(true); refreshProfile() }
+    }
     setPinSaving(false)
   }
 
@@ -143,12 +164,12 @@ export default function MyAccount() {
           <p style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
             Used to authorize editing of invoiced trips. Format: 1 letter + 5 numbers (e.g. <span style={{ fontFamily: 'var(--mono)' }}>A12345</span>).
           </p>
-          {profile?.override_pin && (
+          {hasPin && (
             <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--success)' }}>
               ✅ PIN is currently set. Enter a new one below to change it.
             </div>
           )}
-          {!profile?.override_pin && (
+          {!hasPin && (
             <div style={{ marginBottom: 12, fontSize: 12, color: 'var(--warning, #92400E)', background: '#FEF9C3', padding: '6px 10px', borderRadius: 6 }}>
               ⚠️ No PIN set yet. Set one to allow override of invoiced trip edits.
             </div>

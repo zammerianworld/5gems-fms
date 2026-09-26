@@ -89,6 +89,12 @@ export default function Billing() {
   const [markPaidModal, setMarkPaidModal] = useState(null)
   const [markPaidDate, setMarkPaidDate] = useState('')
   const [markPaidAmount, setMarkPaidAmount] = useState('')
+  const [bulkAmounts, setBulkAmounts] = useState({}) // invoice id -> actual amount received
+  // Estimate used everywhere when no real amount is recorded: net × (1.10 for
+  // a VAT invoice, 0.98 for non-VAT — 2% WHT only). Matches the same
+  // is_vat-aware formula already used across Aging/Client Balance, the bulk
+  // Mark Paid panel, and the quick-edit auto-fill in this file.
+  const creditEstimate = (inv) => (Math.round((inv?.total_sales_net || 0) * (inv?.is_vat ? 1.10 : 0.98) * 100) / 100).toFixed(2)
   const [markPaidSaving, setMarkPaidSaving] = useState(false)
   const [deleteInvoiceTarget, setDeleteInvoiceTarget] = useState(null)
   const [confirmDeleteInvoice, setConfirmDeleteInvoice] = useState(null)
@@ -596,7 +602,9 @@ export default function Billing() {
     if (!markPaidModal) return
     setMarkPaidSaving(true)
     const dateCredited = markPaidDate || new Date().toISOString().slice(0,10)
-    const payload = { status: 'Paid', date_credited: dateCredited, ...(markPaidAmount ? { actual_amount_credited: parseFloat(markPaidAmount) } : {}) }
+    const amt = parseFloat(markPaidAmount)
+    if (!(amt > 0)) { showToast('Enter the actual amount received (from the bank deposit).', 'error'); setMarkPaidSaving(false); return }
+    const payload = { status: 'Paid', date_credited: dateCredited, actual_amount_credited: Math.round(amt * 100) / 100 }
     const { error } = await supabase.from('invoices').update(payload).eq('id', markPaidModal.inv.id)
     if (error) { showToast(error.message, 'error') }
     else { await syncTripsClientPaid(markPaidModal.inv.id, true, dateCredited); showToast('Marked as Paid.'); setMarkPaidModal(null); setMarkPaidDate(''); setMarkPaidAmount(''); fetchAll() }
@@ -605,15 +613,18 @@ export default function Billing() {
 
   const handleBulkPaid = async () => {
     if (!bulkInvoices.length) return
+    const bad = bulkInvoices.find(inv => !(parseFloat(bulkAmounts[inv.id] ?? creditEstimate(inv)) > 0))
+    if (bad) { showToast(`Enter the amount received for invoice ${bad.invoice_no}.`, 'error'); return }
     setBulkSaving(true)
     for (const inv of bulkInvoices) {
       const dateCredited = bulkDates[inv.id] || bulkOneDate || new Date().toISOString().slice(0,10)
-      await supabase.from('invoices').update({ status: 'Paid', date_credited: dateCredited }).eq('id', inv.id)
+      const amt = Math.round(parseFloat(bulkAmounts[inv.id] ?? creditEstimate(inv)) * 100) / 100
+      await supabase.from('invoices').update({ status: 'Paid', date_credited: dateCredited, actual_amount_credited: amt }).eq('id', inv.id)
       await syncTripsClientPaid(inv.id, true, dateCredited)
     }
     logAudit('destructive', 'Marked Paid', 'Invoice', `Marked ${bulkInvoices.length} invoice(s) as Paid`, null, profile?.id, profile?.full_name)
     showToast(`${bulkInvoices.length} invoice${bulkInvoices.length > 1 ? 's' : ''} marked as Paid.`)
-    setBulkInvoices([]); setBulkDates({}); setBulkOneDate(''); fetchAll(); setBulkSaving(false)
+    setBulkInvoices([]); setBulkDates({}); setBulkOneDate(''); setBulkAmounts({}); fetchAll(); setBulkSaving(false)
   }
 
   const recalcInvoiceTotals = async (invoiceId, tbl) => {
@@ -2217,13 +2228,13 @@ export default function Billing() {
             <div style={{ padding: '10px 14px', background: 'var(--accent-light)', border: '1px solid var(--accent)', borderRadius: 8, marginBottom: 12 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
                 <span style={{ fontSize: 13, fontWeight: 500 }}>{bulkInvoices.length} invoice{bulkInvoices.length>1?'s':''} selected</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }}>Total: ₱{fmt(bulkInvoices.reduce((s, inv) => s + (inv.total_sales_net||0) * (inv.is_vat ? 1.10 : 0.98), 0))}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)' }} title="Total of the amounts received entered above">Total: ₱{fmt(bulkInvoices.reduce((s,inv) => s + (parseFloat(bulkAmounts[inv.id] ?? creditEstimate(inv)) || 0), 0))}</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <label style={{ fontSize: 12 }}>Apply one date to all:</label>
                   <DatePickerSingle value={bulkOneDate} onChange={e => setBulkOneDate(e.target.value)} style={{ width: 'auto', fontSize: 12, padding: '3px 8px' }} />
                 </div>
                 <button className="btn-primary btn-sm" onClick={handleBulkPaid} disabled={bulkSaving}>{bulkSaving?'Saving…':'✅ Mark All Paid'}</button>
-                <button className="btn-ghost btn-sm" onClick={() => { setBulkInvoices([]); setBulkDates({}); setBulkOneDate('') }}>Clear</button>
+                <button className="btn-ghost btn-sm" onClick={() => { setBulkInvoices([]); setBulkDates({}); setBulkOneDate(''); setBulkAmounts({}) }}>Clear</button>
               </div>
               {bulkOneDate === '' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -2231,7 +2242,10 @@ export default function Billing() {
                     <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
                       <span style={{ fontFamily: 'var(--mono)', minWidth: 80 }}>{inv.invoice_no}</span>
                       <span style={{ color: 'var(--muted)', flex: 1 }}>{inv.client}</span>
-                      <span className="mono" style={{ fontWeight: 600, color: 'var(--success)' }}>₱{fmt((inv.total_sales_net||0) * (inv.is_vat ? 1.10 : 0.98))}</span>
+                      <span style={{ fontFamily: 'var(--mono)', color: 'var(--muted)', minWidth: 90, textAlign: 'right' }} title="Estimate: net − 2% WHT (or net × 1.10 for VAT invoices)">Est. ₱{fmt((inv.total_sales_net||0) * (inv.is_vat ? 1.10 : 0.98))}</span>
+                      <input type="number" step="0.01" title="Actual amount received" value={bulkAmounts[inv.id] ?? creditEstimate(inv)}
+                        onChange={e => setBulkAmounts(a => ({ ...a, [inv.id]: e.target.value }))}
+                        style={{ width: 120, fontSize: 12, padding: '2px 6px', fontFamily: 'var(--mono)', textAlign: 'right' }} />
                       <DatePickerSingle value={bulkDates[inv.id]||''} onChange={e => setBulkDates(d => ({...d,[inv.id]:e.target.value}))} style={{ width: 'auto', fontSize: 11, padding: '2px 6px' }} />
                     </div>
                   ))}
@@ -2239,6 +2253,25 @@ export default function Billing() {
               )}
             </div>
           )}
+          {(() => {
+            // Select-all for bulk Mark Paid — covers exactly what the current
+            // filters show; locked invoices are skipped (they need unlocking).
+            const selectable = filteredInvoices.filter(inv => inv.status !== 'Paid' && !inv.locked_at)
+            if (!selectable.length) return null
+            const allOn = selectable.every(inv => bulkInvoices.some(b => b.id === inv.id))
+            return (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 12, color: 'var(--muted)' }}>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer', color: 'var(--text)' }}>
+                  <input type="checkbox" checked={allOn} style={{ width: 'auto', margin: 0 }}
+                    onChange={e => setBulkInvoices(prev => e.target.checked
+                      ? [...prev, ...selectable.filter(inv => !prev.some(b => b.id === inv.id))]
+                      : prev.filter(b => !selectable.some(inv => inv.id === b.id)))} />
+                  Select all unpaid shown ({selectable.length})
+                </label>
+                {bulkInvoices.length > 0 && <span>· {bulkInvoices.length} selected for Mark Paid</span>}
+              </div>
+            )
+          })()}
           {filteredInvoices.length === 0
             ? <div style={{ textAlign:'center', padding:48, color:'var(--muted)' }}>
                 <div style={{ fontSize:40, marginBottom:10 }}>📄</div>
@@ -2299,7 +2332,7 @@ export default function Billing() {
                       ? <button className="btn-danger btn-sm" onClick={e => { e.stopPropagation(); if (inv.locked_at) { showToast('Invoice is locked. Unlock first.', 'error'); return } setDeleteInvoiceTarget(inv) }}>Del</button>
                       : <button className="btn-danger btn-sm" onClick={e => { e.stopPropagation(); if (inv.locked_at) { showToast('Invoice is locked. Unlock first.', 'error'); return } setOverridePinModal({action:'deleteInvoice',inv}); setOverridePinInput(''); setOverridePinError('') }}>Del</button>
                     }
-                    {isAdmin && inv.status !== 'Paid' && !inv.locked_at && <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); setMarkPaidModal({inv}); setMarkPaidDate(new Date().toISOString().slice(0,10)); setMarkPaidAmount('') }}>✅ Mark Paid</button>}
+                    {isAdmin && inv.status !== 'Paid' && !inv.locked_at && <button className="btn-ghost btn-sm" onClick={e => { e.stopPropagation(); setMarkPaidModal({inv}); setMarkPaidDate(new Date().toISOString().slice(0,10)); setMarkPaidAmount(creditEstimate(inv)) }}>✅ Mark Paid</button>}
                     {isAdmin && <button className="btn-ghost btn-sm" onClick={async e => {
                       e.stopPropagation()
                       const tbl = inv.truck_type === 'Dump Truck' ? 'trips_dump' : 'trips_pm'
@@ -2915,11 +2948,12 @@ export default function Billing() {
             <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>Invoice <strong>{markPaidModal.inv.invoice_no}</strong> — {markPaidModal.inv.client}<br />Total Sales: <strong>₱{fmt(markPaidModal.inv.total_sales_net||0)}</strong> · Expected (after {markPaidModal.inv.is_vat ? '12% VAT, ' : ''}2% W/Tax): <strong>₱{fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))}</strong></p>
             <div className="form-grid">
               <div className="form-group"><label className="label required">Date Credited</label><DatePickerSingle value={markPaidDate} onChange={e => setMarkPaidDate(e.target.value)} max={new Date().toISOString().slice(0,10)} /></div>
-              <div className="form-group"><label className="label">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))} /></div>
+              <div className="form-group"><label className="label required">Actual Amount Received (₱)</label><input type="number" step="0.01" value={markPaidAmount} onChange={e => setMarkPaidAmount(e.target.value)} placeholder={fmt((markPaidModal.inv.total_sales_net||0)*(markPaidModal.inv.is_vat?1.10:0.98))} />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Pre-filled with the estimate above. Change it if the bank deposit differs — deductions, short payment, bank charges.</div></div>
             </div>
             <div className="modal-actions" style={{ marginTop: 14 }}>
               <button className="btn-ghost" onClick={() => setMarkPaidModal(null)}>Cancel</button>
-              <button className="btn-primary" onClick={handleMarkPaidConfirm} disabled={markPaidSaving||!markPaidDate}>{markPaidSaving?'Saving…':'Confirm Paid'}</button>
+              <button className="btn-primary" onClick={handleMarkPaidConfirm} disabled={markPaidSaving||!markPaidDate||!(parseFloat(markPaidAmount) > 0)}>{markPaidSaving?'Saving…':'Confirm Paid'}</button>
             </div>
           </div>
         </div>

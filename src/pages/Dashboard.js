@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../components/AuthContext'
-import { supabase, fmt, fmtDate, fetchAllRows } from '../lib/supabase'
+import { supabase, fmt, fmtDate, fetchAllRows, pmTripNet } from '../lib/supabase'
 import { useNavigate } from 'react-router-dom'
 import GlobalSearch from '../components/GlobalSearch'
 
@@ -94,7 +94,7 @@ export default function Dashboard() {
   }, [navigate, fetchAll])
 
   const dumpAmt = (arr) => arr.reduce((s, t) => s + (t.weight_tons || 0) * (t.rate_per_ton || 0), 0)
-  const pmAmt = (arr) => arr.reduce((s, t) => s + (t.supplier_amount || 0) + (t.stripping_fee || 0), 0)
+  const pmAmt = (arr) => arr.reduce((s, t) => s + pmTripNet(t), 0)
 
   // Today stats (always today)
   const todayDump = dumpTrips.filter(t => t.trip_date === today)
@@ -478,7 +478,7 @@ export default function Dashboard() {
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDate(t.trip_date)}</div>
                 </div>
                 <span style={{ fontSize: 12, fontFamily: 'var(--mono)', fontWeight: 500, color: 'var(--accent)', flexShrink: 0 }}>
-                  ₱{fmt(t._type === 'dump' ? (t.weight_tons || 0) * (t.rate_per_ton || 0) : (t.supplier_amount || 0) + (t.stripping_fee || 0))}
+                  ₱{fmt(t._type === 'dump' ? (t.weight_tons || 0) * (t.rate_per_ton || 0) : pmTripNet(t))}
                 </span>
               </div>
             ))}

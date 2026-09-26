@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase, fmt, fmtDate, fetchAllRows, isVatInclusiveCode } from '../lib/supabase'
 import { useToast, Toast } from '../components/Toast'
+import { useAuth } from '../components/AuthContext'
+import CreditedBackfill from '../components/CreditedBackfill'
 import { useNavigate } from 'react-router-dom'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -13,6 +15,7 @@ const STATUS_COLORS = {
 
 export default function PaidInvoices() {
   const { toast, showToast, dismissToast } = useToast()
+  const { isAdmin, profile } = useAuth()
   const navigate = useNavigate()
   const [invoices, setInvoices] = useState([])
   const [loading, setLoading] = useState(true)
@@ -388,7 +391,8 @@ export default function PaidInvoices() {
 
       {/* Tab toggle */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
-        {[['list', '📋 List'], ['summary', '🧾 Sales Invoice Summary']].map(([key, label]) => (
+        {[['list', '📋 List'], ['summary', '🧾 Sales Invoice Summary'],
+          ...(isAdmin ? [['missing', `📋 Missing Amounts (${invoices.filter(i => i.status === 'Paid' && i.actual_amount_credited == null).length})`]] : [])].map(([key, label]) => (
           <button key={key} onClick={() => setActiveTab(key)} style={{
             padding: '8px 18px', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 500,
             background: activeTab === key ? 'var(--accent)' : 'var(--surface)',
@@ -398,6 +402,9 @@ export default function PaidInvoices() {
         ))}
       </div>
 
+      {activeTab === 'missing' && isAdmin && (
+        <CreditedBackfill invoices={invoices} onSaved={fetchAll} showToast={showToast} profile={profile} />
+      )}
       {activeTab === 'summary' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>

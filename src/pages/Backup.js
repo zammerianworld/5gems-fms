@@ -5,6 +5,8 @@ import { useToast, Toast } from '../components/Toast'
 import * as XLSX from 'xlsx'
 
 const TABLES = [
+  // Referenced by Prime Mover trips — must come first
+  { key: 'trip_codes', label: 'Trip Codes' },
   // Trips & Billing
   { key: 'trips_dump', label: 'Dump Truck Trips' },
   { key: 'trips_pm', label: 'Prime Mover Trips' },
@@ -23,7 +25,6 @@ const TABLES = [
   { key: 'company_loan_payments', label: 'Company Loan Payments' },
   { key: 'gov_loan_payments', label: "Gov't Loan Payments" },
   { key: 'extra_income', label: 'Extra Income' },
-  { key: 'finances', label: 'Finances' },
   { key: 'historical_data', label: 'Historical Data' },
   // Payroll — Admin/Support
   { key: 'payroll_employees', label: 'Payroll Employees' },
@@ -49,7 +50,6 @@ const TABLES = [
   { key: 'saved_routes', label: 'Saved Routes' },
   { key: 'saved_rates', label: 'Saved Rates' },
   { key: 'saved_pm_trip_codes', label: 'Saved PM Trip Codes' },
-  { key: 'print_templates', label: 'Print Templates' },
   { key: 'orcr_records', label: 'OR/CR Records' },
   { key: 'company_settings', label: 'Company Settings' },
   { key: 'profiles', label: 'Users' },

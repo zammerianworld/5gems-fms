@@ -280,8 +280,10 @@ export default function CheckVouchers() {
       title: 'Delete PDC Entry', variant: 'danger', confirmLabel: 'Delete',
       message: `Delete PDC check ${c.check_no || ''} for ${c.payee || 'this payee'}? This cannot be undone.`,
       onConfirm: async () => {
-        await supabase.rpc('permanent_delete', { p_table: 'pdc_checks', p_id: c.id })
-        fetchPdc()
+        const { data, error } = await supabase.rpc('permanent_delete', { p_table: 'pdc_checks', p_id: c.id })
+        if (error) { showToast("Couldn't delete: " + error.message, 'error'); return }
+        if (data === false) { showToast('Nothing was deleted — the entry may already be gone.', 'error'); fetchPdc(); return }
+        showToast('Deleted.', 'info'); fetchPdc()
       }
     })
   }
@@ -363,8 +365,10 @@ export default function CheckVouchers() {
 
   const handleDelete = async (id, voucher_no) => {
     setConfirmModal({ title: 'Delete Voucher', variant: 'danger', confirmLabel: 'Delete', message: `Delete voucher ${voucher_no}? This cannot be undone.`, onConfirm: async () => {
-      await supabase.rpc('permanent_delete', { p_table: 'check_vouchers', p_id: id })
-      logAudit('destructive', 'Deleted', 'CheckVouchers', 'Deleted check voucher', '', profile?.id, profile?.full_name)
+      const { data, error } = await supabase.rpc('permanent_delete', { p_table: 'check_vouchers', p_id: id })
+      if (error) { showToast("Couldn't delete: " + error.message, 'error'); return }
+      if (data === false) { showToast('Nothing was deleted — the voucher may already be gone.', 'error'); fetchAll(); return }
+      logAudit('destructive', 'Deleted', 'CheckVouchers', `Deleted check voucher ${voucher_no}`, '', profile?.id, profile?.full_name)
       showToast('Deleted.', 'info'); fetchAll()
     }})
   }

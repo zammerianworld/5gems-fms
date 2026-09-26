@@ -98,7 +98,7 @@ const GUIDES = [
       {
         heading: 'Admin Override PIN',
         content: [
-          { type: 'note', text: 'Some sensitive actions (editing billed rates, approving staff expenses) require an Admin PIN. This is a 6-character code (1 letter + 5 numbers, e.g. A12345) set by the superuser per user in Manage Users.' },
+          { type: 'note', text: 'Some sensitive actions (editing billed rates, approving staff expenses) require an Admin PIN. This is a 6-character code (1 letter + 5 numbers, e.g. A12345). Only admin and superuser accounts have a PIN — staff ask an admin to enter theirs. An admin sets their own in My Account, or it is set in Manage Users.' },
         ],
       },
       {
@@ -210,9 +210,23 @@ const GUIDES = [
             'Invoice List tab shows all invoices with status (Unpaid/Partial/Paid), aging color, and totals.',
             'Click an invoice to expand — you can add more trips, edit rates, add remarks (color-coded), or mark as paid.',
             'Remarks support colors: orange, pink, yellow — useful for flagging disputes or notes.',
-            'To mark paid: click Mark as Paid and enter the payment date and amount.',
+            'To mark paid: click Mark as Paid, enter the date credited, and check the Actual Amount Received. It is pre-filled with the estimate (net − 2% WHT, or net × 1.10 for a VAT invoice) — change it to what actually reached the bank if the client deducted anything. Bulk Mark Paid has the same amount field per invoice, and Select all unpaid shown ticks every unpaid invoice in the current filter.',
             'Filter by truck plate using the "All plates" dropdown — works even for multi-truck consolidated SOAs (e.g. SMC invoices covering several plates).',
           ]},
+        ],
+      },
+      {
+        heading: 'Recording Actual Amounts Received',
+        content: [
+          { type: 'text', text: 'Collections figures (Paid Invoices, Cashflow, Year-over-Year, subcon credited amounts) use the real amount received when it is recorded, and an estimate (net − 2% WHT, or net × 1.10 for a VAT invoice) when it is not. Recording the real amount makes those figures exact.' },
+          { type: 'steps', items: [
+            'New payments: Mark as Paid requires the actual amount received, pre-filled with the estimate — just check it against the bank deposit.',
+            'Older invoices (admins): go to Paid Invoices → Missing Amounts. It lists every paid invoice still on the estimate, with a progress bar.',
+            'Type the real amount from the bank, or click = Est. if the deposit matched. The Difference column shows how far it is from the estimate (red = less received).',
+            'You can also correct the Date Credited on the same row. Save one row at a time, or Save all entered.',
+            'For many at once: tick the rows (or the header box to select all shown), then use Fill = Est., Set date credited, and Save selected.',
+          ]},
+          { type: 'note', text: 'Work through it gradually — oldest or largest first. Invoices you have not reached yet simply stay on the estimate.' },
         ],
       },
       {
